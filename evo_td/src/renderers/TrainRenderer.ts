@@ -3,7 +3,7 @@
  */
 import { Scene, MeshBuilder, StandardMaterial, Color3, Vector3, Mesh, TransformNode } from "@babylonjs/core";
 import { TrainCar } from "../game/TrainCar";
-import { TrainCarPositionComponent } from "../components/TrainCarPositionComponent";
+import { AttachmentComponent } from "../components/AttachmentComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 
 /**
@@ -42,11 +42,11 @@ export interface TrainVisualConfig {
  * Default visual configuration for trains
  */
 const DEFAULT_TRAIN_VISUAL: TrainVisualConfig = {
-    carWidth: 1.2,     // Width of each train car (slightly reduced)
-    carHeight: 1.0,    // Height of each train car
-    carLength: 3.5,    // Length of each train car (much longer for better aspect ratio)
-    carSpacing: 0.15,  // Space between cars (much smaller gap)
-    yOffset: 0.5,      // Position above ground
+    carWidth: 0.6,     // Train car width
+    carHeight: 0.5,    // Train car height
+    carLength: 1.4,    // Longer cars for better train-like proportions
+    carSpacing: 0.3,   // Gap between cars to prevent overlap
+    yOffset: 0.3,      // Position above ground
     engineColor: new Color3(0.8, 0.2, 0.2), // Red engine
     carColor: new Color3(0.2, 0.2, 0.8)     // Blue cars
 };
@@ -58,7 +58,6 @@ export class TrainRenderer {
     private scene: Scene;
     private visualConfig: TrainVisualConfig;
     private trainVisuals: Map<string, TrainVisualGroup> = new Map();
-    private debugCounter: number = 0; // For debug logging
 
     /**
      * Create a new TrainRenderer
@@ -130,41 +129,47 @@ export class TrainRenderer {
      * Create a visual representation for a complete train
      * @param trainCars Array of train car entities
      * @param trainId Unique identifier for the train
-     * @returns The created train group containing all car meshes
+     * @returns The created train group containing references to car meshes
      */
     createTrainVisual(trainCars: TrainCar[], trainId: string): TransformNode {
         Logger.log(LogCategory.RENDERING, `Creating train visual: ${trainId} with ${trainCars.length} cars`);
         
-        // Create a parent node for the entire train
+        // Create a parent node for organizational purposes (not for positioning)
         const trainGroup = new TransformNode(`train_${trainId}`, this.scene);
         
-        // Calculate car positions and create individual car visuals
+        // Create individual car visuals that will be positioned independently
         const carVisuals: TrainCarVisual[] = [];
+        let currentOffset = 0;
         
         trainCars.forEach((car, index) => {
             const carMesh = this.createTrainCarVisual(car, index);
             
-            // For articulated movement, we don't need pre-calculated offsets
-            // Each car will follow the one in front of it during movement
+            // Calculate this car's offset distance from the front of the train
             const carVisual: TrainCarVisual = {
                 mesh: carMesh,
                 carId: car.id,
                 carIndex: index,
-                offsetDistance: 0 // Not used in articulated approach
+                offsetDistance: currentOffset
             };
             
-            // Position the car initially at the origin (will be updated during movement)
+            // Position the car initially at origin - TrainSystem will handle actual positioning
             carMesh.position = new Vector3(0, this.visualConfig.yOffset, 0);
             
-            // Do NOT parent the car to the train group - we want absolute positioning
-            // carMesh.parent = trainGroup;
+            // Don't parent cars to the train group - they will be positioned independently
+            // Each car will be registered separately with SceneManager
+            
+            // Create slot visuals for this car (debug/development feature)
+            this.createSlotVisuals(car, carMesh);
             
             carVisuals.push(carVisual);
             
-            Logger.log(LogCategory.RENDERING, `Car ${index} created for articulated movement`);
+            // Update offset for next car (car length + spacing)
+            currentOffset += car.length + this.visualConfig.carSpacing;
+            
+            Logger.log(LogCategory.RENDERING, `Car ${index} positioned with offset: ${carVisual.offsetDistance}`);
         });
         
-        // Store the train visual group for later updates
+        // Store the train visual group for reference (mainly for cleanup)
         const visualGroup: TrainVisualGroup = {
             parentNode: trainGroup,
             cars: carVisuals,
@@ -172,12 +177,13 @@ export class TrainRenderer {
         };
         this.trainVisuals.set(trainId, visualGroup);
         
-        // Position the train group at the origin initially
+        // Position the train group at the origin (it's just a reference node)
         trainGroup.position = new Vector3(0, 0, 0);
         
         Logger.log(LogCategory.RENDERING, `Train visual created: ${trainId}`, {
             groupPosition: trainGroup.position.toString(),
             carCount: carVisuals.length,
+            totalLength: currentOffset,
             isEnabled: trainGroup.isEnabled()
         });
         
@@ -185,190 +191,26 @@ export class TrainRenderer {
     }
     
     /**
-     * Update train car visuals based on authoritative positions from TrainSystem
-     * This is the new preferred method that respects the ECS architecture
-     */
-    updateTrainCarPositionsFromSystem(trainId: string, carPositionComponent: TrainCarPositionComponent): void {
-        const visualGroup = this.trainVisuals.get(trainId);
-        if (!visualGroup) return;
-
-        const carPositions = carPositionComponent.getAllCarPositions();
-        
-        // Update each car visual to match the authoritative position exactly
-        carPositions.forEach(carData => {
-            const carVisual = visualGroup.cars.find(visual => visual.carId === carData.carId);
-            if (carVisual) {
-                // Set position and rotation directly from the authoritative data - no offsets!
-                carVisual.mesh.position = carData.position.clone();
-                carVisual.mesh.rotation = carData.rotation.clone();
-            }
-        });
-
-        // Update the train group position to the front car position for reference
-        const frontCar = carPositionComponent.getFrontCar();
-        if (frontCar) {
-            visualGroup.parentNode.position = frontCar.position.clone();
-        }
-    }
-
-    /**
-     * Update individual car positions along a rail path using articulated chain physics
-     * @deprecated Use updateTrainCarPositionsFromSystem instead for ECS compliance
+     * Update individual car positions from their PositionComponents.
+     * TrainSystem handles the positioning logic; this just updates visuals.
      * @param trainId The train to update
-     * @param frontProgress Progress of the front of the train (0-1)
-     * @param rail Rail object with position/direction methods
+     * @param _frontProgress Progress of the front of the train (0-1) - unused in visual-only update
+     * @param _rail Rail object with position/direction methods - unused in visual-only update
      */
-    updateTrainCarPositions(trainId: string, frontProgress: number, rail: any): void {
+    updateTrainCarPositions(trainId: string, _frontProgress: number, _rail: any): void {
         const visualGroup = this.trainVisuals.get(trainId);
         if (!visualGroup) return;
         
-        const railLength = rail.totalDistance;
-        
-        // Debug logging for the first few updates
-        if (!this.debugCounter) this.debugCounter = 0;
-        if (this.debugCounter < 5) {
-            Logger.log(LogCategory.RENDERING, `Train positioning debug`, {
-                trainId,
-                frontProgress: frontProgress.toFixed(4),
-                railLength: railLength.toFixed(2),
-                carCount: visualGroup.cars.length
-            });
-            this.debugCounter++;
-        }
-        
-        // Sort cars by index to ensure proper order (front to back)
-        const sortedCars = [...visualGroup.cars].sort((a, b) => a.carIndex - b.carIndex);
-        
-        let currentProgress = frontProgress;
-        
-        for (let i = 0; i < sortedCars.length; i++) {
-            const carVisual = sortedCars[i];
-            const carLength = carVisual.mesh.getBoundingInfo().boundingBox.extendSize.z * 2;
+        // Simply update each car's visual position from its PositionComponent
+        // The positioning logic is handled by TrainSystem
+        for (const carVisual of visualGroup.cars) {
+            // Get the corresponding TrainCar entity (we'll need a way to find it)
+            // For now, assume the car mesh position is updated by SceneManager
+            // which reads from the car's PositionComponent
             
-            // For the first car (engine), position it directly at the front progress
-            if (i === 0) {
-                // Use two-point constraint for the front car
-                const halfCar = (carLength * 0.5) / railLength;
-                const clamp = (v: number) => Math.max(0, Math.min(1, v));
-                
-                const frontPos = rail.getPositionAt(clamp(currentProgress));
-                const backPos = rail.getPositionAt(clamp(currentProgress - (carLength / railLength)));
-                
-                if (frontPos && backPos) {
-                    // Position at midpoint between front and back of this car
-                    const midpoint = Vector3.Lerp(backPos, frontPos, 0.5);
-                    carVisual.mesh.position = new Vector3(
-                        midpoint.x,
-                        midpoint.y + this.visualConfig.yOffset,
-                        midpoint.z
-                    );
-                    
-                    // Set rotation based on direction
-                    const direction = frontPos.subtract(backPos);
-                    if (direction.length() > 0.001) {
-                        const rotationY = Math.atan2(direction.x, direction.z);
-                        carVisual.mesh.rotation = new Vector3(0, rotationY, 0);
-                    }
-                    
-                    // Update progress for next car (move back by this car's length + spacing)
-                    currentProgress -= (carLength + this.visualConfig.carSpacing) / railLength;
-                    currentProgress = Math.max(0, currentProgress);
-                }
-            } else {
-                // For subsequent cars, position them relative to the previous car
-                // This creates an articulated chain effect
-                const prevCar = sortedCars[i - 1];
-                const prevCarPos = prevCar.mesh.position;
-                const prevCarRotation = prevCar.mesh.rotation.y;
-                
-                // Calculate where this car should be based on the previous car's position and rotation
-                const carSpacing = carLength + this.visualConfig.carSpacing;
-                
-                // Move backwards from the previous car along its facing direction
-                const backwardDirection = new Vector3(
-                    -Math.sin(prevCarRotation),
-                    0,
-                    -Math.cos(prevCarRotation)
-                );
-                
-                const targetPosition = prevCarPos.add(backwardDirection.scale(carSpacing));
-                
-                // Find the closest point on the rail to this target position
-                const closestProgress = this.findClosestProgressOnRail(targetPosition, rail, currentProgress);
-                
-                // Position the car at this progress point
-                const carPosition = rail.getPositionAt(closestProgress);
-                const carDirection = rail.getDirectionAt(closestProgress);
-                
-                if (carPosition) {
-                    carVisual.mesh.position = new Vector3(
-                        carPosition.x,
-                        carPosition.y + this.visualConfig.yOffset,
-                        carPosition.z
-                    );
-                    
-                    // Set rotation based on rail direction
-                    if (carDirection) {
-                        const rotationY = Math.atan2(carDirection.x, carDirection.z);
-                        carVisual.mesh.rotation = new Vector3(0, rotationY, 0);
-                    }
-                    
-                    currentProgress = closestProgress;
-                }
-            }
-            
-            // Debug logging for the first car on the first few updates
-            if (carVisual.carIndex === 0 && this.debugCounter <= 5) {
-                Logger.log(LogCategory.RENDERING, `Front car position`, {
-                    carIndex: carVisual.carIndex,
-                    progress: currentProgress.toFixed(4),
-                    finalPos: `(${carVisual.mesh.position.x.toFixed(1)}, ${carVisual.mesh.position.z.toFixed(1)})`
-                });
-            }
+            // No positioning logic here - just ensure cars are visible and properly rendered
+            // The actual positioning is handled by SceneManager reading PositionComponent
         }
-        
-        // Update the train group position to the front car position for reference
-        if (visualGroup.cars.length > 0) {
-            const frontCarPosition = rail.getPositionAt(frontProgress);
-            if (frontCarPosition) {
-                visualGroup.parentNode.position = new Vector3(
-                    frontCarPosition.x,
-                    frontCarPosition.y,
-                    frontCarPosition.z
-                );
-            }
-        }
-    }
-    
-    /**
-     * Find the closest progress value on the rail to a target 3D position
-     * @param targetPosition The 3D position to find the closest rail point to
-     * @param rail The rail object
-     * @param startProgress Initial guess for progress (optimization)
-     * @returns Progress value (0-1) of the closest point on the rail
-     */
-    private findClosestProgressOnRail(targetPosition: Vector3, rail: any, startProgress: number): number {
-        let closestProgress = startProgress;
-        let closestDistance = Infinity;
-        
-        // Search around the starting progress with decreasing step size
-        const searchRange = 0.1; // Search within 10% of rail length
-        const steps = 20;
-        
-        for (let i = 0; i <= steps; i++) {
-            const testProgress = Math.max(0, Math.min(1, startProgress - searchRange + (2 * searchRange * i / steps)));
-            const railPosition = rail.getPositionAt(testProgress);
-            
-            if (railPosition) {
-                const distance = Vector3.Distance(targetPosition, railPosition);
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestProgress = testProgress;
-                }
-            }
-        }
-        
-        return closestProgress;
     }
     
     /**
@@ -400,5 +242,186 @@ export class TrainRenderer {
             
             Logger.log(LogCategory.RENDERING, `Train visual removed: ${trainId}`);
         }
+    }
+
+    /**
+     * Create visual representations for attachment slots on a train car
+     * @param trainCar The train car to create slot visuals for
+     * @param parentNode The parent node to attach slot indicators to
+     */
+    createSlotVisuals(trainCar: TrainCar, parentNode: TransformNode): void {
+        const slotComponent = trainCar.getSlotComponent();
+        if (!slotComponent) {
+            Logger.warn(LogCategory.RENDERING, `No slot component found for car ${trainCar.carId}`);
+            return;
+        }
+
+        const slots = slotComponent.getAllSlots();
+        Logger.log(LogCategory.RENDERING, `Creating ${slots.length} slot visuals for car ${trainCar.carId}`);
+
+        slots.forEach(slot => {
+            // Create a small visual indicator for each slot
+            const slotIndicator = MeshBuilder.CreateSphere(
+                `slot_${slot.id}`,
+                { diameter: 0.08 }, // Much smaller for the new car size
+                this.scene
+            );
+
+            // Position the indicator at the slot's position, scaled and adjusted for new car dimensions
+            // The slot positions need to be scaled down significantly to match our smaller car scale
+            const scaledPosition = slot.worldPosition.clone().scale(0.3); // Scale much smaller to match car
+            slotIndicator.position = scaledPosition;
+            slotIndicator.parent = parentNode;
+
+            // Color code by slot type and occupancy
+            const material = new StandardMaterial(`slot_${slot.id}_mat`, this.scene);
+            
+            if (slot.isOccupied) {
+                material.diffuseColor = new Color3(1, 0, 0); // Red for occupied
+                material.emissiveColor = new Color3(0.2, 0, 0);
+            } else {
+                // Different colors for different slot types
+                switch (slot.type) {
+                    case 'top':
+                        material.diffuseColor = new Color3(0, 1, 0); // Green for top
+                        break;
+                    case 'side_left':
+                    case 'side_right':
+                        material.diffuseColor = new Color3(0, 0, 1); // Blue for sides
+                        break;
+                    case 'front':
+                    case 'rear':
+                        material.diffuseColor = new Color3(1, 1, 0); // Yellow for front/rear
+                        break;
+                    case 'internal':
+                        material.diffuseColor = new Color3(1, 0, 1); // Magenta for internal
+                        break;
+                    default:
+                        material.diffuseColor = new Color3(0.5, 0.5, 0.5); // Gray for unknown
+                }
+                material.emissiveColor = material.diffuseColor.scale(0.2);
+            }
+
+            slotIndicator.material = material;
+            
+            // Make slot indicators semi-transparent and non-colliding
+            material.alpha = 0.7;
+            slotIndicator.checkCollisions = false;
+        });
+    }
+
+    /**
+     * Create visual representation for an attached component
+     * @param attachment The attachment component to visualize
+     * @param parentNode The parent node to attach the visual to
+     */
+    createAttachmentVisual(attachment: AttachmentComponent, parentNode: TransformNode): Mesh {
+        const config = attachment.getConfig();
+        const mountInfo = attachment.getMountInfo();
+        
+        if (!mountInfo) {
+            throw new Error(`Cannot create visual for unmounted attachment ${config.name}`);
+        }
+
+        // Create attachment mesh based on size, scaled to fit new car dimensions
+        const size = attachment.getSize();
+        const attachmentMesh = MeshBuilder.CreateBox(
+            `attachment_${config.name}`,
+            {
+                width: size.width * 0.15,   // Scale down significantly to fit smaller cars
+                height: size.height * 0.15, // Scale down significantly to fit smaller cars
+                depth: size.depth * 0.15    // Scale down significantly to fit smaller cars
+            },
+            this.scene
+        );
+
+        // Position at mount location - ensure it's properly attached to the car surface
+        const adjustedMountInfo = {
+            x: mountInfo.x * 0.3, // Scale down the offset positions significantly
+            y: mountInfo.y * 0.3, // Scale down the offset positions significantly
+            z: mountInfo.z * 0.3  // Scale down the offset positions significantly
+        };
+        
+        attachmentMesh.position = new Vector3(adjustedMountInfo.x, adjustedMountInfo.y, adjustedMountInfo.z);
+        attachmentMesh.parent = parentNode;
+
+        // Apply rotation if specified
+        if (mountInfo.rotation) {
+            attachmentMesh.rotation = new Vector3(
+                mountInfo.rotation.x,
+                mountInfo.rotation.y,
+                mountInfo.rotation.z
+            );
+        }
+
+        // Create material based on attachment type
+        const material = new StandardMaterial(`attachment_${config.name}_mat`, this.scene);
+        
+        // Color based on attachment type
+        switch (config.type) {
+            case 'weapon':
+                material.diffuseColor = new Color3(0.8, 0.2, 0.2); // Red for weapons
+                break;
+            case 'cargo':
+                material.diffuseColor = new Color3(0.6, 0.4, 0.2); // Brown for cargo
+                break;
+            case 'defensive':
+                material.diffuseColor = new Color3(0.3, 0.3, 0.8); // Blue for defense
+                break;
+            case 'utility':
+                material.diffuseColor = new Color3(0.5, 0.8, 0.2); // Green for utility
+                break;
+            case 'engine':
+                material.diffuseColor = new Color3(0.2, 0.2, 0.2); // Dark gray for engine parts
+                break;
+            default:
+                material.diffuseColor = new Color3(0.5, 0.5, 0.5); // Gray for unknown
+        }
+
+        // Add custom color if specified
+        if (config.color) {
+            material.diffuseColor = new Color3(config.color.r, config.color.g, config.color.b);
+        }
+
+        // Adjust material properties based on health
+        const healthPercentage = attachment.getHealthPercentage();
+        if (healthPercentage < 0.5) {
+            material.emissiveColor = new Color3(0.3, 0.1, 0.1); // Reddish glow for damaged
+        } else if (healthPercentage < 0.8) {
+            material.emissiveColor = new Color3(0.3, 0.3, 0.1); // Yellowish glow for worn
+        }
+
+        if (!attachment.isFunctional()) {
+            material.alpha = 0.5; // Semi-transparent for non-functional
+        }
+
+        attachmentMesh.material = material;
+        attachmentMesh.checkCollisions = false;
+
+        Logger.log(LogCategory.RENDERING, `Created attachment visual: ${config.name}`, {
+            type: config.type,
+            originalSize: `${size.width}x${size.height}x${size.depth}`,
+            scaledSize: `${(size.width * 0.15).toFixed(2)}x${(size.height * 0.15).toFixed(2)}x${(size.depth * 0.15).toFixed(2)}`,
+            position: `(${adjustedMountInfo.x.toFixed(2)}, ${adjustedMountInfo.y.toFixed(2)}, ${adjustedMountInfo.z.toFixed(2)})`,
+            health: `${(healthPercentage * 100).toFixed(1)}%`,
+            functional: attachment.isFunctional()
+        });
+
+        return attachmentMesh;
+    }
+
+    /**
+     * Get all car meshes for a train (for registering with SceneManager)
+     * @param trainId The train ID
+     * @returns Array of car meshes with their corresponding car IDs
+     */
+    getTrainCarMeshes(trainId: string): Array<{ carId: string, mesh: Mesh }> {
+        const visualGroup = this.trainVisuals.get(trainId);
+        if (!visualGroup) return [];
+        
+        return visualGroup.cars.map(carVisual => ({
+            carId: carVisual.carId,
+            mesh: carVisual.mesh
+        }));
     }
 }

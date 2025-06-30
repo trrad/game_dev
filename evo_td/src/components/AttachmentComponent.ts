@@ -1,127 +1,401 @@
 /**
- * Handles weapon and upgrade attachments for game objects.
+ * AttachmentComponent - Represents an attachment that can be placed on a train car
+ * Supports different sizes, types, and mounting configurations for the modular train system
  */
+
 import { Component } from '../core/Component';
 import { Logger, LogCategory } from '../utils/Logger';
-import type { GameObject } from '../core/GameObject';
-import type { Position3D } from './PositionComponent';
 
-export interface Attachment {
-    id: string;
-    type: string;
-    position?: Position3D;
+/**
+ * Types of attachments available
+ */
+export enum AttachmentType {
+    WEAPON = 'weapon',
+    CARGO = 'cargo',
+    UTILITY = 'utility',
+    DEFENSIVE = 'defensive',
+    ENGINE = 'engine',
+    STRUCTURAL = 'structural' // For basic train car blocks
 }
 
-export interface AttachmentItem extends Attachment {
-    item: GameObject;
+/**
+ * Where an attachment can be mounted
+ */
+export enum AttachmentSlotType {
+    TOP = 'top',           // On top of train car
+    SIDE_LEFT = 'side_left',     // Left side of train car
+    SIDE_RIGHT = 'side_right',   // Right side of train car
+    FRONT = 'front',       // Front of train car
+    REAR = 'rear',         // Rear of train car
+    INTERNAL = 'internal'  // Inside the train car (crew, control systems)
 }
 
+/**
+ * Size of attachment in grid units
+ */
+export interface AttachmentSize {
+    width: number;  // X dimension (units)
+    height: number; // Y dimension (units)
+    depth: number;  // Z dimension (units)
+}
+
+/**
+ * Configuration for an attachment
+ */
+export interface AttachmentConfig {
+    type: AttachmentType;
+    name: string;
+    description: string;
+    size: AttachmentSize;
+    allowedSlots: AttachmentSlotType[];
+    weight: number;
+    health: number;
+    cost: number;
+    
+    // Visual properties
+    color?: { r: number; g: number; b: number };
+    meshName?: string; // For when we upgrade to 3D models
+    
+    // Gameplay properties
+    properties: Map<string, any>;
+}
+
+/**
+ * Current state of an attachment
+ */
+export interface AttachmentState {
+    health: number;
+    maxHealth: number;
+    isDestroyed: boolean;
+    isActive: boolean;
+    
+    // Runtime properties that can change
+    runtimeProperties: Map<string, any>;
+}
+
+/**
+ * Positioning information for mounted attachments
+ */
+export interface AttachmentMountInfo {
+    x: number;
+    y: number;
+    z: number;
+    slotType: AttachmentSlotType;
+    parentCarId: string;
+    rotation?: { x: number; y: number; z: number };
+}
+
+/**
+ * Component representing an attachment that can be mounted on train cars
+ */
 export class AttachmentComponent extends Component {
-    public readonly type = 'attachment';
-    private _attachments: Map<string, Attachment> = new Map();
-    private _attachmentPoints: Position3D[] = [];
-    private _attachedItems: Map<string, GameObject> = new Map();
+    public readonly type = "attachment";
+    
+    private config: AttachmentConfig;
+    private state: AttachmentState;
+    private mountInfo: AttachmentMountInfo | null = null;
 
-    addAttachmentPoint(point: Position3D): void {
-        this._attachmentPoints.push({ ...point });
-    }
-
-    canAttach(position: Position3D): boolean {
-        // If no attachment points are defined, allow attachment anywhere
-        if (this._attachmentPoints.length === 0) {
-            return true;
-        }
+    constructor(config: AttachmentConfig) {
+        super();
+        this.config = { ...config };
+        this.state = {
+            health: config.health,
+            maxHealth: config.health,
+            isDestroyed: false,
+            isActive: true,
+            runtimeProperties: new Map(config.properties)
+        };
         
-        return this._attachmentPoints.some(p => 
-            p.x === position.x && 
-            p.y === position.y && 
-            p.z === position.z
-        );
+        Logger.log(LogCategory.SYSTEM, `Created attachment: ${config.name}`, {
+            type: config.type,
+            size: config.size,
+            allowedSlots: config.allowedSlots
+        });
     }
 
-    attach(attachment: Attachment): boolean {
-        // Only check position if it's provided
-        if (attachment.position && !this.canAttach(attachment.position)) {
-            Logger.warn(LogCategory.ATTACHMENT, 'Invalid attachment position', {
-                objectId: this._gameObject?.id,
-                attachment
+    /**
+     * Get attachment configuration
+     */
+    getConfig(): Readonly<AttachmentConfig> {
+        return this.config;
+    }
+
+    /**
+     * Get current attachment state
+     */
+    getState(): Readonly<AttachmentState> {
+        return { ...this.state };
+    }
+
+    /**
+     * Get attachment type
+     */
+    getAttachmentType(): AttachmentType {
+        return this.config.type;
+    }
+
+    /**
+     * Get attachment size
+     */
+    getSize(): AttachmentSize {
+        return { ...this.config.size };
+    }
+
+    /**
+     * Get allowed slot types for this attachment
+     */
+    getAllowedSlots(): AttachmentSlotType[] {
+        return [...this.config.allowedSlots];
+    }
+
+    /**
+     * Check if attachment can be placed in a specific slot type
+     */
+    canAttachToSlot(slotType: AttachmentSlotType): boolean {
+        return this.config.allowedSlots.includes(slotType);
+    }
+
+    /**
+     * Get weight of attachment (affects train performance)
+     */
+    getWeight(): number {
+        return this.config.weight;
+    }
+
+    /**
+     * Mount the attachment to a specific position and slot
+     */
+    mount(mountInfo: AttachmentMountInfo): boolean {
+        if (!this.canAttachToSlot(mountInfo.slotType)) {
+            Logger.warn(LogCategory.SYSTEM, `Cannot mount ${this.config.name} to slot type ${mountInfo.slotType}`, {
+                allowedSlots: this.config.allowedSlots,
+                requestedSlot: mountInfo.slotType
             });
             return false;
         }
 
-        this._attachments.set(attachment.id, { ...attachment });
+        this.mountInfo = { ...mountInfo };
+        Logger.log(LogCategory.SYSTEM, `Mounted attachment ${this.config.name}`, {
+            position: `(${mountInfo.x}, ${mountInfo.y}, ${mountInfo.z})`,
+            slotType: mountInfo.slotType,
+            parentCar: mountInfo.parentCarId
+        });
         return true;
     }
-    
+
     /**
-     * Attach a game object as an item
-     * @param attachmentItem The attachment item with game object
-     * @returns True if attachment was successful
+     * Get the mount information where this attachment is positioned
      */
-    attachItem(attachmentItem: AttachmentItem): boolean {
-        const { id, type, item, position } = attachmentItem;
-        
-        // Create the base attachment
-        const attachment: Attachment = { 
-            id, 
-            type,
-            position
-        };
-        
-        // Attach the base attachment
-        const success = this.attach(attachment);
-        
-        if (success) {
-            // Store the game object reference
-            this._attachedItems.set(id, item);
-            
-            Logger.log(LogCategory.ATTACHMENT, `Attached ${type} item ${id} to ${this._gameObject?.id}`);
+    getMountInfo(): AttachmentMountInfo | null {
+        return this.mountInfo ? { ...this.mountInfo } : null;
+    }
+
+    /**
+     * Check if attachment is currently mounted
+     */
+    isMounted(): boolean {
+        return this.mountInfo !== null;
+    }
+
+    /**
+     * Remove attachment from its mount
+     */
+    unmount(): void {
+        if (this.mountInfo) {
+            Logger.log(LogCategory.SYSTEM, `Unmounted attachment ${this.config.name}`, {
+                previousPosition: `(${this.mountInfo.x}, ${this.mountInfo.y}, ${this.mountInfo.z})`,
+                previousSlot: this.mountInfo.slotType
+            });
         }
+        this.mountInfo = null;
+    }
+
+    /**
+     * Apply damage to the attachment
+     */
+    takeDamage(damage: number): void {
+        if (this.state.isDestroyed) return;
+
+        const previousHealth = this.state.health;
+        this.state.health = Math.max(0, this.state.health - damage);
         
-        return success;
+        Logger.log(LogCategory.SYSTEM, `Attachment ${this.config.name} took ${damage} damage`, {
+            previousHealth,
+            currentHealth: this.state.health,
+            maxHealth: this.state.maxHealth
+        });
+        
+        if (this.state.health <= 0 && !this.state.isDestroyed) {
+            this.destroy();
+        }
     }
-    
+
     /**
-     * Get an attached game object by ID
-     * @param id The attachment ID
-     * @returns The attached game object or undefined
+     * Destroy the attachment
      */
-    getAttachedItem(id: string): GameObject | undefined {
-        return this._attachedItems.get(id);
+    private destroy(): void {
+        this.state.isDestroyed = true;
+        this.state.isActive = false;
+        
+        Logger.log(LogCategory.SYSTEM, `Attachment ${this.config.name} destroyed`, {
+            type: this.config.type,
+            wasActive: this.state.isActive
+        });
+        
+        // Emit destruction event for systems to handle
+        // This could trigger visual effects, drop loot, etc.
     }
-    
+
     /**
-     * Get all attached game objects
-     * @returns Array of attached game objects
+     * Repair the attachment
      */
-    getAttachedItems(): GameObject[] {
-        return Array.from(this._attachedItems.values());
+    repair(amount: number): void {
+        if (this.state.isDestroyed) {
+            Logger.warn(LogCategory.SYSTEM, `Cannot repair destroyed attachment ${this.config.name}`);
+            return;
+        }
+
+        const previousHealth = this.state.health;
+        this.state.health = Math.min(this.state.maxHealth, this.state.health + amount);
+        
+        Logger.log(LogCategory.SYSTEM, `Repaired attachment ${this.config.name}`, {
+            previousHealth,
+            currentHealth: this.state.health,
+            healingAmount: amount
+        });
     }
 
-    detach(attachmentId: string): boolean {
-        // Also remove from attached items if present
-        this._attachedItems.delete(attachmentId);
-        return this._attachments.delete(attachmentId);
+    /**
+     * Set attachment active/inactive state
+     */
+    setActive(active: boolean): void {
+        if (this.state.isDestroyed) {
+            Logger.warn(LogCategory.SYSTEM, `Cannot change active state of destroyed attachment ${this.config.name}`);
+            return;
+        }
+
+        if (this.state.isActive !== active) {
+            this.state.isActive = active;
+            Logger.log(LogCategory.SYSTEM, `Attachment ${this.config.name} ${active ? 'activated' : 'deactivated'}`);
+        }
     }
 
-    getAttachments(): Attachment[] {
-        return Array.from(this._attachments.values());
+    /**
+     * Get a runtime property value
+     */
+    getProperty(key: string): any {
+        return this.state.runtimeProperties.get(key);
     }
 
+    /**
+     * Set a runtime property value
+     */
+    setProperty(key: string, value: any): void {
+        this.state.runtimeProperties.set(key, value);
+    }
+
+    /**
+     * Get all runtime properties
+     */
+    getAllProperties(): Map<string, any> {
+        return new Map(this.state.runtimeProperties);
+    }
+
+    /**
+     * Check if attachment is functional (not destroyed and active)
+     */
+    isFunctional(): boolean {
+        return !this.state.isDestroyed && this.state.isActive;
+    }
+
+    /**
+     * Get health percentage (0-1)
+     */
+    getHealthPercentage(): number {
+        return this.state.maxHealth > 0 ? this.state.health / this.state.maxHealth : 0;
+    }
+
+    /**
+     * Update attachment logic each frame
+     */
+    update(deltaTime: number): void {
+        // Override in subclasses for specific attachment behavior
+        // For example, weapons might have cooling down, cargo might have decay, etc.
+        
+        // Base update logic - could include things like:
+        // - Self-repair over time for certain attachment types
+        // - Degradation over time
+        // - Status effect processing
+    }
+
+    /**
+     * Serialize attachment data for network sync or save/load
+     */
     serialize(): any {
         return {
-            attachments: Array.from(this._attachments.values()),
-            attachmentPoints: [...this._attachmentPoints]
+            config: {
+                ...this.config,
+                properties: Array.from(this.config.properties.entries())
+            },
+            state: {
+                ...this.state,
+                runtimeProperties: Array.from(this.state.runtimeProperties.entries())
+            },
+            mountInfo: this.mountInfo
         };
     }
 
+    /**
+     * Deserialize attachment data
+     */
     deserialize(data: any): void {
-        this._attachments = new Map(
-            (data.attachments ?? []).map((a: Attachment) => [a.id, a])
-        );
-        this._attachmentPoints = [...(data.attachmentPoints ?? [])];
+        if (data.config) {
+            this.config = {
+                ...data.config,
+                properties: new Map(data.config.properties || [])
+            };
+        }
         
-        // Note: attached GameObject references are not serialized/deserialized
-        // They need to be re-attached separately after deserialization
+        if (data.state) {
+            this.state = {
+                ...data.state,
+                runtimeProperties: new Map(data.state.runtimeProperties || [])
+            };
+        }
+        
+        this.mountInfo = data.mountInfo || null;
+    }
+
+    /**
+     * Clean up attachment resources
+     */
+    dispose(): void {
+        this.mountInfo = null;
+        this.state.runtimeProperties.clear();
+        this.config.properties.clear();
+        
+        Logger.log(LogCategory.SYSTEM, `Disposed attachment ${this.config.name}`);
+        super.dispose();
+    }
+
+    /**
+     * Get a summary of the attachment for debugging
+     */
+    getDebugInfo(): any {
+        return {
+            name: this.config.name,
+            type: this.config.type,
+            size: this.config.size,
+            health: `${this.state.health}/${this.state.maxHealth}`,
+            healthPercentage: `${(this.getHealthPercentage() * 100).toFixed(1)}%`,
+            weight: this.config.weight,
+            isDestroyed: this.state.isDestroyed,
+            isActive: this.state.isActive,
+            isFunctional: this.isFunctional(),
+            isMounted: this.isMounted(),
+            mountInfo: this.mountInfo,
+            allowedSlots: this.config.allowedSlots,
+            propertiesCount: this.state.runtimeProperties.size
+        };
     }
 }

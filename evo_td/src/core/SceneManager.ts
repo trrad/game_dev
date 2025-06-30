@@ -51,38 +51,6 @@ export interface SceneManagerConfig {
 }
 
 /**
- * Camera tracking configuration
- */
-export interface CameraTrackingConfig {
-    /** Camera field of view distance (smaller than SceneManager FoV) */
-    cameraFovDistance: number;
-    /** Camera follow smoothing factor (0-1, higher = more responsive) */
-    followSmoothness: number;
-    /** Camera height offset above the tracked object */
-    heightOffset: number;
-    /** Camera distance behind/around the tracked object */
-    followDistance: number;
-    /** Whether camera tracking is enabled */
-    enabled: boolean;
-    /** Whether to show camera FoV debug visualization */
-    showCameraFovDebug: boolean;
-    /** Minimum zoom distance (closest) */
-    minZoomDistance: number;
-    /** Maximum zoom distance (farthest) */
-    maxZoomDistance: number;
-    /** Camera elevation angle (in radians, lower = more cinematic) */
-    elevationAngle: number;
-    /** Pan offset along train length (0 = center, negative = towards back, positive = towards front) */
-    panOffset: number;
-    /** Maximum pan distance along train */
-    maxPanDistance: number;
-    /** Camera azimuth angle around the train (radians, 0 = behind, PI/2 = right side) */
-    azimuthAngle: number;
-    /** Maximum azimuth rotation allowed (limits camera rotation around train) */
-    maxAzimuthAngle: number;
-}
-
-/**
  * Default configuration for SceneManager
  */
 const DEFAULT_CONFIG: SceneManagerConfig = {
@@ -90,25 +58,6 @@ const DEFAULT_CONFIG: SceneManagerConfig = {
     enableCulling: true,
     maxVisibleObjects: 1000,
     debugMode: false
-};
-
-/**
- * Default camera tracking configuration
- */
-const DEFAULT_CAMERA_TRACKING: CameraTrackingConfig = {
-    cameraFovDistance: 30, // Smaller than SceneManager FoV
-    followSmoothness: 0.1,
-    heightOffset: 8, // Lower for more cinematic feel
-    followDistance: 20,
-    enabled: true,
-    showCameraFovDebug: false,
-    minZoomDistance: 5, // Allow zooming very close for detailed view
-    maxZoomDistance: 50, // Reasonable max distance
-    elevationAngle: Math.PI / 8, // 22.5 degrees - lower, more cinematic angle
-    panOffset: 0, // Start centered on train
-    maxPanDistance: 25, // Allow panning about the length of a medium train
-    azimuthAngle: 0, // Start behind the train
-    maxAzimuthAngle: Math.PI / 3 // Allow 60 degrees rotation in either direction
 };
 
 /**
@@ -133,24 +82,16 @@ export class SceneManager {
     public camera: Camera;
     /** Configuration settings */
     private config: SceneManagerConfig;
-    /** Camera tracking configuration */
-    private cameraTrackingConfig: CameraTrackingConfig;
     /** Map of game object IDs to their visual representations */
     private visualMappings: Map<string, VisualMapping> = new Map();
     /** Time manager reference */
     private timeManager: TimeManager;
     /** Camera target position */
     private cameraTarget: Vector3;
-    /** Current tracked object ID (typically a train) */
-    private trackedObjectId: string | null = null;
-    /** Smooth camera position for interpolation */
-    private smoothCameraPosition: Vector3;
-    /** Current camera pan offset along the tracked object */
-    private currentPanOffset: number = 0;
+    /** GameObject to track with camera (optional) */
+    private cameraTrackingTarget: GameObject | null = null;
     /** Field of view sphere for debugging */
     private fovSphere: Mesh | null = null;
-    /** Camera field of view sphere for debugging */
-    private cameraFovSphere: Mesh | null = null;
     /** Last time the scene was updated */
     private lastUpdateTime: number = 0;
     /** Delta time accumulator for fixed timestep updates */
@@ -162,40 +103,28 @@ export class SceneManager {
      * Create a new SceneManager
      * @param engine The Babylon Engine instance
      * @param config Optional configuration settings
-     * @param cameraTrackingConfig Optional camera tracking configuration
      */
     constructor(
         private engine: Engine,
-        config: Partial<SceneManagerConfig> = {},
-        cameraTrackingConfig: Partial<CameraTrackingConfig> = {}
+        config: Partial<SceneManagerConfig> = {}
     ) {
         // Apply default config with overrides
         this.config = { ...DEFAULT_CONFIG, ...config };
-        this.cameraTrackingConfig = { ...DEFAULT_CAMERA_TRACKING, ...cameraTrackingConfig };
         
         // Create scene
         this.scene = new Scene(engine);
         
-        // Set up basic camera with cinematic positioning
+        // Set up basic camera
         this.cameraTarget = new Vector3(0, 0, 0);
-        this.smoothCameraPosition = new Vector3(0, this.cameraTrackingConfig.heightOffset, -this.cameraTrackingConfig.followDistance);
-        this.currentPanOffset = this.cameraTrackingConfig.panOffset;
-        
         this.camera = new ArcRotateCamera(
             "mainCamera",
-            Math.PI / 2, // Azimuth angle (side to side)
-            this.cameraTrackingConfig.elevationAngle, // Lower elevation for cinematic feel
-            this.cameraTrackingConfig.followDistance,
+            Math.PI / 2,
+            Math.PI / 3,
+            20,
             this.cameraTarget,
             this.scene
         );
         this.camera.attachControl(engine.getRenderingCanvas(), true);
-        
-        // Set camera zoom limits
-        if (this.camera instanceof ArcRotateCamera) {
-            this.camera.lowerRadiusLimit = this.cameraTrackingConfig.minZoomDistance;
-            this.camera.upperRadiusLimit = this.cameraTrackingConfig.maxZoomDistance;
-        }
         
         // Set up basic lighting
         const hemiLight = new HemisphericLight(
@@ -229,7 +158,7 @@ export class SceneManager {
      */
     private setupDebugVisuals(): void {
         if (this.config.debugMode) {
-            // Create field of view sphere for debugging (SceneManager FoV)
+            // Create field of view sphere for debugging
             this.fovSphere = MeshBuilder.CreateSphere(
                 "fovSphere", 
                 { diameter: this.config.fieldOfViewDistance * 2 }, 
@@ -242,27 +171,6 @@ export class SceneManager {
             this.fovSphere.material = fovMaterial;
             this.fovSphere.isPickable = false;
         }
-
-        if (this.cameraTrackingConfig.showCameraFovDebug) {
-            this.setupCameraFovDebugSphere();
-        }
-    }
-
-    /**
-     * Create camera FoV debug sphere
-     */
-    private setupCameraFovDebugSphere(): void {
-        this.cameraFovSphere = MeshBuilder.CreateSphere(
-            "cameraFovSphere", 
-            { diameter: this.cameraTrackingConfig.cameraFovDistance * 2 }, 
-            this.scene
-        );
-        const cameraFovMaterial = new StandardMaterial("cameraFovSphereMat", this.scene);
-        cameraFovMaterial.diffuseColor = new Color3(0.8, 0.4, 0.2);
-        cameraFovMaterial.alpha = 0.15;
-        cameraFovMaterial.wireframe = true;
-        this.cameraFovSphere.material = cameraFovMaterial;
-        this.cameraFovSphere.isPickable = false;
     }
 
     /**
@@ -409,6 +317,44 @@ export class SceneManager {
     }
 
     /**
+     * Set a GameObject for the camera to automatically track
+     * @param gameObject GameObject to track, or null to stop tracking
+     */
+    setCameraTrackingTarget(gameObject: GameObject | null): void {
+        this.cameraTrackingTarget = gameObject;
+        
+        if (gameObject) {
+            Logger.log(LogCategory.RENDERING, `Camera now tracking GameObject: ${gameObject.id}`);
+        } else {
+            Logger.log(LogCategory.RENDERING, `Camera tracking cleared`);
+        }
+    }
+
+    /**
+     * Get the currently tracked GameObject
+     */
+    getCameraTrackingTarget(): GameObject | null {
+        return this.cameraTrackingTarget;
+    }
+
+    /**
+     * Update camera position based on tracking target
+     */
+    private updateCameraTracking(): void {
+        if (!this.cameraTrackingTarget) return;
+
+        // Get the target's position component
+        const posComponent = this.cameraTrackingTarget.getComponent('position') as PositionComponent;
+        if (!posComponent) return;
+
+        const targetPos = posComponent.getPosition();
+        const newTarget = new Vector3(targetPos.x, targetPos.y, targetPos.z);
+
+        // Update camera target to follow the tracked object
+        this.setCameraTarget(newTarget);
+    }
+
+    /**
      * Update the visual state of all tracked game objects
      * @param deltaTime Time since last update (in seconds)
      */
@@ -418,9 +364,6 @@ export class SceneManager {
         
         // Accumulate delta time for fixed timestep updates
         this.deltaTimeAccumulator += deltaTime * timeScale;
-        
-        // Update camera tracking to follow tracked object
-        this.updateCameraTracking(deltaTime);
         
         // Update visual representation for all game objects using fixed timestep
         while (this.deltaTimeAccumulator >= this.FIXED_TIMESTEP) {
@@ -434,11 +377,14 @@ export class SceneManager {
         // Update debug visualization if enabled
         this.updateDebugVisuals();
         
+        // Update camera tracking if a target is set
+        this.updateCameraTracking();
+        
         this.lastUpdateTime = performance.now();
     }
 
     /**
-     * Update object visibility based on distance from camera and fog of war around tracked train
+     * Update object visibility based on distance from camera
      */
     private updateObjectVisibility(): void {
         if (!this.config.enableCulling) {
@@ -454,66 +400,35 @@ export class SceneManager {
             return;
         }
 
-        // Get camera position and tracked object position for fog of war
+        // Get camera position
         const cameraPosition = this.camera.position;
-        let fogOfWarCenter: Vector3 | null = null;
-        
-        // If we have a tracked object, use it as the center for fog of war
-        if (this.trackedObjectId) {
-            const trackedMapping = this.visualMappings.get(this.trackedObjectId);
-            if (trackedMapping) {
-                fogOfWarCenter = this.getVisualPosition(trackedMapping.visual);
-            }
-        }
-        
-        // If no tracked object, use camera position as fallback
-        if (!fogOfWarCenter) {
-            fogOfWarCenter = cameraPosition.clone();
-        }
         
         // Calculate distances and sort objects by distance
         const distancedObjects = Array.from(this.visualMappings.values()).map(mapping => {
             const visualPosition = this.getVisualPosition(mapping.visual);
-            const distanceFromCamera = Vector3.Distance(visualPosition, cameraPosition);
-            const distanceFromFogCenter = Vector3.Distance(visualPosition, fogOfWarCenter!);
-            return { mapping, distanceFromCamera, distanceFromFogCenter };
-        }).sort((a, b) => a.distanceFromCamera - b.distanceFromCamera);
+            const distance = Vector3.Distance(visualPosition, cameraPosition);
+            return { mapping, distance };
+        }).sort((a, b) => a.distance - b.distance);
         
-        // Apply visibility based on distance and fog of war
+        // Apply visibility based on distance and max visible objects
         const maxObjects = this.config.maxVisibleObjects;
         distancedObjects.forEach((obj, index) => {
-            // Check SceneManager field of view (larger area for background processing)
-            const isWithinSceneFOV = obj.distanceFromCamera <= this.config.fieldOfViewDistance;
-            
-            // Check camera field of view (smaller area for "fog of war" effect)
-            const isWithinCameraFOV = obj.distanceFromFogCenter <= this.cameraTrackingConfig.cameraFovDistance;
-            
-            // Check object limit
+            const isWithinFOV = obj.distance <= this.config.fieldOfViewDistance;
             const isWithinObjectLimit = index < maxObjects;
-            
-            // Always show the tracked object itself
-            const isTrackedObject = obj.mapping.gameObject.id === this.trackedObjectId;
-            
-            // Show if within camera FoV (fog of war), unless it's beyond scene FoV or object limit
-            const shouldBeVisible = (isWithinCameraFOV || isTrackedObject) && isWithinSceneFOV && isWithinObjectLimit;
-            
+            const shouldBeVisible = isWithinFOV && isWithinObjectLimit;
             this.setVisualVisibility(obj.mapping.visual, shouldBeVisible, obj.mapping.childMeshes);
             
             // Log visibility changes for debugging
-            if (this.config.debugMode && (obj.mapping.gameObject.type === 'enemy' || obj.mapping.gameObject.type === 'station')) {
+            if (this.config.debugMode && (obj.mapping.gameObject.type === 'station' || obj.mapping.gameObject.type === 'rail')) {
                 const visualPosition = this.getVisualPosition(obj.mapping.visual);
                 Logger.log(LogCategory.PERFORMANCE, `${obj.mapping.gameObject.type} visibility: ${obj.mapping.gameObject.id}`, {
-                    distanceFromCamera: obj.distanceFromCamera.toFixed(2),
-                    distanceFromFogCenter: obj.distanceFromFogCenter.toFixed(2),
-                    sceneFovDistance: this.config.fieldOfViewDistance,
-                    cameraFovDistance: this.cameraTrackingConfig.cameraFovDistance,
-                    isWithinSceneFOV,
-                    isWithinCameraFOV,
+                    distance: obj.distance.toFixed(2), 
+                    fieldOfViewDistance: this.config.fieldOfViewDistance,
+                    isWithinFOV,
                     isWithinObjectLimit,
-                    isTrackedObject,
                     visible: shouldBeVisible,
+                    cullingEnabled: this.config.enableCulling,
                     cameraPosition: `(${cameraPosition.x.toFixed(1)}, ${cameraPosition.y.toFixed(1)}, ${cameraPosition.z.toFixed(1)})`,
-                    fogCenter: `(${fogOfWarCenter.x.toFixed(1)}, ${fogOfWarCenter.y.toFixed(1)}, ${fogOfWarCenter.z.toFixed(1)})`,
                     visualPosition: `(${visualPosition.x.toFixed(1)}, ${visualPosition.y.toFixed(1)}, ${visualPosition.z.toFixed(1)})`
                 });
             }
@@ -807,275 +722,5 @@ export class SceneManager {
         });
 
         return true;
-    }
-
-    /**
-     * Set the object to track with the camera (typically a train)
-     * @param gameObjectId The ID of the game object to track
-     */
-    setTrackedObject(gameObjectId: string | null): void {
-        this.trackedObjectId = gameObjectId;
-        
-        if (gameObjectId) {
-            Logger.log(LogCategory.SYSTEM, `Camera now tracking object: ${gameObjectId}`);
-            
-            // Update camera target to the tracked object immediately
-            const trackedMapping = this.visualMappings.get(gameObjectId);
-            if (trackedMapping) {
-                const trackedPosition = this.getVisualPosition(trackedMapping.visual);
-                this.setCameraTarget(trackedPosition);
-            }
-        } else {
-            Logger.log(LogCategory.SYSTEM, "Camera tracking disabled");
-        }
-    }
-
-    /**
-     * Get the currently tracked object ID
-     */
-    getTrackedObjectId(): string | null {
-        return this.trackedObjectId;
-    }
-
-    /**
-     * Update camera tracking to follow the tracked object
-     */
-    private updateCameraTracking(deltaTime: number): void {
-        if (!this.cameraTrackingConfig.enabled || !this.trackedObjectId) {
-            return;
-        }
-
-        const trackedMapping = this.visualMappings.get(this.trackedObjectId);
-        if (!trackedMapping) {
-            return;
-        }
-
-        const trackedPosition = this.getVisualPosition(trackedMapping.visual);
-        
-        // Get the train's forward direction (assuming it's a train)
-        const trackedRotation = trackedMapping.visual.rotation || new Vector3(0, 0, 0);
-        const trainForward = new Vector3(
-            Math.sin(trackedRotation.y),
-            0,
-            Math.cos(trackedRotation.y)
-        );
-        
-        // Calculate panned position along the train's length
-        const pannedPosition = trackedPosition.add(trainForward.scale(this.currentPanOffset));
-        
-        // Calculate desired camera target (the panned position)
-        const desiredTarget = pannedPosition.clone();
-        desiredTarget.y += 1; // Slight offset up from ground level
-        
-        // Calculate camera position with cinematic angle and azimuth
-        const distance = this.camera instanceof ArcRotateCamera ? this.camera.radius : this.cameraTrackingConfig.followDistance;
-        const elevation = this.cameraTrackingConfig.elevationAngle;
-        
-        // Base azimuth relative to train's orientation
-        const trainAzimuth = trackedRotation.y; // Train's current facing direction
-        const relativeAzimuth = this.cameraTrackingConfig.azimuthAngle; // Our camera offset
-        const finalAzimuth = trainAzimuth + relativeAzimuth;
-        
-        const desiredCameraPosition = new Vector3(
-            desiredTarget.x + Math.cos(finalAzimuth) * Math.cos(elevation) * distance,
-            desiredTarget.y + Math.sin(elevation) * distance,
-            desiredTarget.z + Math.sin(finalAzimuth) * Math.cos(elevation) * distance
-        );
-
-        // Smooth interpolation towards desired positions
-        const smoothness = this.cameraTrackingConfig.followSmoothness;
-        
-        // Update camera target
-        this.cameraTarget = Vector3.Lerp(
-            this.cameraTarget,
-            desiredTarget,
-            smoothness * deltaTime * 60
-        );
-
-        // Apply to camera with cinematic positioning
-        if (this.camera instanceof ArcRotateCamera) {
-            this.camera.target = this.cameraTarget;
-            
-            // Smoothly update the camera's alpha (azimuth) and beta (elevation)
-            const targetAlpha = finalAzimuth + Math.PI; // Add PI because ArcRotateCamera's alpha is opposite
-            const targetBeta = Math.PI / 2 - elevation; // Convert from elevation to ArcRotateCamera's beta
-            
-            // Normalize angles to avoid sudden jumps
-            let alphaDiff = targetAlpha - this.camera.alpha;
-            while (alphaDiff > Math.PI) alphaDiff -= 2 * Math.PI;
-            while (alphaDiff < -Math.PI) alphaDiff += 2 * Math.PI;
-            
-            this.camera.alpha += alphaDiff * smoothness * deltaTime * 60;
-            this.camera.beta = Vector3.Lerp(
-                new Vector3(0, this.camera.beta, 0),
-                new Vector3(0, targetBeta, 0),
-                smoothness * deltaTime * 60
-            ).y;
-            
-            // Update radius (zoom distance)
-            this.camera.radius = Vector3.Lerp(
-                new Vector3(this.camera.radius, 0, 0),
-                new Vector3(distance, 0, 0),
-                smoothness * deltaTime * 60
-            ).x;
-        }
-        
-        // Update debug spheres to follow the tracked object
-        this.updateDebugSpheresPosition();
-    }
-
-    /**
-     * Update debug sphere positions to follow camera target
-     */
-    private updateDebugSpheresPosition(): void {
-        // Update FOV sphere position to follow camera target
-        if (this.fovSphere) {
-            this.fovSphere.position = this.cameraTarget.clone();
-        }
-        
-        // Update camera FoV sphere position to follow camera target
-        if (this.cameraFovSphere) {
-            this.cameraFovSphere.position = this.cameraTarget.clone();
-        }
-    }
-
-    /**
-     * Set camera field of view distance (user adjustable for fog of war)
-     */
-    setCameraFovDistance(distance: number): void {
-        // Clamp the distance to reasonable bounds
-        this.cameraTrackingConfig.cameraFovDistance = Math.max(5, Math.min(distance, this.config.fieldOfViewDistance * 0.8));
-        
-        Logger.log(LogCategory.SYSTEM, `Camera field of view distance updated: ${this.cameraTrackingConfig.cameraFovDistance}`);
-        
-        // Update camera FoV sphere if it exists
-        if (this.cameraFovSphere) {
-            this.cameraFovSphere.scaling.setAll(this.cameraTrackingConfig.cameraFovDistance / 15); // Scale relative to default radius
-        }
-        
-        // Also adjust camera distance for zoom effect
-        if (this.camera instanceof ArcRotateCamera) {
-            this.camera.radius = Math.max(10, Math.min(distance * 1.2, 80));
-        }
-    }
-
-    /**
-     * Get current camera field of view distance
-     */
-    getCameraFovDistance(): number {
-        return this.cameraTrackingConfig.cameraFovDistance;
-    }
-
-    /**
-     * Set camera pan offset along the tracked train
-     * @param offset Pan offset (-maxPanDistance to +maxPanDistance)
-     */
-    setCameraPanOffset(offset: number): void {
-        this.currentPanOffset = Math.max(-this.cameraTrackingConfig.maxPanDistance, 
-                                        Math.min(offset, this.cameraTrackingConfig.maxPanDistance));
-        Logger.log(LogCategory.SYSTEM, `Camera pan offset updated: ${this.currentPanOffset.toFixed(1)}`);
-    }
-
-    /**
-     * Pan camera relative to current position
-     * @param deltaOffset Amount to pan by
-     */
-    panCamera(deltaOffset: number): void {
-        this.setCameraPanOffset(this.currentPanOffset + deltaOffset);
-    }
-
-    /**
-     * Reset camera pan to center of train
-     */
-    resetCameraPan(): void {
-        this.setCameraPanOffset(0);
-    }
-
-    /**
-     * Set camera zoom distance
-     * @param distance Zoom distance (minZoomDistance to maxZoomDistance)
-     */
-    setCameraZoom(distance: number): void {
-        if (this.camera instanceof ArcRotateCamera) {
-            const clampedDistance = Math.max(this.cameraTrackingConfig.minZoomDistance, 
-                                            Math.min(distance, this.cameraTrackingConfig.maxZoomDistance));
-            this.camera.radius = clampedDistance;
-            Logger.log(LogCategory.SYSTEM, `Camera zoom updated: ${clampedDistance.toFixed(1)}`);
-        }
-    }
-
-    /**
-     * Adjust camera zoom relative to current zoom
-     * @param deltaZoom Amount to zoom by (negative = zoom in, positive = zoom out)
-     */
-    adjustCameraZoom(deltaZoom: number): void {
-        if (this.camera instanceof ArcRotateCamera) {
-            this.setCameraZoom(this.camera.radius + deltaZoom);
-        }
-    }
-
-    /**
-     * Set camera elevation angle for cinematic control
-     * @param angle Elevation angle in radians
-     */
-    setCameraElevation(angle: number): void {
-        this.cameraTrackingConfig.elevationAngle = Math.max(0.1, Math.min(angle, Math.PI / 2 - 0.1));
-        Logger.log(LogCategory.SYSTEM, `Camera elevation updated: ${(this.cameraTrackingConfig.elevationAngle * 180 / Math.PI).toFixed(1)}°`);
-    }
-
-    /**
-     * Set camera azimuth angle (rotation around the train)
-     * @param angle Azimuth angle in radians (0 = behind, PI/2 = right side, -PI/2 = left side)
-     */
-    setCameraAzimuth(angle: number): void {
-        const clampedAngle = Math.max(-this.cameraTrackingConfig.maxAzimuthAngle, 
-                                     Math.min(angle, this.cameraTrackingConfig.maxAzimuthAngle));
-        this.cameraTrackingConfig.azimuthAngle = clampedAngle;
-        Logger.log(LogCategory.SYSTEM, `Camera azimuth updated: ${(clampedAngle * 180 / Math.PI).toFixed(1)}°`);
-    }
-
-    /**
-     * Adjust camera azimuth relative to current azimuth
-     * @param deltaAngle Amount to rotate by in radians (positive = clockwise when viewed from above)
-     */
-    adjustCameraAzimuth(deltaAngle: number): void {
-        this.setCameraAzimuth(this.cameraTrackingConfig.azimuthAngle + deltaAngle);
-    }
-
-    /**
-     * Reset camera azimuth to behind the train
-     */
-    resetCameraAzimuth(): void {
-        this.setCameraAzimuth(0);
-    }
-
-    /**
-     * Get current camera azimuth angle
-     */
-    getCameraAzimuth(): number {
-        return this.cameraTrackingConfig.azimuthAngle;
-    }
-
-    /**
-     * Toggle camera FoV debug visualization
-     */
-    setCameraFovDebugEnabled(enabled: boolean): void {
-        this.cameraTrackingConfig.showCameraFovDebug = enabled;
-        
-        if (enabled && !this.cameraFovSphere) {
-            this.setupCameraFovDebugSphere();
-        } else if (!enabled && this.cameraFovSphere) {
-            this.cameraFovSphere.dispose();
-            this.cameraFovSphere = null;
-        }
-        
-        Logger.log(LogCategory.SYSTEM, `Camera FoV debug ${enabled ? 'enabled' : 'disabled'}`);
-    }
-
-    /**
-     * Get camera tracking configuration
-     */
-    getCameraTrackingConfig(): CameraTrackingConfig {
-        return { ...this.cameraTrackingConfig };
     }
 }

@@ -4,6 +4,8 @@ import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { InventoryComponent } from "../components/InventoryComponent";
 import { AttachmentComponent } from "../components/AttachmentComponent";
+import { AttachmentSlotComponent } from "../components/AttachmentSlotComponent";
+import { AttachmentSlotFactory } from "../components/AttachmentSlotFactory";
 
 export interface TrainCarConfig {
     id: string;
@@ -51,10 +53,10 @@ export class TrainCar extends GameObject {
             this.addComponent(inventory);
         }
 
-        if (config.attachmentSlots) {
-            const attachment = new AttachmentComponent();
-            this.addComponent(attachment);
-        }
+        // All train cars support attachments via slot system
+        const slotConfig = AttachmentSlotFactory.createSlotConfig(config.type);
+        const slotComponent = new AttachmentSlotComponent(slotConfig);
+        this.addComponent(slotComponent);
 
         // Initialize metrics
         this.metrics.set('health', this._state.health);
@@ -184,6 +186,116 @@ export class TrainCar extends GameObject {
             currentHealth: this._state.health,
             timestamp: performance.now()
         });
+    }
+
+    /**
+     * Get the attachment slot component for this car
+     */
+    getSlotComponent(): AttachmentSlotComponent | null {
+        return this.getComponent('attachmentSlot') as AttachmentSlotComponent | null;
+    }
+
+    /**
+     * Add an attachment to this car at a specific grid position
+     */
+    addAttachment(
+        attachment: AttachmentComponent,
+        slotType: string,
+        gridX: number,
+        gridY: number,
+        gridZ: number
+    ): boolean {
+        const slotComponent = this.getSlotComponent();
+        if (!slotComponent) {
+            Logger.warn(LogCategory.TRAIN, `Cannot add attachment to car ${this.carId}: no slot component`);
+            return false;
+        }
+
+        const result = slotComponent.placeAttachment(
+            attachment,
+            slotType as any, // Type assertion for slot type enum
+            gridX,
+            gridY,
+            gridZ
+        );
+
+        if (result.success) {
+            this.metrics.set('attachments_count', this.metrics.get('attachments_count')! + 1);
+            
+            this.emitEvent({
+                type: 'attachment_added',
+                carId: this.carId,
+                attachmentName: attachment.getConfig().name,
+                attachmentType: attachment.getAttachmentType(),
+                gridPosition: { x: gridX, y: gridY, z: gridZ },
+                slotType: slotType,
+                timestamp: performance.now()
+            });
+
+            Logger.log(LogCategory.TRAIN, `Added attachment to car ${this.carId}`, {
+                attachment: attachment.getConfig().name,
+                position: `(${gridX}, ${gridY}, ${gridZ})`,
+                slotType: slotType
+            });
+        } else {
+            Logger.warn(LogCategory.TRAIN, `Failed to add attachment to car ${this.carId}`, {
+                error: result.errorMessage,
+                conflicts: result.conflictingAttachments
+            });
+        }
+
+        return result.success;
+    }
+
+    /**
+     * Remove an attachment from this car
+     */
+    removeAttachment(attachmentId: string): boolean {
+        const slotComponent = this.getSlotComponent();
+        if (!slotComponent) {
+            Logger.warn(LogCategory.TRAIN, `Cannot remove attachment from car ${this.carId}: no slot component`);
+            return false;
+        }
+
+        const success = slotComponent.removeAttachment(attachmentId);
+        
+        if (success) {
+            this.metrics.set('attachments_count', Math.max(0, this.metrics.get('attachments_count')! - 1));
+            
+            this.emitEvent({
+                type: 'attachment_removed',
+                carId: this.carId,
+                attachmentId: attachmentId,
+                timestamp: performance.now()
+            });
+
+            Logger.log(LogCategory.TRAIN, `Removed attachment from car ${this.carId}`, {
+                attachmentId: attachmentId
+            });
+        }
+
+        return success;
+    }
+
+    /**
+     * Get all attachments on this car
+     */
+    getAttachments(): AttachmentComponent[] {
+        // This would need to be implemented by tracking attachments
+        // For now, return empty array
+        return [];
+    }
+
+    /**
+     * Get attachment capacity statistics
+     */
+    getAttachmentStats(): any {
+        const slotComponent = this.getSlotComponent();
+        if (!slotComponent) {
+            return { totalSlots: 0, occupied: 0, available: 0 };
+        }
+
+        return slotComponent.getOccupancyStats();
     }
 
     serialize(): TrainCarConfig & TrainCarState {

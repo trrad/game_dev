@@ -13,11 +13,23 @@ import { ObjectTracker } from '../utils/ObjectTracker';
 
 let nextGameObjectId = 1;
 
-export class GameObject {
+/** Event listener function type */
+type EventListener = (...args: any[]) => void;
+
+/** Event emitter interface for game objects */
+interface GameObjectEventEmitter {
+    on(event: string, listener: EventListener): void;
+    off(event: string, listener: EventListener): void;
+    emit(event: string, ...args: any[]): void;
+}
+
+export class GameObject implements GameObjectEventEmitter {
     /** Unique identifier for this GameObject */
     public readonly id: string;
     /** Map of component type to component instance */
     private _components: Map<string, Component> = new Map();
+    /** Event listeners map */
+    private _eventListeners: Map<string, EventListener[]> = new Map();
     /** Event history for observability */
     protected eventHistory: any[] = [];
     /** Metrics for observability */
@@ -89,15 +101,68 @@ export class GameObject {
     }
 
     /**
+     * Add an event listener for a specific event type.
+     */
+    on(event: string, listener: EventListener): void {
+        if (!this._eventListeners.has(event)) {
+            this._eventListeners.set(event, []);
+        }
+        this._eventListeners.get(event)!.push(listener);
+    }
+
+    /**
+     * Remove an event listener for a specific event type.
+     */
+    off(event: string, listener: EventListener): void {
+        const listeners = this._eventListeners.get(event);
+        if (listeners) {
+            const index = listeners.indexOf(listener);
+            if (index >= 0) {
+                listeners.splice(index, 1);
+            }
+            if (listeners.length === 0) {
+                this._eventListeners.delete(event);
+            }
+        }
+    }
+
+    /**
+     * Emit an event to all registered listeners.
+     */
+    emit(event: string, ...args: any[]): void {
+        const listeners = this._eventListeners.get(event);
+        if (listeners) {
+            // Create a copy to avoid issues if listeners are removed during emission
+            const listenersCopy = [...listeners];
+            listenersCopy.forEach(listener => {
+                try {
+                    listener(...args);
+                } catch (error) {
+                    Logger?.log?.(LogCategory.ERROR, `Error in event listener for ${event}:`, { error, objectId: this.id });
+                }
+            });
+        }
+        
+        // Log event for observability
+        this.emitEvent({ type: 'event_emitted', event, args, objectId: this.id });
+    }
+
+    /**
      * Disposes this GameObject and all its components.
      */
     dispose(): void {
         if (this._disposed) return;
         this.emitEvent({ type: 'object_disposing', objectId: this.id });
+        
+        // Clean up components
         for (const comp of this._components.values()) {
             comp.dispose();
         }
         this._components.clear();
+        
+        // Clean up event listeners
+        this._eventListeners.clear();
+        
         ObjectTracker?.unregister?.(this);
         Logger?.log?.(LogCategory.PERFORMANCE, `GameObject disposed: ${this.id}`);
         this._disposed = true;
