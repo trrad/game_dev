@@ -19,6 +19,7 @@ import {
 import { StationRenderer } from "./renderers/StationRenderer";
 import { RailRenderer } from "./renderers/RailRenderer";
 import { TrainRenderer } from "./renderers/TrainRenderer";
+import { EnemyRenderer } from "./renderers/EnemyRenderer";
 import { GroundRenderer } from "./renderers/GroundRenderer";
 import { LightRenderer } from "./renderers/LightRenderer";
 
@@ -48,6 +49,7 @@ import { EventStack } from "./game/EventStack";
 // Import train-related classes for later use
 import { Train } from "./entities/Train";
 import { TrainSystem } from "./systems/TrainSystem";
+import { EnemySystem } from "./systems/EnemySystem";
 
 // Import attachment system components
 import { AttachmentFactory } from "./components/AttachmentFactory";
@@ -71,11 +73,13 @@ class ECSApp {
     private timeManager: TimeManager;
     private eventStack: EventStack;
     private trainSystem: TrainSystem;
+    private enemySystem: EnemySystem;
     
     // Renderers
     private stationRenderer: StationRenderer;
     private railRenderer: RailRenderer;
     private trainRenderer: TrainRenderer;
+    private enemyRenderer: EnemyRenderer;
     private groundRenderer: GroundRenderer;
     private lightRenderer: LightRenderer;
     
@@ -153,8 +157,29 @@ class ECSApp {
             this.stationRenderer = new StationRenderer(this.sceneManager.scene);
             this.railRenderer = new RailRenderer(this.sceneManager.scene);
             this.trainRenderer = new TrainRenderer(this.sceneManager.scene);
+            this.enemyRenderer = new EnemyRenderer(this.sceneManager.scene);
             this.groundRenderer = new GroundRenderer(this.sceneManager.scene);
             this.lightRenderer = new LightRenderer(this.sceneManager.scene);
+            
+            // Initialize Enemy System with custom spawn configuration
+            this.enemySystem = new EnemySystem(this.enemyRenderer, {
+                spawnInterval: { min: 8, max: 15 },  // Spawn every 8-15 seconds
+                maxEnemies: 12,                      // Max 12 enemies at once
+                spawnRadius: 25,                     // Spawn within 25 units of rails
+                spawnOnlyWhenTrainMoving: false,     // Always spawn for continuous action
+                enemyTypes: {
+                    basic: 0.4,                      // 40% basic enemies
+                    fast: 0.3,                       // 30% fast enemies  
+                    tank: 0.2,                       // 20% tank enemies
+                    aggressive: 0.1                  // 10% aggressive enemies
+                }
+            });
+            
+            // Connect systems with TimeManager, EventStack, and SceneManager
+            this.enemySystem.setTimeManager(this.timeManager);
+            this.enemySystem.setEventStack(this.eventStack);
+            this.enemySystem.setSceneManager(this.sceneManager);
+            this.enemySystem.setTrainSystem(this.trainSystem);
             
             // Connect TrainRenderer to TrainSystem for visual updates
             this.trainSystem.setTrainRenderer(this.trainRenderer);
@@ -200,6 +225,9 @@ class ECSApp {
             
             // Update train system with time-scaled delta
             this.trainSystem.update(deltaTime);
+            
+            // Update enemy system with time-scaled delta
+            this.enemySystem.update(deltaTime);
         });
         
         // Register the render loop
@@ -417,6 +445,9 @@ class ECSApp {
             
             // Add rail to TrainSystem for movement calculations
             this.trainSystem.addRail(rail);
+            
+            // Add rail to EnemySystem for spawn location calculations  
+            this.enemySystem.addRail(rail);
             
             // Store the rail
             this.rails.set(config.id, rail);

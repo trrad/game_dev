@@ -326,7 +326,14 @@ export class TrainSystem {
     }
 
     /**
-     * Get a train by ID
+     * Get all active trains (for use by other systems like EnemySystem)
+     */
+    getAllTrains(): Train[] {
+        return Array.from(this.trains.values());
+    }
+
+    /**
+     * Get a specific train by ID
      */
     getTrain(trainId: string): Train | undefined {
         return this.trains.get(trainId);

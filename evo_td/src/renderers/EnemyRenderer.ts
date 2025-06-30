@@ -65,7 +65,7 @@ export class EnemyRenderer {
     constructor(scene: Scene, config?: Partial<EnemyVisualConfig>) {
         this.scene = scene;
         this.visualConfig = { ...DEFAULT_ENEMY_VISUAL, ...config };
-        
+
         Logger.log(LogCategory.RENDERING, "EnemyRenderer initialized");
     }
 
@@ -74,49 +74,49 @@ export class EnemyRenderer {
      */
     public createEnemyVisual(enemy: Enemy): TransformNode {
         const enemyId = enemy.id;
-        
+
         Logger.log(LogCategory.RENDERING, `Creating enemy visual: ${enemyId}`);
-        
+
         // Create parent node
         const parentNode = new TransformNode(`enemy_${enemyId}`, this.scene);
-        
+
         // Create the main enemy mesh
         const mesh = MeshBuilder.CreateSphere(
             `enemy_mesh_${enemyId}`,
             { diameter: this.visualConfig.baseSize },
             this.scene
         );
-        
+
         // Create material
         const material = new StandardMaterial(`enemy_material_${enemyId}`, this.scene);
         material.diffuseColor = this.visualConfig.materialColors.base.clone();
         material.specularColor = new Color3(0.1, 0.1, 0.1);
         mesh.material = material;
-        
+
         // Parent the mesh to the node
         mesh.parent = parentNode;
-        
+
         // Create health bar if enabled
         let healthBar: Mesh | undefined;
         if (this.visualConfig.showHealthBar) {
             healthBar = this.createHealthBar(enemyId);
             healthBar.parent = parentNode;
         }
-        
+
         // Create state indicator if enabled
         let stateIndicator: Mesh | undefined;
         if (this.visualConfig.showStateIndicator) {
             stateIndicator = this.createStateIndicator(enemyId);
             stateIndicator.parent = parentNode;
         }
-        
+
         // Set initial position
         const positionComponent = enemy.getComponent<PositionComponent>('position');
         if (positionComponent) {
             const pos = positionComponent.getPosition();
             parentNode.position = new Vector3(pos.x, pos.y, pos.z);
         }
-        
+
         // Store the visual
         const enemyVisual: EnemyVisual = {
             parentNode,
@@ -127,14 +127,14 @@ export class EnemyRenderer {
             enemyId,
             lastUpdateTime: performance.now()
         };
-        
+
         this.enemyVisuals.set(enemyId, enemyVisual);
-        
+
         Logger.log(LogCategory.RENDERING, `Enemy visual created: ${enemyId}`, {
             position: parentNode.position.toString(),
             size: this.visualConfig.baseSize
         });
-        
+
         return parentNode;
     }
 
@@ -146,7 +146,7 @@ export class EnemyRenderer {
         if (!visual) return;
 
         const currentTime = performance.now();
-        
+
         // Update position
         const positionComponent = enemy.getComponent<PositionComponent>('position');
         if (positionComponent) {
@@ -159,17 +159,17 @@ export class EnemyRenderer {
         if (healthComponent) {
             const healthPercentage = healthComponent.getHealthPercentage();
             const maxHealth = healthComponent.getMaxHealth();
-            
+
             // Scale based on max health (growth over time) and current health percentage
             const growthScale = Math.min(maxHealth / 75, 3.0); // Original max health was 75
             const healthScale = 0.7 + (healthPercentage * 0.3); // Scale down when damaged
             const finalScale = this.visualConfig.baseSize * growthScale * healthScale;
-            
+
             visual.mesh.scaling.setAll(Math.min(finalScale, this.visualConfig.maxSize));
-            
+
             // Update material color based on health and state
             this.updateEnemyColor(visual, healthPercentage, enemy);
-            
+
             // Update health bar
             if (visual.healthBar) {
                 this.updateHealthBar(visual.healthBar, healthPercentage);
@@ -195,21 +195,21 @@ export class EnemyRenderer {
         if (!visual) return;
 
         Logger.log(LogCategory.RENDERING, `Removing enemy visual: ${enemyId}`);
-        
+
         // Dispose of all meshes and materials
         visual.mesh.dispose();
         visual.material.dispose();
-        
+
         if (visual.healthBar) {
             visual.healthBar.dispose();
         }
-        
+
         if (visual.stateIndicator) {
             visual.stateIndicator.dispose();
         }
-        
+
         visual.parentNode.dispose();
-        
+
         this.enemyVisuals.delete(enemyId);
     }
 
@@ -240,15 +240,15 @@ export class EnemyRenderer {
             { width: 0.8, height: 0.1, depth: 0.02 },
             this.scene
         );
-        
+
         const healthMaterial = new StandardMaterial(`enemy_health_mat_${enemyId}`, this.scene);
         healthMaterial.diffuseColor = new Color3(0, 1, 0); // Green
         healthMaterial.emissiveColor = new Color3(0, 0.3, 0);
         healthBar.material = healthMaterial;
-        
+
         // Position above enemy
         healthBar.position.y = 1.0;
-        
+
         return healthBar;
     }
 
@@ -261,15 +261,15 @@ export class EnemyRenderer {
             { diameter: 0.2 },
             this.scene
         );
-        
+
         const indicatorMaterial = new StandardMaterial(`enemy_state_mat_${enemyId}`, this.scene);
         indicatorMaterial.diffuseColor = new Color3(1, 1, 0); // Yellow default
         indicatorMaterial.emissiveColor = new Color3(0.3, 0.3, 0);
         indicator.material = indicatorMaterial;
-        
+
         // Position above health bar
         indicator.position.y = 1.3;
-        
+
         return indicator;
     }
 
@@ -278,13 +278,13 @@ export class EnemyRenderer {
      */
     private updateEnemyColor(visual: EnemyVisual, healthPercentage: number, enemy: Enemy): void {
         let targetColor: Color3;
-        
+
         if (enemy.isDead()) {
             targetColor = this.visualConfig.materialColors.dead;
         } else {
             const aiComponent = enemy.getComponent<AIBehaviorComponent>('aiBehavior');
             const aiState = aiComponent?.getCurrentState() ?? AIState.WANDERING;
-            
+
             if (aiState === AIState.ATTACKING || aiState === AIState.PURSUING) {
                 targetColor = this.visualConfig.materialColors.aggressive;
             } else if (healthPercentage < 0.5) {
@@ -293,7 +293,7 @@ export class EnemyRenderer {
                 targetColor = this.visualConfig.materialColors.base;
             }
         }
-        
+
         visual.material.diffuseColor = targetColor.clone();
     }
 
@@ -303,7 +303,7 @@ export class EnemyRenderer {
     private updateHealthBar(healthBar: Mesh, healthPercentage: number): void {
         // Scale width based on health percentage
         healthBar.scaling.x = Math.max(0.1, healthPercentage);
-        
+
         // Change color based on health
         const material = healthBar.material as StandardMaterial;
         if (healthPercentage > 0.6) {
@@ -320,7 +320,7 @@ export class EnemyRenderer {
      */
     private updateStateIndicator(indicator: Mesh, aiState: AIState): void {
         const material = indicator.material as StandardMaterial;
-        
+
         switch (aiState) {
             case AIState.WANDERING:
                 material.diffuseColor = new Color3(0, 1, 0); // Green
@@ -350,7 +350,7 @@ export class EnemyRenderer {
             this.removeEnemyVisual(enemyId);
         });
         this.enemyVisuals.clear();
-        
+
         Logger.log(LogCategory.RENDERING, "EnemyRenderer disposed");
     }
 }

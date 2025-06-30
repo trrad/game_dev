@@ -32,23 +32,23 @@ export interface AIBehaviorState {
     currentState: AIState;
     targetPosition: { x: number; y: number; z: number } | null;
     lastStateChange: number;
-    
+
     // AI characteristics
     aggressionLevel: number;    // 0.0-1.0
     intelligence: number;       // 0.0-1.0
     sightRange: number;         // Detection range in units
     attackRange: number;        // Range to start attacking
     fearThreshold: number;      // 0.0-1.0, health % when to retreat
-    
+
     // Behavior patterns
     socialBehavior: SocialBehavior;
     huntingStrategy: HuntingStrategy;
-    
+
     // Movement patterns
     wanderRadius: number;       // How far to wander from spawn
     wanderTarget: { x: number; y: number; z: number } | null;
     lastWanderChange: number;
-    
+
     // Growth and evolution
     spawnTime: number;
     lastGrowthTime: number;
@@ -57,27 +57,27 @@ export interface AIBehaviorState {
 
 export class AIBehaviorComponent extends Component<AIBehaviorState> {
     public readonly type = 'aiBehavior';
-    
+
     private _currentState: AIState = AIState.WANDERING;
     private _targetPosition: Vector3 | null = null;
     private _lastStateChange: number = 0;
-    
+
     // AI characteristics
     private _aggressionLevel: number;
     private _intelligence: number;
     private _sightRange: number;
     private _attackRange: number;
     private _fearThreshold: number;
-    
+
     // Behavior patterns
     private _socialBehavior: SocialBehavior;
     private _huntingStrategy: HuntingStrategy;
-    
+
     // Movement patterns
     private _wanderRadius: number;
     private _wanderTarget: Vector3 | null = null;
     private _lastWanderChange: number = 0;
-    
+
     // Growth and evolution
     private _spawnTime: number;
     private _lastGrowthTime: number;
@@ -94,7 +94,7 @@ export class AIBehaviorComponent extends Component<AIBehaviorState> {
         wanderRadius?: number;
     } = {}) {
         super();
-        
+
         this._aggressionLevel = config.aggressionLevel ?? 0.5;
         this._intelligence = config.intelligence ?? 0.3;
         this._sightRange = config.sightRange ?? 12;
@@ -103,7 +103,7 @@ export class AIBehaviorComponent extends Component<AIBehaviorState> {
         this._socialBehavior = config.socialBehavior ?? SocialBehavior.SOLITARY;
         this._huntingStrategy = config.huntingStrategy ?? HuntingStrategy.PURSUIT;
         this._wanderRadius = config.wanderRadius ?? 8;
-        
+
         this._spawnTime = performance.now();
         this._lastGrowthTime = this._spawnTime;
         this._lastStateChange = this._spawnTime;
@@ -117,7 +117,7 @@ export class AIBehaviorComponent extends Component<AIBehaviorState> {
         if (this._currentState !== newState) {
             this._currentState = newState;
             this._lastStateChange = performance.now();
-            
+
             if (targetPosition) {
                 this._targetPosition = targetPosition.clone();
             }
@@ -176,10 +176,10 @@ export class AIBehaviorComponent extends Component<AIBehaviorState> {
     public serialize(): AIBehaviorState {
         return {
             currentState: this._currentState,
-            targetPosition: this._targetPosition ? { 
-                x: this._targetPosition.x, 
-                y: this._targetPosition.y, 
-                z: this._targetPosition.z 
+            targetPosition: this._targetPosition ? {
+                x: this._targetPosition.x,
+                y: this._targetPosition.y,
+                z: this._targetPosition.z
             } : null,
             lastStateChange: this._lastStateChange,
             aggressionLevel: this._aggressionLevel,

@@ -22,7 +22,7 @@ export interface HealthState {
 
 export class HealthComponent extends Component<HealthState> {
     public readonly type = 'health';
-    
+
     private _health: number;
     private _maxHealth: number;
     private _isDead: boolean = false;
@@ -31,7 +31,7 @@ export class HealthComponent extends Component<HealthState> {
     private _damageResistances: HealthState['damageResistances'];
 
     constructor(
-        maxHealth: number = 100, 
+        maxHealth: number = 100,
         regenerationRate: number = 0,
         resistances?: Partial<HealthState['damageResistances']>
     ) {
@@ -59,10 +59,10 @@ export class HealthComponent extends Component<HealthState> {
 
         const resistance = this._damageResistances[damageType];
         const actualDamage = Math.max(0, amount * resistance);
-        
+
         this._health = Math.max(0, this._health - actualDamage);
         this._lastDamageTime = performance.now();
-        
+
         if (this._health <= 0) {
             this._isDead = true;
         }

@@ -10,7 +10,7 @@ import { AIBehaviorComponent, SocialBehavior, HuntingStrategy } from '../compone
 export interface EnemyConfig {
     id: string;
     spawnPosition: { x: number; y: number; z: number };
-    
+
     // Health configuration
     maxHealth?: number;
     regenerationRate?: number;
@@ -23,10 +23,10 @@ export interface EnemyConfig {
         toxic: number;
         radiation: number;
     }>;
-    
+
     // Movement configuration
     baseSpeed?: number;
-    
+
     // AI configuration
     aggressionLevel?: number;
     intelligence?: number;
@@ -41,16 +41,16 @@ export interface EnemyConfig {
 export class Enemy extends GameObject {
     constructor(config: EnemyConfig) {
         super(config.id);
-        
+
         // Add position component
         const positionComponent = new PositionComponent();
         positionComponent.setPosition(config.spawnPosition);
         this.addComponent(positionComponent);
-        
+
         // Add movement component
         const movementComponent = new MovementComponent(this, config.baseSpeed ?? 1.0);
         this.addComponent(movementComponent);
-        
+
         // Add health component
         const healthComponent = new HealthComponent(
             config.maxHealth ?? 75,
@@ -58,7 +58,7 @@ export class Enemy extends GameObject {
             config.damageResistances
         );
         this.addComponent(healthComponent);
-        
+
         // Add AI behavior component
         const aiBehaviorComponent = new AIBehaviorComponent({
             aggressionLevel: config.aggressionLevel,
@@ -72,7 +72,7 @@ export class Enemy extends GameObject {
         });
         this.addComponent(aiBehaviorComponent);
     }
-    
+
     /**
      * Get the enemy's current health percentage
      */
@@ -80,7 +80,7 @@ export class Enemy extends GameObject {
         const healthComponent = this.getComponent<HealthComponent>('health');
         return healthComponent ? healthComponent.getHealthPercentage() : 0;
     }
-    
+
     /**
      * Check if the enemy is dead
      */
@@ -88,7 +88,7 @@ export class Enemy extends GameObject {
         const healthComponent = this.getComponent<HealthComponent>('health');
         return healthComponent ? healthComponent.isDead() : true;
     }
-    
+
     /**
      * Apply damage to the enemy
      */
@@ -96,7 +96,7 @@ export class Enemy extends GameObject {
         const healthComponent = this.getComponent<HealthComponent>('health');
         return healthComponent ? healthComponent.takeDamage(amount, damageType) : 0;
     }
-    
+
     /**
      * Get the enemy's current position
      */
@@ -104,7 +104,7 @@ export class Enemy extends GameObject {
         const positionComponent = this.getComponent<PositionComponent>('position');
         return positionComponent ? positionComponent.getPosition() : { x: 0, y: 0, z: 0 };
     }
-    
+
     /**
      * Set the enemy's position
      */
@@ -114,7 +114,7 @@ export class Enemy extends GameObject {
             positionComponent.setPosition({ x, y, z });
         }
     }
-    
+
     /**
      * Get the enemy's current AI state
      */
@@ -122,7 +122,7 @@ export class Enemy extends GameObject {
         const aiComponent = this.getComponent<AIBehaviorComponent>('aiBehavior');
         return aiComponent ? aiComponent.getCurrentState() : 'unknown';
     }
-    
+
     /**
      * Get the enemy's sight range
      */
