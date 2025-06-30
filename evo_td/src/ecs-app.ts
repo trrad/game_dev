@@ -21,6 +21,7 @@ import { RailRenderer } from "./renderers/RailRenderer";
 import { TrainRenderer } from "./renderers/TrainRenderer";
 import { GroundRenderer } from "./renderers/GroundRenderer";
 import { LightRenderer } from "./renderers/LightRenderer";
+import { EnemyRenderer } from "./renderers/EnemyRenderer";
 
 // Import core ECS classes
 import { GameObject } from "./core/GameObject";
@@ -45,9 +46,12 @@ import { TrainJourneyControlsUI } from "./ui/TrainJourneyControlsUI";
 import { TimeManager } from "./game/TimeManager";
 import { EventStack } from "./game/EventStack";
 
-// Import train-related classes for later use
+// Import train-related classes
 import { Train } from "./entities/Train";
 import { TrainSystem } from "./systems/TrainSystem";
+
+// Import enemy-related classes
+import { EnemySystem } from "./systems/EnemySystem";
 
 class ECSApp {
     private canvas: HTMLCanvasElement;
@@ -65,6 +69,7 @@ class ECSApp {
     private timeManager: TimeManager;
     private eventStack: EventStack;
     private trainSystem: TrainSystem;
+    private enemySystem: EnemySystem;
     
     // Renderers
     private stationRenderer: StationRenderer;
@@ -72,6 +77,7 @@ class ECSApp {
     private trainRenderer: TrainRenderer;
     private groundRenderer: GroundRenderer;
     private lightRenderer: LightRenderer;
+    private enemyRenderer: EnemyRenderer;
     
     // Game entities
     private stations: Map<string, Station> = new Map();
@@ -123,6 +129,14 @@ class ECSApp {
                 enableCulling: true,
                 maxVisibleObjects: 500,
                 debugMode: false
+            },
+            {
+                cameraFovDistance: 35, // Start with a reasonable fog of war distance
+                followSmoothness: 0.15, // Smooth camera following
+                heightOffset: 18,
+                followDistance: 25,
+                enabled: true,
+                showCameraFovDebug: false // Start with debug off, can toggle with F
             }
         );
         
@@ -149,6 +163,13 @@ class ECSApp {
             this.trainRenderer = new TrainRenderer(this.sceneManager.scene);
             this.groundRenderer = new GroundRenderer(this.sceneManager.scene);
             this.lightRenderer = new LightRenderer(this.sceneManager.scene);
+            this.enemyRenderer = new EnemyRenderer(this.sceneManager.scene);
+            
+            // Initialize Enemy System and connect dependencies
+            this.enemySystem = new EnemySystem(this.enemyRenderer);
+            this.enemySystem.setTimeManager(this.timeManager);
+            this.enemySystem.setEventStack(this.eventStack);
+            this.enemySystem.setSceneManager(this.sceneManager);
             
             // Connect TrainRenderer to TrainSystem for visual updates
             this.trainSystem.setTrainRenderer(this.trainRenderer);
@@ -169,6 +190,8 @@ class ECSApp {
             // Add some initial events to the event log for demonstration
             this.eventStack.logEvent(LogCategory.SYSTEM, 'app_initialized', 'ECS Train Trading Game initialized successfully');
             this.eventStack.logEvent(LogCategory.UI, 'controls_ready', 'Press F1 to toggle event log, Space to pause, 1-5 for time speed');
+            this.eventStack.logEvent(LogCategory.UI, 'camera_controls', 'Camera: Arrow keys pan/zoom, Shift+Arrow rotate, T toggle tracking, R reset pan, Alt+R reset rotation');
+            this.eventStack.logEvent(LogCategory.UI, 'camera_advanced', 'Advanced: Ctrl+1-5 FoV presets, Alt+1-5 zoom presets, F debug sphere');
             
             Logger.log(LogCategory.SYSTEM, "ECS App initialized successfully with station network");
             
@@ -194,6 +217,9 @@ class ECSApp {
             
             // Update train system with time-scaled delta
             this.trainSystem.update(deltaTime);
+            
+            // Update enemy system with time-scaled delta
+            this.enemySystem.update(deltaTime);
         });
         
         // Register the render loop
@@ -249,6 +275,96 @@ class ECSApp {
                 const wasPaused = this.timeManager.isPausedState();
                 this.timeManager.setPaused(!wasPaused);
                 this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', `Game ${wasPaused ? 'unpaused' : 'paused'} via spacebar`);
+            }
+            
+            // Camera controls (Ctrl + Number keys for zoom/FoV)
+            if (ev.ctrlKey && ev.key >= '1' && ev.key <= '5') {
+                const fovMap = { '1': 15, '2': 25, '3': 35, '4': 50, '5': 75 } as const;
+                const fov = fovMap[ev.key as keyof typeof fovMap];
+                if (fov) {
+                    this.sceneManager.setCameraFovDistance(fov);
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_fov_changed', `Camera FoV set to ${fov} units`);
+                }
+            }
+            
+            // Camera zoom controls (Alt + Number keys)
+            if (ev.altKey && ev.key >= '1' && ev.key <= '5') {
+                const zoomMap = { '1': 8, '2': 15, '3': 25, '4': 35, '5': 50 } as const;
+                const zoom = zoomMap[ev.key as keyof typeof zoomMap];
+                if (zoom) {
+                    this.sceneManager.setCameraZoom(zoom);
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_zoom_changed', `Camera zoom set to ${zoom} units`);
+                }
+            }
+            
+            // Camera panning controls (Arrow keys when not in input)
+            if (!ev.target || (ev.target as HTMLElement).tagName !== 'INPUT') {
+                if (ev.key === 'ArrowLeft') {
+                    ev.preventDefault();
+                    if (ev.shiftKey) {
+                        // Shift + Left: Rotate camera to left side of train
+                        this.sceneManager.adjustCameraAzimuth(-0.1); // ~5.7 degrees
+                        this.eventStack.logEvent(LogCategory.UI, 'camera_azimuth', 'Rotated camera left around train');
+                    } else {
+                        // Normal: Pan towards back of train
+                        this.sceneManager.panCamera(-3);
+                        this.eventStack.logEvent(LogCategory.UI, 'camera_pan', 'Panned camera towards back of train');
+                    }
+                } else if (ev.key === 'ArrowRight') {
+                    ev.preventDefault();
+                    if (ev.shiftKey) {
+                        // Shift + Right: Rotate camera to right side of train
+                        this.sceneManager.adjustCameraAzimuth(0.1); // ~5.7 degrees
+                        this.eventStack.logEvent(LogCategory.UI, 'camera_azimuth', 'Rotated camera right around train');
+                    } else {
+                        // Normal: Pan towards front of train
+                        this.sceneManager.panCamera(3);
+                        this.eventStack.logEvent(LogCategory.UI, 'camera_pan', 'Panned camera towards front of train');
+                    }
+                } else if (ev.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    this.sceneManager.adjustCameraZoom(-2); // Zoom in
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_zoom', 'Zoomed camera in');
+                } else if (ev.key === 'ArrowDown') {
+                    ev.preventDefault();
+                    this.sceneManager.adjustCameraZoom(2); // Zoom out
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_zoom', 'Zoomed camera out');
+                }
+            }
+            
+            // Reset camera pan with R
+            if (ev.key.toLowerCase() === 'r' && !ev.ctrlKey && !ev.shiftKey) {
+                if (ev.altKey) {
+                    // Alt + R: Reset camera azimuth to behind train
+                    this.sceneManager.resetCameraAzimuth();
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_reset', 'Reset camera azimuth to behind train');
+                } else {
+                    // Normal R: Reset camera pan
+                    this.sceneManager.resetCameraPan();
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_reset', 'Reset camera to center of train');
+                }
+            }
+            
+            // Toggle camera tracking with T
+            if (ev.key.toLowerCase() === 't' && !ev.ctrlKey && !ev.shiftKey) {
+                const currentTracked = this.sceneManager.getTrackedObjectId();
+                if (currentTracked) {
+                    this.sceneManager.setTrackedObject(null);
+                    this.eventStack.logEvent(LogCategory.UI, 'camera_tracking_disabled', 'Camera tracking disabled');
+                } else {
+                    // Re-enable tracking for the first train
+                    const firstTrain = Array.from(this.trains.values())[0];
+                    if (firstTrain) {
+                        this.sceneManager.setTrackedObject(firstTrain.id);
+                        this.eventStack.logEvent(LogCategory.UI, 'camera_tracking_enabled', `Camera now tracking ${firstTrain.id}`);
+                    }
+                }
+            }
+            
+            // Toggle camera FoV debug visualization with F
+            if (ev.key.toLowerCase() === 'f' && !ev.ctrlKey && !ev.shiftKey) {
+                this.sceneManager.setCameraFovDebugEnabled(!this.sceneManager.getCameraTrackingConfig().showCameraFovDebug);
+                this.eventStack.logEvent(LogCategory.UI, 'fog_of_war_debug', 'Toggled camera FoV debug visualization');
             }
         });
     }
@@ -408,6 +524,9 @@ class ECSApp {
             
             // Add rail to TrainSystem for movement calculations
             this.trainSystem.addRail(rail);
+            
+            // Add rail to EnemySystem for spawning calculations
+            this.enemySystem.addRail(rail);
             
             // Store the rail
             this.rails.set(config.id, rail);
@@ -688,6 +807,13 @@ class ECSApp {
         this.trains.set(train.id, train);
         this.sceneManager.registerGameObject(train, trainVisual);
         
+        // Set the train as the camera tracking target
+        this.sceneManager.setTrackedObject(train.id);
+        Logger.log(LogCategory.SYSTEM, `Camera now tracking train: ${train.id}`);
+        
+        // Add train to EnemySystem for targeting
+        this.enemySystem.addTrain(train);
+        
         Logger.log(LogCategory.SYSTEM, `Created initial train: ${train.id} at station_a`, {
             trainPosition: `(${startPosition.x}, ${startPosition.y}, ${startPosition.z})`,
             visualPosition: trainVisual.position.toString(),
@@ -804,6 +930,11 @@ class ECSApp {
             
             // Stop systems
             this.timeManager.stop();
+            
+            // Dispose of game systems
+            if (this.enemySystem) {
+                this.enemySystem.dispose();
+            }
             
             // Properly dispose of the SceneManager
             this.sceneManager.dispose();
