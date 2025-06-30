@@ -1,0 +1,81 @@
+/**
+ * Time Control Panel CSS
+ * Styles for the time management UI (speed controls, pause, game time display)
+ */
+
+.time-controls {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    font-family: Arial, sans-serif;
+    z-index: 1000;
+    min-width: 200px;
+}
+
+.time-speed-label {
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #4a9eff;
+}
+
+.time-buttons {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.time-button {
+    padding: 6px 12px;
+    font-size: 12px;
+    border: 1px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 40px;
+    background-color: #333;
+    color: #ccc;
+}
+
+.time-button:hover {
+    background-color: #555;
+}
+
+.time-button.active {
+    background-color: #4a9eff;
+    color: white;
+}
+
+.pause-button {
+    padding: 6px 12px;
+    font-size: 12px;
+    border: 1px solid #666;
+    border-radius: 4px;
+    cursor: pointer;
+    background-color: #660000;
+    color: white;
+    font-weight: bold;
+    min-width: 60px;
+}
+
+.pause-button:hover {
+    background-color: #880000;
+}
+
+.pause-button.paused {
+    background-color: #006600;
+}
+
+.game-time-display {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 8px;
+    border-top: 1px solid #444;
+    padding-top: 8px;
+}

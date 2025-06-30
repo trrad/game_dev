@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "@babylonjs/core": "^8.14.0",
+    "@babylonjs/inspector": "^8.14.0",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.0.3",
+    "ts-jest": "^29.4.0"
+  }
+}

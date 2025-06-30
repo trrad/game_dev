@@ -1,0 +1,65 @@
+/**
+ * CSS Loader Utility
+ * Dynamically loads CSS files and manages stylesheets
+ */
+
+export class CSSLoader {
+    private loadedStyles: Set<string> = new Set();
+
+    /**
+     * Load a CSS file from the assets/ui directory
+     */
+    public async loadCSS(filename: string): Promise<void> {
+        if (this.loadedStyles.has(filename)) {
+            return; // Already loaded
+        }
+
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = `./src/ui/assets/${filename}`;
+        
+        return new Promise((resolve, reject) => {
+            link.onload = () => {
+                this.loadedStyles.add(filename);
+                resolve();
+            };
+            link.onerror = () => {
+                reject(new Error(`Failed to load CSS: ${filename}`));
+            };
+            document.head.appendChild(link);
+        });
+    }
+
+    /**
+     * Load multiple CSS files
+     */
+    public async loadMultipleCSS(filenames: string[]): Promise<void> {
+        const promises = filenames.map(filename => this.loadCSS(filename));
+        await Promise.all(promises);
+    }
+
+    /**
+     * Remove a loaded CSS file
+     */
+    public unloadCSS(filename: string): void {
+        const links = document.querySelectorAll(`link[href="./src/ui/assets/${filename}"]`);
+        links.forEach(link => link.remove());
+        this.loadedStyles.delete(filename);
+    }
+
+    /**
+     * Get list of loaded styles
+     */
+    public getLoadedStyles(): string[] {
+        return Array.from(this.loadedStyles);
+    }
+
+    /**
+     * Dispose all loaded styles
+     */
+    public dispose(): void {
+        this.loadedStyles.forEach(filename => this.unloadCSS(filename));
+        this.loadedStyles.clear();
+    }
+}

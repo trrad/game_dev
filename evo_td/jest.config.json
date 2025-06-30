@@ -1,0 +1,21 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "jsdom",
+  "roots": [
+    "<rootDir>/src"
+  ],
+  "testMatch": [
+    "**/__tests__/**/*.ts",
+    "**/?(*.)+(spec|test).ts"
+  ],
+  "transform": {
+    "^.+\\.tsx?$": "ts-jest",
+    "^.+\\.jsx?$": "babel-jest"
+  },
+  "moduleNameMapper": {
+    "@babylonjs/core": "<rootDir>/src/tests/mocks/babylonjs.mock.ts"
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!@babylonjs)"
+  ]
+}

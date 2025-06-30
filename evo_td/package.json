@@ -1,0 +1,21 @@
+{
+  "name": "evo_td",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:original": "vite --config vite.config.js",
+    "dev:ecs": "vite --config vite.config.ecs.js",
+    "build": "tsc && vite build",
+    "build:ecs": "tsc && vite build --config vite.config.ecs.js",
+    "preview": "vite preview",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "devDependencies": {
+    "jest-environment-jsdom": "^30.0.2",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.0"
+  }
+}

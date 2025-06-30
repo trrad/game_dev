@@ -1,0 +1,104 @@
+/**
+ * Unit tests for the TrainCar class and its components.
+ */
+import { TrainCar } from '../../game/TrainCar';
+import type { TrainCarConfig } from '../../game/TrainCar';
+
+describe('TrainCar', () => {
+    let car: TrainCar;
+    const defaultConfig: TrainCarConfig = {
+        id: 'car1',
+        type: 'cargo',
+        length: 10,
+        cargoCapacity: 100,
+        attachmentSlots: 2,
+        maxHealth: 100
+    };
+
+    beforeEach(() => {
+        car = new TrainCar(defaultConfig);
+    });
+
+    describe('Creation', () => {
+        it('should create with correct initial values', () => {
+            expect(car.carId).toBe('car1');
+            expect(car.carType).toBe('cargo');
+            expect(car.length).toBe(10);
+        });
+
+        it('should initialize components based on car type', () => {
+            // Default cargo car should have all components
+            expect(car.getComponent('position')).toBeDefined();
+            expect(car.getComponent('inventory')).toBeDefined();
+            expect(car.getComponent('attachment')).toBeDefined();
+
+            // Engine car without cargo/attachments
+            const engineCar = new TrainCar({
+                id: 'engine1',
+                type: 'engine',
+                length: 8
+            });
+
+            expect(engineCar.getComponent('position')).toBeDefined();
+            expect(engineCar.getComponent('inventory')).toBeUndefined();
+            expect(engineCar.getComponent('attachment')).toBeUndefined();
+        });
+    });
+
+    describe('Health System', () => {
+        // Skip all health-related tests until the system is implemented
+        it.skip('should handle damage and repair (future feature)', () => {
+            // These will be implemented when the health system is ready
+            expect(true).toBe(true); // Placeholder
+        });
+    });
+
+    describe('Update Logic', () => {
+        it('should update components', () => {
+            car.update(1); // Should not throw
+            expect(car.getComponent('position')).toBeDefined();
+        });
+    });
+
+    describe('Serialization', () => {
+        it('should serialize basic properties', () => {
+            const serialized = car.serialize();
+
+            expect(serialized).toMatchObject({
+                id: 'car1',
+                type: 'cargo',
+                length: 10
+            });
+        });
+
+        it('should deserialize basic properties', () => {
+            const newState = {
+                ...defaultConfig,
+                id: 'car2',
+                type: 'passenger',
+                length: 12
+            };
+
+            car.deserialize(newState);
+            expect(car.carId).toBe('car2');
+            expect(car.carType).toBe('passenger');
+            expect(car.length).toBe(12);
+        });
+    });
+
+    describe('Resource Cleanup', () => {
+        it('should dispose resources properly', () => {
+            const mockMeshDispose = jest.fn();
+            const mockGroupDispose = jest.fn();
+            car.mesh = { dispose: mockMeshDispose } as any;
+            car.group = { dispose: mockGroupDispose } as any;
+
+            car.dispose();
+
+            expect(mockMeshDispose).toHaveBeenCalled();
+            expect(mockGroupDispose).toHaveBeenCalled();
+            expect(car.mesh).toBeUndefined();
+            expect(car.group).toBeUndefined();
+        });
+    });
+});
