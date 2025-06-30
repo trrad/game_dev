@@ -4,7 +4,7 @@
  * For actual implementation, integrate with the App class in app.ts
  */
 import { Engine } from "@babylonjs/core";
-import { Game } from "../game/Game";
+import { Game } from "../entities/Game";
 import { GameObject } from "../core/GameObject";
 import { PositionComponent } from "../components/PositionComponent";
 import { MovementComponent } from "../components/MovementComponent";

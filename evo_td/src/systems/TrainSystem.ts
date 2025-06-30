@@ -4,11 +4,11 @@
 import { Logger, LogCategory } from '../utils/Logger';
 import { GameObject } from '../core/GameObject';
 import { Train } from '../entities/Train';
-import type { TrainConfig } from '../types/TrainConfig';
+import type { TrainConfig } from '../entities/Train';
 import { PositionComponent, type Position3D } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
-import { Rail } from '../game/Rail';
-import { TimeManager } from '../game/TimeManager';
+import { Rail } from '../entities/Rail';
+import { TimeManager } from '../core/TimeManager';
 import { Vector3 } from '@babylonjs/core';
 import { TrainRenderer } from '../renderers/TrainRenderer';
 

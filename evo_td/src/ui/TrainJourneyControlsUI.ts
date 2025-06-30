@@ -4,9 +4,9 @@
  */
 
 import { Train } from "../entities/Train";
-import { Station } from "../game/Station";
+import { Station } from "../entities/Station";
 import { TrainSystem } from "../systems/TrainSystem";
-import { EventStack } from "../game/EventStack";
+import { EventStack } from "../core/EventStack";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 

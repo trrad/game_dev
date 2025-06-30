@@ -6,8 +6,21 @@ import { GameObject } from "../core/GameObject";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { MovementComponent } from "../components/MovementComponent";
-import { TrainCar } from "../game/TrainCar";
-import type { TrainConfig } from "../types/TrainConfig";
+import { TrainCar } from "./TrainCar";
+
+/**
+ * Configuration interface for Train entities.
+ */
+export interface TrainConfig {
+    /** Maximum cargo capacity in units */
+    cargoCapacity: number;
+    /** Base movement speed */
+    baseSpeed: number;
+    /** Spacing between train cars */
+    carSpacing: number;
+    /** Power efficiency multiplier */
+    powerEfficiency: number;
+}
 
 export interface TrainState {
     currentSpeed: number;

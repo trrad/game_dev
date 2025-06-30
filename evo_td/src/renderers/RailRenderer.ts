@@ -2,7 +2,7 @@
  * RailRenderer - Responsible for creating and managing visual representations of rails
  */
 import { Scene, MeshBuilder, Color3, Vector3, LinesMesh } from "@babylonjs/core";
-import { Rail, RailConfig } from "../game/Rail";
+import { Rail, RailConfig } from "../entities/Rail";
 import { Logger, LogCategory } from "../utils/Logger";
 
 /**

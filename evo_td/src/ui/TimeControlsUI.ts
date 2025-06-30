@@ -3,7 +3,7 @@
  * Handles the time management interface (speed controls, pause, game time display)
  */
 
-import { TimeManager, TimeSpeed } from "../game/TimeManager";
+import { TimeManager, TimeSpeed } from "../core/TimeManager";
 import { Logger, LogCategory } from "../utils/Logger";
 import { CSS_CLASSES, defaultUIConfig } from "./assets/ui-config";
 

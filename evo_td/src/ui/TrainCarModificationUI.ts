@@ -3,7 +3,7 @@
  */
 
 import { Logger, LogCategory } from '../utils/Logger';
-import { TrainCar } from '../game/TrainCar';
+import { TrainCar } from '../entities/TrainCar';
 import { AttachmentComponent, AttachmentSlotType } from '../components/AttachmentComponent';
 import { AttachmentFactory } from '../components/AttachmentFactory';
 import { AttachmentSlotComponent } from '../components/AttachmentSlotComponent';

@@ -2,7 +2,7 @@
  * TrainRenderer - Responsible for creating and managing visual representations of trains
  */
 import { Scene, MeshBuilder, StandardMaterial, Color3, Vector3, Mesh, TransformNode } from "@babylonjs/core";
-import { TrainCar } from "../game/TrainCar";
+import { TrainCar } from "../entities/TrainCar";
 import { AttachmentComponent } from "../components/AttachmentComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 

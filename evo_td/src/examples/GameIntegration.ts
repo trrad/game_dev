@@ -4,19 +4,19 @@
  */
 
 import { Engine, Scene, MeshBuilder, Vector3, StandardMaterial, Color3, PointLight } from "@babylonjs/core";
-import { Game } from "../game/Game";
+import { Game } from "../entities/Game";
 import { SceneManager } from "../core/SceneManager";
-import { Station } from "../game/Station";
-import { Rail } from "../game/Rail";
+import { Station } from "../entities/Station";
+import { Rail } from "../entities/Rail";
 import { Train } from "../entities/Train";
 import { TrainSystem } from "../systems/TrainSystem";
 import { PositionComponent } from "../components/PositionComponent";
 import { MovementComponent } from "../components/MovementComponent";
 import { InventoryComponent } from "../components/InventoryComponent";
 import { AttachmentComponent } from "../components/AttachmentComponent";
-import { TrainCar } from "../game/TrainCar";
+import { TrainCar } from "../entities/TrainCar";
 import { GameObject } from "../core/GameObject";
-import { EventStack } from "../game/EventStack";
+import { EventStack } from "../core/EventStack";
 import { Logger, LogCategory } from "../utils/Logger";
 
 export class GameIntegration {

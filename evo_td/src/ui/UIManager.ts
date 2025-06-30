@@ -8,8 +8,8 @@ import { TimeControlsUI } from "./TimeControlsUI";
 import { EventLogUI } from "./EventLogUI";
 import { UIFactory } from "./UIFactory";
 import { UISystem } from "../systems/UISystem";
-import { TimeManager } from "../game/TimeManager";
-import { EventStack } from "../game/EventStack";
+import { TimeManager } from "../core/TimeManager";
+import { EventStack } from "../core/EventStack";
 import { Logger, LogCategory } from "../utils/Logger";
 
 export class UIManager {

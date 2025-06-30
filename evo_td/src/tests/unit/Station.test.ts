@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import { Station, StationConfig } from "../../game/Station";
+import { Station, StationConfig } from "../../entities/Station";
 
 describe('Station', () => {
     let testConfig: StationConfig;

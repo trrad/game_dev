@@ -15,7 +15,7 @@ import {
     Color4,
     PointLight
 } from "@babylonjs/core";
-import { Game } from "./game/Game";
+import { Game } from "./entities/Game";
 
 // --- Attachment System Types ---
 

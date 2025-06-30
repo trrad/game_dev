@@ -1,4 +1,4 @@
-import { Game } from "./game/Game";
+import { Game } from "./entities/Game";
 
 // The App class (in app.ts) is now responsible for world state and rendering.
 // The Game class handles ticks and event stack.

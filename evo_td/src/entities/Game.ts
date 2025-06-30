@@ -1,5 +1,5 @@
-import { TimeManager } from "./TimeManager";
-import { EventStack, GameEvent } from "./EventStack";
+import { TimeManager } from "../core/TimeManager";
+import { EventStack, GameEvent } from "../core/EventStack";
 import { SceneManager } from "../core/SceneManager";
 import { Engine } from "@babylonjs/core";
 import { Logger, LogCategory } from "../utils/Logger";

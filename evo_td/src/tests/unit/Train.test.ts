@@ -5,7 +5,7 @@ import { Train } from '../../entities/Train';
 import { MovementComponent } from '../../components/MovementComponent';
 import { PositionComponent } from '../../components/PositionComponent';
 import { TrainSystem } from '../../systems/TrainSystem';
-import type { TrainConfig } from '../../types/TrainConfig';
+import type { TrainConfig } from '../../entities/Train';
 import type { Position3D } from '../../components/PositionComponent';
 
 describe('Train Entity', () => {

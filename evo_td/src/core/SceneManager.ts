@@ -33,7 +33,7 @@ import {
 
 import { GameObject } from './GameObject';
 import { PositionComponent } from '../components/PositionComponent';
-import { TimeManager } from '../game/TimeManager';
+import { TimeManager } from './TimeManager';
 import { Logger, LogCategory } from '../utils/Logger';
 
 /**

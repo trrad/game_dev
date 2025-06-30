@@ -2,8 +2,8 @@
  * Unit tests for the TrainCar class and its components.
  */
 import { Vector3 } from "@babylonjs/core";
-import { TrainCar } from '../../game/TrainCar';
-import type { TrainCarConfig } from '../../game/TrainCar';
+import { TrainCar } from '../../entities/TrainCar';
+import type { TrainCarConfig } from '../../entities/TrainCar';
 
 describe('TrainCar', () => {
     let car: TrainCar;

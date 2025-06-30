@@ -32,10 +32,10 @@ import { PositionComponent } from "./components/PositionComponent";
 import { MovementComponent } from "./components/MovementComponent";
 
 // Import game entities
-import { Station, StationConfig } from "./game/Station";
-import { Rail, RailConfig } from "./game/Rail";
-import { TrainCar, TrainCarConfig } from "./game/TrainCar";
-import { TrainConfig } from "./types/TrainConfig";
+import { Station, StationConfig } from "./entities/Station";
+import { Rail, RailConfig } from "./entities/Rail";
+import { TrainCar, TrainCarConfig } from "./entities/TrainCar";
+import { TrainConfig } from "./entities/Train";
 
 // Import UI and utility systems
 import { Logger, LogCategory } from "./utils/Logger";
@@ -43,8 +43,8 @@ import { UISystem } from "./systems/UISystem";
 import { UIFactory } from "./ui/UIFactory";
 import { EventLogUI } from "./ui/EventLogUI";
 import { TrainJourneyControlsUI } from "./ui/TrainJourneyControlsUI";
-import { TimeManager } from "./game/TimeManager";
-import { EventStack } from "./game/EventStack";
+import { TimeManager } from "./core/TimeManager";
+import { EventStack } from "./core/EventStack";
 
 // Import train-related classes for later use
 import { Train } from "./entities/Train";
