@@ -5,6 +5,8 @@ import { PositionComponent } from "../components/PositionComponent";
 import { InventoryComponent } from "../components/InventoryComponent";
 import { AttachmentComponent } from "../components/AttachmentComponent";
 import { AttachmentSlotComponent } from "../components/AttachmentSlotComponent";
+import { RailPositionComponent } from "../components/RailPositionComponent";
+import { TrainCarPositionComponent } from "../components/TrainCarPositionComponent";
 import { AttachmentSlotFactory } from "./AttachmentSlotFactory";
 
 export interface TrainCarConfig {
@@ -46,6 +48,13 @@ export class TrainCar extends GameObject {
         // Add required components
         const position = new PositionComponent();
         this.addComponent(position);
+
+        // Add rail-specific components for train cars
+        const railPosition = new RailPositionComponent(this);
+        this.addComponent(railPosition);
+
+        const trainCarPosition = new TrainCarPositionComponent(this, config.length);
+        this.addComponent(trainCarPosition);
 
         // Add optional components based on car type
         if (config.cargoCapacity) {

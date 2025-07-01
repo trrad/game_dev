@@ -6,7 +6,10 @@ import { GameObject } from "../core/GameObject";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { MovementComponent } from "../components/MovementComponent";
+import { RailPositionComponent } from "../components/RailPositionComponent";
+import { RailMovementComponent } from "../components/RailMovementComponent";
 import { TrainCar } from "./TrainCar";
+import type { EventStack } from "../core/EventStack";
 
 /**
  * Configuration interface for Train entities.
@@ -42,8 +45,8 @@ export class Train extends GameObject {
     private _cars: TrainCar[] = [];
     private _state: TrainState;
 
-    constructor(playerId: string, config: TrainConfig) {
-        super('train');
+    constructor(playerId: string, config: TrainConfig, eventStack?: EventStack) {
+        super('train', eventStack);
         this._playerId = playerId;
         this._config = { ...config };
 
@@ -63,6 +66,13 @@ export class Train extends GameObject {
 
         const movement = new MovementComponent(this, 1.0);
         this.addComponent(movement);
+
+        // Add rail-specific components
+        const railPosition = new RailPositionComponent(this);
+        this.addComponent(railPosition);
+
+        const railMovement = new RailMovementComponent(this, config.baseSpeed || 1.0);
+        this.addComponent(railMovement);
 
         // Initialize metrics
         this.metrics.set('cars_count', 0);
@@ -233,6 +243,14 @@ export class Train extends GameObject {
         this._state.currentRailId = railId;
         this._state.targetStationId = targetStationId;
 
+        // Emit event for both local listeners and EventStack routing
+        this.emit('journey_started', {
+            trainId: this.id,
+            railId: railId,
+            targetStationId: targetStationId,
+            timestamp: performance.now()
+        });
+
         this.emitEvent({
             type: 'movement_started',
             trainId: this.id,
@@ -255,6 +273,17 @@ export class Train extends GameObject {
         this._state.isMoving = false;
         this._state.currentRailId = undefined;
         this._state.targetStationId = undefined;
+        
+        // Also stop the rail components
+        const railMovement = this.getComponent<RailMovementComponent>('railMovement');
+        const railPosition = this.getComponent<RailPositionComponent>('railPosition');
+        
+        if (railMovement) {
+            railMovement.stopJourney();
+        }
+        if (railPosition) {
+            railPosition.clearRailPosition();
+        }
 
         this.emitEvent({
             type: 'movement_stopped',
@@ -318,11 +347,11 @@ export class Train extends GameObject {
         // Update train state based on car conditions
         this.updateTrainStats();
 
-        // Update movement state from MovementComponent
-        const movementComponent = this.getComponent<MovementComponent>('movement');
-        if (movementComponent) {
-            this._state.isMoving = movementComponent.isRailMoving();
-            this._state.currentSpeed = movementComponent.getSpeed();
+        // Update movement state from RailMovementComponent
+        const railMovement = this.getComponent<RailMovementComponent>('railMovement');
+        if (railMovement) {
+            this._state.isMoving = railMovement.isMoving();
+            this._state.currentSpeed = railMovement.getSpeed();
         }
     }
 

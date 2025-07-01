@@ -33,12 +33,12 @@ A multiplayer cozy trading and exploration game where players form shipping guil
 ├── Gameplay Systems
 │   ├── Train System
 │   │   ├── Train Entity [entities/Train.ts]
-│   │   ├── Train Cars [game/TrainCar.ts]
+│   │   ├── Train Cars [entities/TrainCar.ts]
 │   │   └── Train System [systems/TrainSystem.ts]
 │   │
 │   ├── Station & Rail Network
-│   │   ├── Station Entity [game/Station.ts]
-│   │   ├── Rail Connections [game/Rail.ts]
+│   │   ├── Station Entity [entities/Station.ts]
+│   │   ├── Rail Connections [entities/Rail.ts]
 │   │   └── Rendering [renderers/*Renderer.ts]
 │   │
 │   ├── Economy System
@@ -50,7 +50,7 @@ A multiplayer cozy trading and exploration game where players form shipping guil
 ├── Technical Infrastructure
 │   ├── Rendering Pipeline [ecs-app.ts]
 │   ├── Network Layer [net/ColyseusClient.ts]
-│   ├── Event System [game/EventStack.ts]
+│   ├── Event System [core/EventStack.ts]
 │   └── Logging [utils/Logger.ts]
 │
 └── User Interface

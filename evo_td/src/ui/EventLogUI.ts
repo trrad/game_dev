@@ -18,6 +18,16 @@ export class EventLogUI {
     private autoScroll: boolean = true;
     private maxEntries: number = 100;
     private unsubscribeEventLog?: () => void;
+    
+    // Event filtering configuration
+    private showAllEvents: boolean = false;
+    private visibleCategories: Set<LogCategory> = new Set([
+        LogCategory.TRAIN,
+        LogCategory.ENEMY,
+        LogCategory.ECONOMY,
+        LogCategory.ERROR
+    ]);
+    private filterButton: HTMLElement;
 
     constructor(eventStack: EventStack) {
         this.eventStack = eventStack;
@@ -35,13 +45,21 @@ export class EventLogUI {
         this.container = document.createElement('div');
         this.container.className = CSS_CLASSES.eventLog.panel;
         
-        // Header with title and toggle
+        // Header with title and controls
         this.header = document.createElement('div');
         this.header.className = CSS_CLASSES.eventLog.header;
         
         const title = document.createElement('div');
         title.className = CSS_CLASSES.eventLog.title;
         title.textContent = 'Event Log';
+        
+        // Filter toggle button
+        this.filterButton = document.createElement('button');
+        this.filterButton.className = CSS_CLASSES.eventLog.toggle;
+        this.filterButton.textContent = this.showAllEvents ? 'ALL' : 'FILTERED';
+        this.filterButton.title = this.showAllEvents ? 'Showing all events - click to filter' : 'Showing important events only - click to show all';
+        this.filterButton.onclick = () => this.toggleFilter();
+        this.filterButton.style.marginRight = '4px';
         
         this.toggleButton = document.createElement('button');
         this.toggleButton.className = CSS_CLASSES.eventLog.toggle;
@@ -50,6 +68,7 @@ export class EventLogUI {
         this.toggleButton.onclick = () => this.toggle();
         
         this.header.appendChild(title);
+        this.header.appendChild(this.filterButton);
         this.header.appendChild(this.toggleButton);
         
         // Content area
@@ -82,6 +101,11 @@ export class EventLogUI {
     }
 
     private addEventEntry(entry: EventLogEntry, shouldScroll: boolean = true): void {
+        // Apply filtering - skip events that don't match current filter settings
+        if (!this.shouldShowEvent(entry)) {
+            return;
+        }
+        
         const entryElement = document.createElement('div');
         entryElement.className = CSS_CLASSES.eventLog.entry;
         
@@ -117,6 +141,47 @@ export class EventLogUI {
         this.updateFooter();
     }
 
+    /**
+     * Determine if an event should be shown based on current filter settings.
+     */
+    private shouldShowEvent(entry: EventLogEntry): boolean {
+        if (this.showAllEvents) {
+            return true;
+        }
+        
+        // Show events that match visible categories
+        return this.visibleCategories.has(entry.category as LogCategory);
+    }
+
+    /**
+     * Toggle between showing all events and filtered events.
+     */
+    private toggleFilter(): void {
+        this.showAllEvents = !this.showAllEvents;
+        this.filterButton.textContent = this.showAllEvents ? 'ALL' : 'FILTERED';
+        this.filterButton.title = this.showAllEvents ? 'Showing all events - click to filter' : 'Showing important events only - click to show all';
+        
+        // Refresh the display
+        this.refreshEventDisplay();
+    }
+
+    /**
+     * Refresh the event display based on current filter settings.
+     */
+    private refreshEventDisplay(): void {
+        // Clear current display
+        this.content.innerHTML = '';
+        
+        // Re-populate with filtered events
+        const allEvents = this.eventStack.getEventLog();
+        allEvents.forEach(entry => this.addEventEntry(entry, false));
+        
+        // Scroll to bottom if needed
+        if (this.autoScroll && !this.isCollapsed) {
+            this.scrollToBottom();
+        }
+    }
+
     private scrollToBottom(): void {
         this.content.scrollTop = this.content.scrollHeight;
     }
@@ -124,7 +189,8 @@ export class EventLogUI {
     private updateFooter(): void {
         const entryCount = this.content.children.length;
         const scrollInfo = this.autoScroll ? 'Auto-scroll ON' : 'Auto-scroll OFF';
-        this.footer.textContent = `${entryCount}/${this.maxEntries} entries • ${scrollInfo}`;
+        const filterInfo = this.showAllEvents ? 'All events' : 'Filtered';
+        this.footer.textContent = `${entryCount}/${this.maxEntries} entries • ${filterInfo} • ${scrollInfo}`;
         
         // Add click handler to toggle auto-scroll
         this.footer.onclick = () => {

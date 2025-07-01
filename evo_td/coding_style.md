@@ -740,14 +740,14 @@ src/
 │   ├── UIManager.ts
 │   ├── panels/
 │   └── mobile/
-├── rendering/              # Client-side rendering
-│   ├── SceneManager.ts
-│   ├── LightingManager.ts
-│   └── DebugRenderer.ts
+├── renderers/              # Client-side rendering
+│   ├── StationRenderer.ts
+│   ├── TrainRenderer.ts
+│   ├── EnemyRenderer.ts
+│   └── LightRenderer.ts
 ├── networking/             # Multiplayer
-│   ├── GameRoom.ts
-│   ├── StateSync.ts
-│   └── NetworkManager.ts
+│   ├── ColyseusClient.ts
+│   └── NetworkManager.ts (planned)
 ├── config/                 # Configuration
 │   ├── GameConfig.ts
 │   ├── base.json

@@ -9,7 +9,12 @@ export interface Position3D {
     z: number;
 }
 
-export class PositionComponent extends Component {
+export interface PositionState {
+    position: Position3D;
+    rotation: Position3D;
+}
+
+export class PositionComponent extends Component<PositionState> {
     public readonly type = 'position';
     private _position: Position3D = { x: 0, y: 0, z: 0 };
     private _rotation: Position3D = { x: 0, y: 0, z: 0 };
@@ -30,14 +35,14 @@ export class PositionComponent extends Component {
         return { ...this._rotation };
     }
 
-    serialize(): any {
+    serialize(): PositionState {
         return {
             position: { ...this._position },
             rotation: { ...this._rotation }
         };
     }
 
-    deserialize(data: any): void {
+    deserialize(data: PositionState): void {
         if (data.position) this._position = { ...data.position };
         if (data.rotation) this._rotation = { ...data.rotation };
     }

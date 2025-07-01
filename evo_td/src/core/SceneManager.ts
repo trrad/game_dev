@@ -34,6 +34,7 @@ import {
 import { GameObject } from './GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { TimeManager } from './TimeManager';
+import { EventStack } from './EventStack';
 import { Logger, LogCategory } from '../utils/Logger';
 
 /**
@@ -98,6 +99,13 @@ export class SceneManager {
     private deltaTimeAccumulator: number = 0;
     /** Fixed update interval in seconds */
     private readonly FIXED_TIMESTEP: number = 1/60;
+    /** Event stack for event-driven features */
+    private eventStack: EventStack | null = null;
+    /** Station focus state */
+    private isStationFocused: boolean = false;
+    private focusedStationId: string | null = null;
+    private originalCameraPosition: Vector3 | null = null;
+    private originalCameraTarget: Vector3 | null = null;
 
     /**
      * Create a new SceneManager
@@ -722,5 +730,80 @@ export class SceneManager {
         });
 
         return true;
+    }
+
+    /**
+     * Focus the camera on a specific station for detailed view
+     * @param stationId The ID of the station to focus on
+     */
+    focusCameraOnStation(stationId: string): void {
+        const mapping = this.visualMappings.get(stationId);
+        if (!mapping) {
+            Logger.log(LogCategory.SYSTEM, `Cannot focus camera on station: Station ID not found: ${stationId}`);
+            return;
+        }
+
+        // Store original camera state if this is an ArcRotateCamera
+        if (this.camera instanceof ArcRotateCamera) {
+            if (!this.isStationFocused) {
+                this.originalCameraPosition = this.camera.position.clone();
+                this.originalCameraTarget = this.camera.target.clone();
+            }
+
+            const stationPosition = this.getVisualPosition(mapping.visual);
+            
+            // Position camera for station overview
+            this.camera.target = stationPosition;
+            this.camera.radius = 100; // Distance for good perimeter view
+            this.camera.beta = Math.PI / 4; // Fixed angle for top-down view
+        }
+
+        this.isStationFocused = true;
+        this.focusedStationId = stationId;
+        
+        Logger.log(LogCategory.SYSTEM, `Camera focused on station: ${stationId}`);
+    }
+
+    /**
+     * Release camera focus and return to original position
+     */
+    releaseCameraFocus(): void {
+        if (!this.isStationFocused || !this.originalCameraPosition || !this.originalCameraTarget) {
+            return;
+        }
+
+        // Restore original camera state if this is an ArcRotateCamera
+        if (this.camera instanceof ArcRotateCamera) {
+            this.camera.position = this.originalCameraPosition;
+            this.camera.target = this.originalCameraTarget;
+        }
+
+        this.isStationFocused = false;
+        this.focusedStationId = null;
+        this.originalCameraPosition = null;
+        this.originalCameraTarget = null;
+        
+        Logger.log(LogCategory.SYSTEM, "Camera focus released, returned to original position");
+    }
+
+    /**
+     * Subscribe to station focus events from the event system
+     * @param eventStack The EventStack instance to subscribe to
+     */
+    subscribeToStationFocusEvents(eventStack: EventStack): void {
+        this.eventStack = eventStack;
+        
+        // Subscribe to focus events using the pub/sub system
+        eventStack.subscribe('camera_focus_station', (event) => {
+            if (event.payload?.stationId) {
+                this.focusCameraOnStation(event.payload.stationId);
+            }
+        });
+
+        eventStack.subscribe('camera_release_station', () => {
+            this.releaseCameraFocus();
+        });
+        
+        Logger.log(LogCategory.SYSTEM, "SceneManager subscribed to station focus events");
     }
 }

@@ -8,6 +8,7 @@ import { EnemyRenderer } from '../renderers/EnemyRenderer';
 import { HealthComponent } from '../components/HealthComponent';
 import { PositionComponent } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
+import { RailMovementComponent } from '../components/RailMovementComponent';
 import { AIBehaviorComponent, AIState, HuntingStrategy, SocialBehavior } from '../components/AIBehaviorComponent';
 import { TimeManager } from '../core/TimeManager';
 import { EventStack } from '../core/EventStack';
@@ -216,8 +217,8 @@ export class EnemySystem {
         if (this.spawnConfig.spawnOnlyWhenTrainMoving && this.trainSystem) {
             const trains = this.trainSystem.getAllTrains();
             const isAnyTrainMoving = trains.some(train => {
-                const movementComponent = train.getComponent<MovementComponent>('movement');
-                return movementComponent?.isRailMoving() ?? false;
+                const railMovement = train.getComponent<RailMovementComponent>('railMovement');
+                return railMovement?.isMoving() ?? false;
             });
 
             if (!isAnyTrainMoving) {

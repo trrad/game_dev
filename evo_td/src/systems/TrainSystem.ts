@@ -2,15 +2,20 @@
  * Manages train entities and their behaviors.
  */
 import { Logger, LogCategory } from '../utils/Logger';
+import { ConfigManager } from '../core/ConfigManager';
 import { GameObject } from '../core/GameObject';
 import { Train } from '../entities/Train';
 import type { TrainConfig } from '../entities/Train';
 import { PositionComponent, type Position3D } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
+import { RailPositionComponent } from '../components/RailPositionComponent';
+import { RailMovementComponent } from '../components/RailMovementComponent';
+import { TrainCarPositionComponent } from '../components/TrainCarPositionComponent';
 import { Rail } from '../entities/Rail';
 import { TimeManager } from '../core/TimeManager';
 import { Vector3 } from '@babylonjs/core';
 import { TrainRenderer } from '../renderers/TrainRenderer';
+import { EventStack } from '../core/EventStack';
 
 export class TrainSystem {
     private trains: Map<string, Train> = new Map();
@@ -18,6 +23,7 @@ export class TrainSystem {
     private rails: Map<string, Rail> = new Map(); // Reference to rails for movement calculations
     private timeManager: TimeManager | null = null; // Reference to TimeManager
     private trainRenderer: TrainRenderer | null = null; // Reference to TrainRenderer for visual updates
+    private eventStack: EventStack | null = null; // Reference to EventStack for event logging
 
     constructor() {
         // Initialize metrics
@@ -43,6 +49,14 @@ export class TrainSystem {
     }
 
     /**
+     * Set the EventStack reference for event logging
+     */
+    setEventStack(eventStack: EventStack): void {
+        this.eventStack = eventStack;
+        Logger.log(LogCategory.SYSTEM, `EventStack connected to TrainSystem`);
+    }
+
+    /**
      * Add a rail to the system for train movement calculations
      */
     addRail(rail: Rail): void {
@@ -54,19 +68,11 @@ export class TrainSystem {
         });
     }
 
-    private setupEventHandlers(train: Train): void {
-        train.on('journey_completed', () => {
-            this.metrics.set('journeys_completed', 
-                (this.metrics.get('journeys_completed') || 0) + 1
-            );
-        });
-    }
-
     /**
      * Create a new train for a player
      */
     createTrain(playerId: string, config: TrainConfig, position?: Position3D): Train {
-        const train = new Train(playerId, config);
+        const train = new Train(playerId, config, this.eventStack);
         
         // Set initial position if provided
         if (position) {
@@ -81,7 +87,7 @@ export class TrainSystem {
         // For initial setup, call initializeCarPositions() after adding cars
         // this.initializeTrainCarPositions(train);
 
-        this.setupEventHandlers(train);
+        // No longer need manual event handlers - GameObject now routes through EventStack automatically
         this.trains.set(train.id, train);
         this.metrics.set('active_trains', this.trains.size);
 
@@ -95,7 +101,7 @@ export class TrainSystem {
     }
 
     /**
-     * Start a train's journey along a rail
+     * Start a train's journey along a rail using the new rail components
      * @param trainId ID of the train to move
      * @param railId ID of the rail to travel on
      * @param targetStationId ID of the target station
@@ -114,8 +120,18 @@ export class TrainSystem {
             return false;
         }
 
+        // Get rail components
+        const railPosition = train.getComponent<RailPositionComponent>('railPosition');
+        const railMovement = train.getComponent<RailMovementComponent>('railMovement');
+        const posComponent = train.getComponent<PositionComponent>('position');
+        
+        if (!railPosition || !railMovement || !posComponent) {
+            Logger.error(LogCategory.TRAIN, `Train missing required rail components`, new Error(`Train ${trainId} missing rail components`));
+            return false;
+        }
+
         // Check if train is already moving
-        if (train.isMoving) {
+        if (railMovement.isMoving()) {
             Logger.log(LogCategory.TRAIN, `Journey request denied - train already moving`, {
                 trainId,
                 requestedRailId: railId,
@@ -124,16 +140,7 @@ export class TrainSystem {
             return false;
         }
 
-        // Get train's current position to determine direction
-        const posComponent = train.getComponent<PositionComponent>('position');
-        const movementComponent = train.getComponent<MovementComponent>('movement');
-        
-        if (!posComponent || !movementComponent) {
-            Logger.error(LogCategory.TRAIN, `Train missing required components`, new Error(`Train ${trainId} missing position or movement component`));
-            return false;
-        }
-
-        // Determine travel direction based on which station we're leaving
+        // Determine travel direction based on current position
         const currentPos = posComponent.getPosition();
         const stationAPos = rail.getPositionAt(0);
         const stationBPos = rail.getPositionAt(1);
@@ -141,49 +148,92 @@ export class TrainSystem {
         const distanceToA = Vector3.Distance(new Vector3(currentPos.x, currentPos.y, currentPos.z), stationAPos);
         const distanceToB = Vector3.Distance(new Vector3(currentPos.x, currentPos.y, currentPos.z), stationBPos);
         
-        // If we're closer to station A, we're going towards station B (forward)
-        // If we're closer to station B, we're going towards station A (reverse)
         const direction = distanceToA < distanceToB ? 'forward' : 'reverse';
+        const initialProgress = direction === 'forward' ? 0 : 1;
+        
+        // Set rail position
+        railPosition.setRailPosition(railId, initialProgress, direction);
         
         // Start rail movement
-        movementComponent.startRailMovement(railId, targetStationId, direction);
+        railMovement.startJourney(targetStationId);
+        
+        // Notify train that journey is starting (this will emit events)
+        train.startMovement(railId, targetStationId);
+        
+        // Initialize car positions in formation
+        this.initializeTrainCarRailPositions(train, railId);
         
         this.metrics.set('journeys_started', (this.metrics.get('journeys_started') || 0) + 1);
         
-        Logger.log(LogCategory.TRAIN, `Train journey started`, {
+        // Train will emit journey_started event automatically via GameObject EventStack integration
+        
+        Logger.log(LogCategory.TRAIN, `Train rail journey started`, {
             trainId,
             railId,
             targetStationId,
             direction,
-            currentPosition: `(${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})`
+            initialProgress
         });
 
         return true;
     }
 
     /**
-     * Update all trains, including smooth movement along rails
+     * Initialize rail positions for all cars in a train formation
+     */
+    private initializeTrainCarRailPositions(train: Train, railId: string): void {
+        const cars = train.getCars();
+        
+        cars.forEach((car, index) => {
+            const carRailPosition = car.getComponent<RailPositionComponent>('railPosition');
+            const carTrainPosition = car.getComponent<TrainCarPositionComponent>('trainCarPosition');
+            
+            if (carRailPosition && carTrainPosition) {
+                // Connect car to train formation
+                carTrainPosition.connectToTrain(train.id, index);
+                
+                // Set initial rail position with proper offset
+                const trainRailPosition = train.getComponent<RailPositionComponent>('railPosition');
+                if (trainRailPosition) {
+                    const rail = this.rails.get(railId);
+                    if (rail) {
+                        const progressOffset = carTrainPosition.calculateRailProgressOffset(rail.totalDistance);
+                        const carProgress = Math.max(0, Math.min(1, 
+                            trainRailPosition.getProgress() - progressOffset
+                        ));
+                        
+                        carRailPosition.setRailPosition(railId, carProgress, trainRailPosition.getDirection());
+                        carRailPosition.setFormationOffset(carTrainPosition.getOffsetDistance());
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Update all trains using the new rail components
      */
     update(deltaTime: number): void {
         for (const train of this.trains.values()) {
-            this.updateTrainMovement(train, deltaTime);
+            this.updateTrainRailMovement(train, deltaTime);
             train.update(deltaTime);
         }
     }
 
     /**
-     * Update smooth movement for a single train
+     * Update train movement using rail components
      */
-    private updateTrainMovement(train: Train, deltaTime: number): void {
-        const movementComponent = train.getComponent<MovementComponent>('movement');
+    private updateTrainRailMovement(train: Train, deltaTime: number): void {
+        const railPosition = train.getComponent<RailPositionComponent>('railPosition');
+        const railMovement = train.getComponent<RailMovementComponent>('railMovement');
         const positionComponent = train.getComponent<PositionComponent>('position');
         
-        if (!movementComponent || !positionComponent) return;
+        if (!railPosition || !railMovement || !positionComponent) return;
         
-        // Only update if train is moving along a rail
-        if (!movementComponent.isRailMoving()) return;
+        // Only update if train is on a rail
+        if (!railPosition.isOnRail()) return;
         
-        const railId = movementComponent.getRailId();
+        const railId = railPosition.getRailId();
         if (!railId) return;
         
         const rail = this.rails.get(railId);
@@ -191,32 +241,32 @@ export class TrainSystem {
         
         // Get time scaling factor from TimeManager
         const timeScale = this.timeManager ? this.timeManager.getSpeed() : 1;
-        
-        // Calculate progress delta based on train speed, rail length, and time scaling
-        const trainSpeed = movementComponent.getSpeed(); // units per second
-        const railLength = rail.totalDistance;
         const scaledDeltaTime = deltaTime * timeScale;
-        const progressDelta = (trainSpeed * scaledDeltaTime) / railLength;
         
-        // Update progress
-        movementComponent.updateRailProgress(progressDelta);
+        // Update movement state (acceleration/deceleration)
+        railMovement.updateMovement(scaledDeltaTime);
         
-        // Get new position along the rail (this represents the front of the train)
-        const progress = movementComponent.getRailProgress();
-        const frontPosition = rail.getPositionAt(progress);
+        // Calculate progress delta based on current speed and rail length
+        const progressDelta = railMovement.calculateProgressDelta(scaledDeltaTime, rail.totalDistance);
         
-        // Update train entity position (represents the front of the train)
+        // Update rail progress
+        railPosition.updateProgress(progressDelta);
+        
+        // Calculate world position from rail progress
+        const progress = railPosition.getEffectiveProgress();
+        const worldPosition = rail.getPositionAt(progress);
+        const worldDirection = rail.getDirectionAt(progress);
+        
+        // Update actual world position
         positionComponent.setPosition({
-            x: frontPosition.x,
-            y: frontPosition.y,
-            z: frontPosition.z
+            x: worldPosition.x,
+            y: worldPosition.y,
+            z: worldPosition.z
         });
         
-        // Update rotation based on direction along rail
-        const direction = rail.getDirectionAt(progress);
-        if (direction) {
-            // Convert direction to rotation (looking along the direction)
-            const rotationY = Math.atan2(direction.x, direction.z);
+        // Calculate rotation from direction vector
+        if (worldDirection) {
+            const rotationY = Math.atan2(worldDirection.x, worldDirection.z);
             positionComponent.setRotation({
                 x: 0,
                 y: rotationY,
@@ -224,14 +274,11 @@ export class TrainSystem {
             });
         }
         
-        // Update individual car positions along the rail
-        this.updateTrainCarPositions(train, progress, rail);
+        // Update car positions if this train has cars
+        this.updateTrainCarPositions(train);
         
-        // Note: Car visual positions are now updated by SceneManager
-        // reading from each car's PositionComponent, so no need to call trainRenderer
-        
-        // Check if journey is complete
-        if (movementComponent.isMovementComplete()) {
+        // Check if journey is complete - simply based on reaching the end
+        if (railPosition.hasReachedEnd()) {
             this.completeJourney(train);
         }
     }
@@ -240,9 +287,24 @@ export class TrainSystem {
      * Update individual car positions along the rail
      * Each car follows the rail path independently at the correct offset distance
      */
-    private updateTrainCarPositions(train: Train, frontProgress: number, rail: Rail): void {
+    private updateTrainCarPositions(train: Train): void {
+        const railPosition = train.getComponent<RailPositionComponent>('railPosition');
+        const railId = railPosition?.getRailId();
+        
+        if (!railPosition || !railId) return;
+        
+        const rail = this.rails.get(railId);
+        if (!rail) return;
+        
         const trainCars = train.getCars();
-        let currentOffset = 0;
+        const frontProgress = railPosition.getProgress();
+        
+        // Get spacing configuration
+        const carSpacing = ConfigManager.get<number>('train.carSpacing') || 0.8;
+        const engineLength = 1.4; // TODO: Move to config
+        
+        // Start offset with train engine length + spacing for first car
+        let currentOffset = engineLength + carSpacing;
         
         for (let i = 0; i < trainCars.length; i++) {
             const car = trainCars[i];
@@ -256,7 +318,14 @@ export class TrainSystem {
             // Calculate this car's progress along the rail based on its offset distance
             const railLength = rail.totalDistance;
             const carProgressOffset = currentOffset / railLength;
-            const carProgress = Math.max(0, frontProgress - carProgressOffset);
+            
+            // Ensure car progress is behind the train (subtract offset for forward movement)
+            let carProgress;
+            if (railPosition.getDirection() === 'forward') {
+                carProgress = Math.max(0, frontProgress - carProgressOffset);
+            } else {
+                carProgress = Math.min(1, frontProgress + carProgressOffset);
+            }
             
             // Get this car's world position and direction from the rail
             const carWorldPosition = rail.getPositionAt(carProgress);
@@ -271,7 +340,12 @@ export class TrainSystem {
                 });
                 
                 // Update car's rotation to align with rail direction
-                const carRotationY = Math.atan2(carDirection.x, carDirection.z);
+                // For reverse direction, flip the rotation 180 degrees
+                let carRotationY = Math.atan2(carDirection.x, carDirection.z);
+                if (railPosition.getDirection() === 'reverse') {
+                    carRotationY += Math.PI;
+                }
+                
                 carPositionComponent.setRotation({
                     x: 0,
                     y: carRotationY,
@@ -279,23 +353,27 @@ export class TrainSystem {
                 });
             }
             
-            // Update offset for next car (car length + spacing)
-            // Using the same spacing as the renderer for consistency
-            currentOffset += car.length + 0.3; // Match carSpacing from TrainRenderer
+            // Update offset for next car (this car's length + spacing)
+            currentOffset += car.length + carSpacing;
         }
     }
 
     /**
-     * Complete a train's journey
+     * Complete a train's journey using rail components
      */
     private completeJourney(train: Train): void {
-        const movementComponent = train.getComponent<MovementComponent>('movement');
-        if (!movementComponent) return;
+        const railMovement = train.getComponent<RailMovementComponent>('railMovement');
+        const railPosition = train.getComponent<RailPositionComponent>('railPosition');
         
-        const targetStationId = movementComponent.getTargetStationId();
+        if (!railMovement || !railPosition) return;
         
-        // Stop movement
-        movementComponent.stopRailMovement();
+        const targetStationId = railMovement.getTargetStationId();
+        
+        // Stop rail movement
+        railMovement.stopJourney();
+        railPosition.clearRailPosition();
+        
+        // Train will emit journey_completed event automatically via GameObject EventStack integration
         
         Logger.log(LogCategory.TRAIN, `Train journey completed`, {
             trainId: train.id,
@@ -303,6 +381,46 @@ export class TrainSystem {
         });
         
         // Call the train's completeJourney method which will emit the event
+        if (targetStationId) {
+            train.completeJourney(targetStationId);
+        }
+    }
+
+    /**
+     * Complete a rail journey using the new components
+     */
+    private completeRailJourney(train: Train): void {
+        const railMovement = train.getComponent<RailMovementComponent>('railMovement');
+        const railPosition = train.getComponent<RailPositionComponent>('railPosition');
+        
+        if (!railMovement || !railPosition) return;
+        
+        const targetStationId = railMovement.getTargetStationId();
+        
+        // Stop movement
+        railMovement.stopJourney();
+        
+        // Clear rail position for train and cars
+        railPosition.clearRailPosition();
+        
+        const cars = train.getCars();
+        cars.forEach(car => {
+            const carRailPosition = car.getComponent<RailPositionComponent>('railPosition');
+            const carTrainPosition = car.getComponent<TrainCarPositionComponent>('trainCarPosition');
+            
+            if (carRailPosition) {
+                carRailPosition.clearRailPosition();
+            }
+        });
+        
+        this.metrics.set('journeys_completed', (this.metrics.get('journeys_completed') || 0) + 1);
+        
+        Logger.log(LogCategory.TRAIN, `Rail journey completed`, {
+            trainId: train.id,
+            targetStationId
+        });
+
+        // Complete the journey using train's method
         if (targetStationId) {
             train.completeJourney(targetStationId);
         }
@@ -421,6 +539,57 @@ export class TrainSystem {
         
         Logger.log(LogCategory.TRAIN, `Initialized car positions for train ${trainId}`, {
             carCount: train.getCarCount()
+        });
+    }
+
+    /**
+     * Update rail positions for all cars in a train formation using new rail components
+     */
+    private updateCarRailPositions(train: Train): void {
+        const trainRailPosition = train.getComponent<RailPositionComponent>('railPosition');
+        if (!trainRailPosition || !trainRailPosition.isOnRail()) return;
+        
+        const railId = trainRailPosition.getRailId();
+        if (!railId) return;
+        
+        const rail = this.rails.get(railId);
+        if (!rail) return;
+        
+        const cars = train.getCars();
+        cars.forEach(car => {
+            const carRailPosition = car.getComponent<RailPositionComponent>('railPosition');
+            const carTrainPosition = car.getComponent<TrainCarPositionComponent>('trainCarPosition');
+            const carWorldPosition = car.getComponent<PositionComponent>('position');
+            
+            if (carRailPosition && carTrainPosition && carWorldPosition && carTrainPosition.isConnected()) {
+                // Calculate car's progress based on train position and formation offset
+                const progressOffset = carTrainPosition.calculateRailProgressOffset(rail.totalDistance);
+                const carProgress = Math.max(0, Math.min(1, 
+                    trainRailPosition.getProgress() - progressOffset
+                ));
+                
+                // Update car's rail position
+                carRailPosition.updateProgress(carProgress - carRailPosition.getProgress());
+                
+                // Update car's world position
+                const carWorldPos = rail.getPositionAt(carProgress);
+                const carWorldDir = rail.getDirectionAt(carProgress);
+                
+                if (carWorldPos && carWorldDir) {
+                    carWorldPosition.setPosition({
+                        x: carWorldPos.x,
+                        y: carWorldPos.y,
+                        z: carWorldPos.z
+                    });
+                    
+                    const carRotationY = Math.atan2(carWorldDir.x, carWorldDir.z);
+                    carWorldPosition.setRotation({
+                        x: 0,
+                        y: carRotationY,
+                        z: 0
+                    });
+                }
+            }
         });
     }
 }

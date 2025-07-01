@@ -26,6 +26,7 @@ import { LightRenderer } from "./renderers/LightRenderer";
 // Import core ECS classes
 import { GameObject } from "./core/GameObject";
 import { SceneManager } from "./core/SceneManager";
+import { StationManager } from "./core/StationManager";
 
 // Import components
 import { PositionComponent } from "./components/PositionComponent";
@@ -55,6 +56,7 @@ import { EnemySystem } from "./systems/EnemySystem";
 import { AttachmentFactory } from "./components/AttachmentFactory";
 import { TrainCarModificationUI } from "./ui/TrainCarModificationUI";
 import { CSSLoader } from "./utils/CSSLoader";
+import { ExpandedStationIntegrationDemo } from "./examples/ExpandedStationIntegrationDemo";
 
 class ECSApp {
     private canvas: HTMLCanvasElement;
@@ -74,6 +76,7 @@ class ECSApp {
     private eventStack: EventStack;
     private trainSystem: TrainSystem;
     private enemySystem: EnemySystem;
+    private stationManager: StationManager;
     
     // Renderers
     private stationRenderer: StationRenderer;
@@ -149,9 +152,17 @@ class ECSApp {
             this.uiSystem = new UISystem();
             this.uiFactory = new UIFactory(this.uiSystem);
             
-            // Initialize Train System and connect TimeManager
+            // Initialize StationManager for expanded station features
+            this.stationManager = new StationManager(this.timeManager, this.eventStack, {
+                minStationDistance: 30, // Adjusted for close station network
+                defaultPerimeterRadius: 50,
+                maxStationsPerWorld: 20
+            });
+            
+            // Initialize Train System and connect TimeManager and EventStack
             this.trainSystem = new TrainSystem();
             this.trainSystem.setTimeManager(this.timeManager);
+            this.trainSystem.setEventStack(this.eventStack);
             
             // Initialize renderers
             this.stationRenderer = new StationRenderer(this.sceneManager.scene);
@@ -160,6 +171,9 @@ class ECSApp {
             this.enemyRenderer = new EnemyRenderer(this.sceneManager.scene);
             this.groundRenderer = new GroundRenderer(this.sceneManager.scene);
             this.lightRenderer = new LightRenderer(this.sceneManager.scene);
+            
+            // Set up SceneManager event subscriptions for camera control
+            this.sceneManager.subscribeToStationFocusEvents(this.eventStack);
             
             // Initialize Enemy System with custom spawn configuration
             this.enemySystem = new EnemySystem(this.enemyRenderer, {
@@ -200,8 +214,16 @@ class ECSApp {
             // Add some initial events to the event log for demonstration
             this.eventStack.logEvent(LogCategory.SYSTEM, 'app_initialized', 'ECS Train Trading Game initialized successfully');
             this.eventStack.logEvent(LogCategory.UI, 'controls_ready', 'Press F1 to toggle event log, M for train modification UI, Space to pause, 1-5 for time speed');
+            this.eventStack.logEvent(LogCategory.UI, 'camera_controls', 'Camera controls: Q = Central Station, W = Eastern Depot, E = Northern Outpost, R = Release focus');
             
-            Logger.log(LogCategory.SYSTEM, "ECS App initialized successfully with station network");
+            // Run integration demo to showcase expanded station features
+            ExpandedStationIntegrationDemo.demonstrateIntegration();
+            ExpandedStationIntegrationDemo.demonstrateEventFlows();
+            
+            // Log current demo world configuration
+            this.logCurrentDemoSetup();
+            
+            Logger.log(LogCategory.SYSTEM, "ECS App initialized successfully with expanded station network");
             
         } catch (error) {
             Logger.log(LogCategory.SYSTEM, "Failed to initialize ECS App:", error);
@@ -290,6 +312,48 @@ class ECSApp {
                 this.timeManager.setPaused(!wasPaused);
                 this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', `Game ${wasPaused ? 'unpaused' : 'paused'} via spacebar`);
             }
+            
+            // Station camera focus shortcuts (Q, W, E keys)
+            if (ev.key === 'q' || ev.key === 'Q') {
+                ev.preventDefault();
+                this.eventStack.emit({
+                    type: 'camera_focus_station',
+                    payload: { stationId: 'station_a' },
+                    source: 'keyboard_shortcut'
+                });
+                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focused on Central Station via Q key');
+            }
+            
+            if (ev.key === 'w' || ev.key === 'W') {
+                ev.preventDefault();
+                this.eventStack.emit({
+                    type: 'camera_focus_station',
+                    payload: { stationId: 'station_b' },
+                    source: 'keyboard_shortcut'
+                });
+                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focused on Eastern Depot via W key');
+            }
+            
+            if (ev.key === 'e' || ev.key === 'E') {
+                ev.preventDefault();
+                this.eventStack.emit({
+                    type: 'camera_focus_station',
+                    payload: { stationId: 'station_c' },
+                    source: 'keyboard_shortcut'
+                });
+                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focused on Northern Outpost via E key');
+            }
+            
+            // Release camera focus (R key)
+            if (ev.key === 'r' || ev.key === 'R') {
+                ev.preventDefault();
+                this.eventStack.emit({
+                    type: 'camera_release_station',
+                    payload: {},
+                    source: 'keyboard_shortcut'
+                });
+                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focus released via R key');
+            }
         });
     }
     
@@ -297,8 +361,8 @@ class ECSApp {
      * Set up the camera for the scene
      */
     private setupCamera(): void {
-        // Center camera on Central Station position
-        const centralStationPosition = new Vector3(-20, 0, 0);
+        // Center camera on Central Station position (updated)
+        const centralStationPosition = new Vector3(-30, 0, 0);
         
         // Configure the SceneManager's camera instead of creating a new one
         const camera = this.sceneManager.camera as ArcRotateCamera;
@@ -306,14 +370,14 @@ class ECSApp {
         // Set camera parameters
         camera.alpha = -Math.PI / 2;    // alpha (rotation around Y axis)
         camera.beta = Math.PI / 4;      // beta (elevation angle) - slightly less steep for better view
-        camera.radius = 50;             // radius (distance from target) - much closer zoom
+        camera.radius = 80;             // radius (distance from target) - adjusted for larger spacing
         camera.target = centralStationPosition;  // target the Central Station
         
         camera.minZ = 0.1;
         camera.maxZ = 1000;
         camera.wheelPrecision = 5;
         camera.lowerRadiusLimit = 10;   // Allow getting closer
-        camera.upperRadiusLimit = 200;  // Reduced max zoom out
+        camera.upperRadiusLimit = 300;  // Increased max zoom out for larger world
         
         // Set the camera target in SceneManager
         this.sceneManager.setCameraTarget(centralStationPosition);
@@ -345,55 +409,59 @@ class ECSApp {
     
     /**
      * Create the network of stations and rails using the proper ECS classes
+     * TODO: Replace this manual setup with WorldSystem for procedural generation
      */
     private createStationNetwork(): void {
-        Logger.log(LogCategory.SYSTEM, "Creating station network");
+        Logger.log(LogCategory.SYSTEM, "Creating expanded station network with StationManager");
         
-        // Define station configurations
+        // Define standard station configurations that work with existing StationConfig interface
         const stationConfigs: StationConfig[] = [
             {
                 id: 'station_a',
                 name: 'Central Station',
-                position: new Vector3(-20, 0, 0), // Let StationRenderer handle height
-                connectedRails: ['rail_ab', 'rail_ac']
+                position: new Vector3(-30, 0, 0), // Moved further for better spacing
+                connectedRails: ['rail_ab', 'rail_ac'],
+                // Expanded station features with more small buildings
+                perimeterRadius: 60,
+                hasCargoWarehouse: true,
+                decorativeBuildingCount: 8 // More buildings for central station
             },
             {
                 id: 'station_b',
                 name: 'Eastern Depot',
-                position: new Vector3(20, 0, 0), // Let StationRenderer handle height
-                connectedRails: ['rail_ab']
+                position: new Vector3(40, 0, 0), // Moved further east
+                connectedRails: ['rail_ab'],
+                // Smaller station with basic features
+                perimeterRadius: 40,
+                hasCargoWarehouse: true,
+                decorativeBuildingCount: 6 // Medium number of buildings
             },
             {
                 id: 'station_c',
                 name: 'Northern Outpost',
-                position: new Vector3(-10, 0, 15), // Let StationRenderer handle height
-                connectedRails: ['rail_ac']
+                position: new Vector3(-15, 0, 35), // Moved further north
+                connectedRails: ['rail_ac'],
+                // Military-style outpost
+                perimeterRadius: 35,
+                hasCargoWarehouse: true,
+                decorativeBuildingCount: 5 // Fewer buildings for outpost
             }
         ];
         
-        // Debug log all station configurations
-        Logger.log(LogCategory.SYSTEM, "Station configurations:", stationConfigs.map(s => ({
-            id: s.id,
-            position: `(${s.position.x}, ${s.position.y}, ${s.position.z})`
-        })));
-        
-        // Create station entities
+        // Create expanded stations using StationManager
         for (const config of stationConfigs) {
-            const station = new Station(config);
+            const station = this.stationManager.createStation(config);
             
-            // Get the station index for color selection
-            const stationIndex = stationConfigs.findIndex(s => s.id === config.id);
+            // Create visual representation using enhanced StationRenderer
+            const stationVisualGroup = this.stationRenderer.createExpandedStationVisual(station, this.stations.size);
             
-            // Create a visual mesh for the station using the StationRenderer
-            const stationMesh = this.stationRenderer.createStationVisual(config, stationIndex);
-            
-            // Register the station with the SceneManager
-            this.sceneManager.registerGameObject(station, stationMesh);
+            // Register the main station mesh with the SceneManager
+            this.sceneManager.registerGameObject(station, stationVisualGroup.mainMesh);
             
             // Store the station
             this.stations.set(config.id, station);
             
-            Logger.log(LogCategory.SYSTEM, `Created station: ${config.name} at (${config.position.x}, ${config.position.y}, ${config.position.z})`);
+            Logger.log(LogCategory.SYSTEM, `Created expanded station: ${config.name} with perimeter radius ${config.perimeterRadius}`);
         }
         
         // Define rail configurations
@@ -404,15 +472,15 @@ class ECSApp {
                 stationA: 'station_a',
                 stationB: 'station_b',
                 trackPoints: [
-                    new Vector3(-20, 0, 0),   // Station A
-                    new Vector3(-15, 0, 3),   
+                    new Vector3(-30, 0, 0),   // Station A (updated position)
+                    new Vector3(-20, 0, 3),   
                     new Vector3(-10, 0, 5),   
-                    new Vector3(-5, 0, 6),    
-                    new Vector3(0, 0, 5),     
-                    new Vector3(5, 0, 3),     
-                    new Vector3(10, 0, 1),    
-                    new Vector3(15, 0, -2),   
-                    new Vector3(20, 0, 0)     // Station B
+                    new Vector3(0, 0, 6),    
+                    new Vector3(10, 0, 5),     
+                    new Vector3(20, 0, 3),     
+                    new Vector3(30, 0, 1),    
+                    new Vector3(35, 0, 0),   
+                    new Vector3(40, 0, 0)     // Station B (updated position)
                 ],
                 isOperational: true
             },
@@ -422,12 +490,12 @@ class ECSApp {
                 stationA: 'station_a',
                 stationB: 'station_c',
                 trackPoints: [
-                    new Vector3(-20, 0, 0),
-                    new Vector3(-18, 0, 3),
-                    new Vector3(-16, 0, 6),
-                    new Vector3(-14, 0, 9),
-                    new Vector3(-12, 0, 12),
-                    new Vector3(-10, 0, 15)
+                    new Vector3(-30, 0, 0),   // Station A (updated position)
+                    new Vector3(-28, 0, 5),
+                    new Vector3(-25, 0, 10),
+                    new Vector3(-22, 0, 18),
+                    new Vector3(-18, 0, 25),
+                    new Vector3(-15, 0, 35)   // Station C (updated position)
                 ],
                 isOperational: true
             }
@@ -951,6 +1019,11 @@ class ECSApp {
             // Stop systems
             this.timeManager.stop();
             
+            // Clean up StationManager
+            if (this.stationManager) {
+                this.stationManager.dispose();
+            }
+            
             // Properly dispose of the SceneManager
             this.sceneManager.dispose();
             
@@ -1116,6 +1189,49 @@ class ECSApp {
             
             this.eventStack.logEvent(LogCategory.UI, 'train_modification_ui_toggle', `Train modification UI ${isCurrentlyVisible ? 'hidden' : 'shown'}`);
         }
+    }
+
+    /**
+     * Log the current demo world configuration
+     * This is a temporary helper function until we implement the WorldSystem
+     */
+    private logCurrentDemoSetup(): void {
+        Logger.log(LogCategory.SYSTEM, "=== Current Demo World Configuration ===");
+        
+        // Log station summary
+        Logger.log(LogCategory.SYSTEM, `Created ${this.stations.size} stations with unique building configurations:`);
+        Array.from(this.stations.values()).forEach(station => {
+            const buildingData = station.buildingData;
+            Logger.log(LogCategory.SYSTEM, `  ${station.name}: ${buildingData.length} buildings`, {
+                stationId: station.stationId,
+                position: station.position.toString(),
+                perimeterRadius: station.getPerimeter()?.radius || 'N/A',
+                hasWarehouse: !!station.getCargoWarehouse()
+            });
+        });
+        
+        // Log rail network
+        Logger.log(LogCategory.SYSTEM, `Rail network: ${this.rails.size} rails connecting stations`);
+        Array.from(this.rails.values()).forEach(rail => {
+            Logger.log(LogCategory.SYSTEM, `  ${rail.name}: ${rail.stationA} ↔ ${rail.stationB}`, {
+                railId: rail.railId,
+                trackPoints: rail.trackPoints.length,
+                isOperational: rail.isOperational
+            });
+        });
+        
+        // Log train status
+        Logger.log(LogCategory.SYSTEM, `Active trains: ${this.trains.size}`);
+        Array.from(this.trains.values()).forEach(train => {
+            const cars = train.getCars();
+            Logger.log(LogCategory.SYSTEM, `  Train ${train.id}: ${cars.length} cars`, {
+                totalCars: cars.length,
+                carTypes: cars.map(c => c.carType)
+            });
+        });
+        
+        Logger.log(LogCategory.SYSTEM, "=== End Demo Configuration ===");
+        Logger.log(LogCategory.SYSTEM, "NOTE: Future WorldSystem will handle procedural world generation using Factory patterns and configuration files");
     }
 
 }

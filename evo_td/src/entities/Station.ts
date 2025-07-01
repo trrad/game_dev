@@ -2,12 +2,29 @@ import { Vector3, Mesh } from "@babylonjs/core";
 import { GameObject } from "../core/GameObject";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
+import { HealthComponent } from "../components/HealthComponent";
+import { StationPerimeterComponent } from "../components/StationPerimeterComponent";
+import { BuildingComponent, BuildingType } from "../components/BuildingComponent";
+import { CargoWarehouseComponent, CargoType } from "../components/CargoWarehouseComponent";
+import type { EventStack } from "../core/EventStack";
 
 export interface StationConfig {
     id: string;
     name: string;
     position: Vector3;
     connectedRails: string[];
+    // New expanded station properties
+    perimeterRadius?: number;
+    hasCargoWarehouse?: boolean;
+    decorativeBuildingCount?: number;
+}
+
+export interface StationBuildingData {
+    id: string;
+    type: BuildingType;
+    position: Vector3;
+    size: Vector3;
+    colorIndex: number;
 }
 
 export interface StationState {
@@ -15,6 +32,10 @@ export interface StationState {
     reputation: number;
     profitMultiplier: number;
     cargoCapacity: number;
+    // New state properties
+    isExpanded: boolean;
+    buildingIds: string[];
+    buildingData: StationBuildingData[];
 }
 
 export interface MarketPrices {
@@ -32,8 +53,8 @@ export class Station extends GameObject {
     private _marketPrices: MarketPrices = {};
     private _lastPriceUpdate: number = 0;
     
-    constructor(config: StationConfig) {
-        super('station');
+    constructor(config: StationConfig, eventStack?: EventStack) {
+        super('station', eventStack);
         this._config = config;
         
         // Debug log to see the auto-generated ID versus the config ID
@@ -56,7 +77,11 @@ export class Station extends GameObject {
             level: 1,
             reputation: 50, // 0-100 scale
             profitMultiplier: 1.0,
-            cargoCapacity: 100 // Base storage capacity
+            cargoCapacity: 100, // Base storage capacity
+            // Initialize new state properties
+            isExpanded: false,
+            buildingIds: [],
+            buildingData: []
         };
 
         // Set up metrics
@@ -210,5 +235,198 @@ export class Station extends GameObject {
             id: this.stationId,
             time: gameTime
         });
+    }
+
+    /**
+     * Expand the station to include perimeter, buildings, and cargo warehouse
+     */
+    expandStation(): void {
+        if (this._state.isExpanded) {
+            Logger.log(LogCategory.SYSTEM, `Station ${this.stationId} already expanded`);
+            return;
+        }
+
+        // Add station perimeter component
+        const perimeterRadius = this._config.perimeterRadius || 50;
+        const perimeter = new StationPerimeterComponent();
+        perimeter.initialize(this.position, perimeterRadius);
+        this.addComponent(perimeter);
+
+        // Add health component for station vulnerability
+        const health = new HealthComponent(1000, 0); // 1000 HP, no regen
+        this.addComponent(health);
+
+        // Create cargo warehouse if specified
+        if (this._config.hasCargoWarehouse !== false) {
+            this.createCargoWarehouse();
+        }
+
+        // Create decorative buildings
+        const buildingCount = this._config.decorativeBuildingCount || 3;
+        this.createDecorativeBuildings(buildingCount);
+
+        this._state.isExpanded = true;
+        Logger.log(LogCategory.SYSTEM, `Station ${this.stationId} expanded with perimeter radius ${perimeterRadius}`);
+    }
+
+    /**
+     * Create a cargo warehouse building within the station
+     */
+    private createCargoWarehouse(): void {
+        const perimeter = this.getComponent<StationPerimeterComponent>('station_perimeter');
+        if (!perimeter) return;
+
+        // Place warehouse at a fixed offset from station center (within 3-4 unit radius)
+        const warehousePosition = new Vector3(
+            this.position.x + 2.5, // 2.5 units east of center
+            this.position.y,
+            this.position.z - 1.5  // 1.5 units south of center
+        );
+        
+        // Create warehouse building entity as a child GameObject
+        const warehouse = new GameObject('cargo_warehouse');
+        
+        // Add building component
+        const building = new BuildingComponent();
+        building.initialize(BuildingType.CARGO_WAREHOUSE, warehousePosition, new Vector3(12, 6, 8));
+        warehouse.addComponent(building);
+
+        // Add cargo warehouse functionality
+        const cargoWarehouse = new CargoWarehouseComponent();
+        cargoWarehouse.initialize();
+        warehouse.addComponent(cargoWarehouse);
+
+        // Add health for vulnerability
+        const health = new HealthComponent(500, 0); // 500 HP, no regen
+        warehouse.addComponent(health);
+
+        this._state.buildingIds.push(warehouse.id);
+        Logger.log(LogCategory.SYSTEM, `Created cargo warehouse for station ${this.stationId} at controlled position`);
+    }
+
+    /**
+     * Create decorative buildings around the station
+     */
+    private createDecorativeBuildings(count: number): void {
+        const buildingTypes = [
+            BuildingType.DECORATIVE_TOWER,
+            BuildingType.DECORATIVE_SHOP,
+            BuildingType.DECORATIVE_BUILDING
+        ];
+
+        // Generate random, unique positions in a 2-4 unit radius around station center for each station
+        for (let i = 0; i < count; i++) {
+            const buildingType = buildingTypes[Math.floor(Math.random() * buildingTypes.length)];
+            
+            // Generate random position within 2-4 unit radius
+            const angle = Math.random() * 2 * Math.PI;
+            const distance = 2 + Math.random() * 2; // 2-4 unit radius
+            
+            const position = new Vector3(
+                this.position.x + Math.cos(angle) * distance,
+                this.position.y,
+                this.position.z + Math.sin(angle) * distance
+            );
+
+            const building = new GameObject('decorative_building');
+            
+            const buildingComponent = new BuildingComponent();
+            const size = this.getRandomBuildingSize(buildingType);
+            buildingComponent.initialize(buildingType, position, size);
+            building.addComponent(buildingComponent);
+
+            // Add health for vulnerability
+            const health = new HealthComponent(300, 0); // 300 HP, no regen
+            building.addComponent(health);
+
+            // Store building data for renderer
+            const buildingData: StationBuildingData = {
+                id: building.id,
+                type: buildingType,
+                position: position.clone(),
+                size: size.clone(),
+                colorIndex: Math.floor(Math.random() * 5) // Random grey tone index
+            };
+            
+            this._state.buildingData.push(buildingData);
+            this._state.buildingIds.push(building.id);
+        }
+
+        Logger.log(LogCategory.SYSTEM, `Created ${count} randomly positioned decorative buildings for station ${this.stationId}`);
+    }
+
+    /**
+     * Check if a position is occupied by existing buildings
+     */
+    private isPositionOccupied(position: Vector3, minDistance: number): boolean {
+        // For now, just check distance from station center
+        // In a full implementation, this would check against all building positions
+        const distanceFromCenter = Vector3.Distance(position, this.position);
+        return distanceFromCenter < minDistance;
+    }
+
+    /**
+     * Get random building size based on type (smaller sizes for more buildings)
+     */
+    private getRandomBuildingSize(buildingType: BuildingType): Vector3 {
+        // Add random variation to building sizes for more uniqueness
+        const variation = 0.5 + Math.random() * 0.5; // 0.5x to 1.0x size variation
+        
+        switch (buildingType) {
+            case BuildingType.DECORATIVE_TOWER:
+                return new Vector3(
+                    1.5 * variation, 
+                    6 + Math.random() * 4, // 6-10 height for towers
+                    1.5 * variation
+                );
+            case BuildingType.DECORATIVE_SHOP:
+                return new Vector3(
+                    3 + Math.random() * 2, // 3-5 width
+                    2 + Math.random() * 2, // 2-4 height
+                    2.5 * variation
+                );
+            case BuildingType.DECORATIVE_BUILDING:
+                return new Vector3(
+                    2.5 + Math.random() * 1.5, // 2.5-4 width
+                    3 + Math.random() * 2,      // 3-5 height
+                    2.5 + Math.random() * 1     // 2.5-3.5 depth
+                );
+            default:
+                return new Vector3(
+                    2 + Math.random() * 1, 
+                    2.5 + Math.random() * 1.5, 
+                    2 + Math.random() * 1
+                );
+        }
+    }
+
+    /**
+     * Get the cargo warehouse component if it exists
+     */
+    getCargoWarehouse(): CargoWarehouseComponent | null {
+        // In a full implementation, this would search through building entities
+        // For now, we'll assume the station itself can have the component
+        return this.getComponent<CargoWarehouseComponent>('cargo_warehouse');
+    }
+
+    /**
+     * Check if the station is expanded
+     */
+    get isExpanded(): boolean {
+        return this._state.isExpanded;
+    }
+
+    /**
+     * Get the station perimeter component
+     */
+    getPerimeter(): StationPerimeterComponent | null {
+        return this.getComponent<StationPerimeterComponent>('station_perimeter');
+    }
+
+    /**
+     * Get the building data for this station
+     */
+    get buildingData(): StationBuildingData[] {
+        return [...this._state.buildingData]; // Return a copy to prevent external modification
     }
 }
