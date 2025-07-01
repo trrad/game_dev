@@ -749,8 +749,8 @@ class ECSApp {
             }
         ];
         
-        // Create the train cars
-        const trainCars = carConfigs.map(config => new TrainCar(config));
+        // Create the train cars with scene for Entity-Level Registration
+        const trainCars = carConfigs.map(config => new TrainCar(config, this.eventStack, this.scene));
         
         // Get the starting station (Station A)
         const startingStation = this.stations.get('station_a');
@@ -1200,7 +1200,7 @@ class ECSApp {
                         cargoCapacity: 50,
                         maxHealth: 100
                     };
-                    const demoCar = new TrainCar(demoCarConfig);
+                    const demoCar = new TrainCar(demoCarConfig, this.eventStack, this.scene);
                     this.trainModificationUI.setCar(demoCar);
                     this.trainModificationUI.show();
                     

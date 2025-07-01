@@ -3,11 +3,12 @@
  * Each voxel represents a discrete unit with position, health, and cargo properties
  */
 
-import { Mesh } from "@babylonjs/core";
+import { Mesh, Scene } from "@babylonjs/core";
 import { GameObject } from '../core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { HealthComponent } from '../components/HealthComponent';
 import { CargoCapacityType, VoxelMaterial, VoxelFace } from '../components/TrainCarVoxelComponent';
+import { VoxelRenderComponent } from '../renderers/VoxelRenderComponent';
 import { Logger, LogCategory } from '../utils/Logger';
 
 /**
@@ -37,9 +38,14 @@ export class TrainCarVoxel extends GameObject {
         cargoType: CargoCapacityType = CargoCapacityType.STANDARD,
         material: VoxelMaterial = VoxelMaterial.STEEL,
         capacity: number = 100,
-        maxHealth: number = 100
+        maxHealth: number = 100,
+        eventStack?: any,  // EventStack for GameObject
+        scene?: Scene      // Scene for rendering (passed to GameObject)
     ) {
-        super(id);
+        super('trainCarVoxel', eventStack, scene);
+        
+        // Override the ID to use the provided ID instead of auto-generated one
+        (this as any).id = id;
         
         this.gridPosition = { ...gridPosition };
         this.cargoType = cargoType;
@@ -55,6 +61,16 @@ export class TrainCarVoxel extends GameObject {
         positionComponent.setPosition({ x: worldPosition.x, y: worldPosition.y, z: worldPosition.z });
         this.addComponent(positionComponent);
         this.addComponent(new HealthComponent(maxHealth));
+
+        // Add render component if scene is available (Entity-Level Registration pattern)
+        if (this.scene) {
+            const voxelRenderComponent = new VoxelRenderComponent(this.scene, { 
+                size: 0.4  // Standard voxel size
+            });
+            this.addComponent(voxelRenderComponent);
+            
+            Logger.log(LogCategory.RENDERING, `Added VoxelRenderComponent to voxel ${id}`);
+        }
 
         Logger.log(LogCategory.SYSTEM, `Created TrainCarVoxel ${id} at grid(${gridPosition.x},${gridPosition.y},${gridPosition.z}) world(${worldPosition.x},${worldPosition.y},${worldPosition.z})`);
     }

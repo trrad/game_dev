@@ -1,4 +1,4 @@
-import { Vector3, Mesh, TransformNode } from "@babylonjs/core";
+import { Vector3, Mesh, TransformNode, Scene } from "@babylonjs/core";
 import { GameObject } from "../core/GameObject";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
@@ -11,6 +11,7 @@ import { TrainCarPositionComponent } from "../components/TrainCarPositionCompone
 import { AttachmentSlotFactory } from "./AttachmentSlotFactory";
 import { TrainCarVoxel } from "./TrainCarVoxel";
 import { TrainCarVoxelComponent, CargoCapacityType, VoxelMaterial, VoxelFace } from "../components/TrainCarVoxelComponent";
+import { VoxelRenderComponent } from "../renderers/VoxelRenderComponent";
 
 export interface TrainCarConfig {
     id: string;
@@ -47,8 +48,8 @@ export class TrainCar extends GameObject {
     private _voxelSpacing: number;
     private _voxelDimensions: { width: number; height: number; length: number };
 
-    constructor(config: TrainCarConfig) {
-        super('trainCar');
+    constructor(config: TrainCarConfig, eventStack?: any, scene?: Scene) {
+        super('trainCar', eventStack, scene);
         this._config = config;
         // Use consistent voxel spacing that matches the renderer's voxel size
         this._voxelSpacing = config.voxelSpacing || 0.5;
@@ -230,7 +231,9 @@ export class TrainCar extends GameObject {
             cargoType,
             material,
             capacity,
-            maxHealth
+            maxHealth,
+            this.eventStack,  // Pass eventStack to voxel
+            this.scene        // Pass scene to voxel
         );
 
         // Set voxel rotation to match car rotation
@@ -874,5 +877,28 @@ export class TrainCar extends GameObject {
         }
         
         super.dispose();
+    }
+
+    /**
+     * Set up rendering for this car and all its voxels
+     * Should be called after the car is created and registered with SceneManager
+     */
+    setupRendering(scene: Scene): void {
+        // Add VoxelRenderComponent to all existing voxels
+        this._voxels.forEach(voxel => {
+            // Check if voxel already has a render component
+            if (!voxel.getComponent('render')) {
+                const voxelRenderComponent = new VoxelRenderComponent(scene, { 
+                    size: this._voxelSpacing * 0.8 // Slightly smaller than spacing for visual gaps
+                });
+                voxel.addComponent(voxelRenderComponent);
+                
+                Logger.log(LogCategory.RENDERING, `Added VoxelRenderComponent to voxel ${voxel.id}`);
+            }
+        });
+
+        Logger.log(LogCategory.RENDERING, `Rendering setup complete for car ${this.carId}`, {
+            voxelCount: this._voxels.size
+        });
     }
 }

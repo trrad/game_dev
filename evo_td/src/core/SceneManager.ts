@@ -33,8 +33,10 @@ import {
 
 import { GameObject } from './GameObject';
 import { PositionComponent } from '../components/PositionComponent';
+import { RenderComponent } from '../renderers/RenderComponent';
 import { TimeManager } from './TimeManager';
 import { EventStack } from './EventStack';
+import { ObjectTracker } from '../utils/ObjectTracker';
 import { Logger, LogCategory } from '../utils/Logger';
 
 /**
@@ -101,6 +103,8 @@ export class SceneManager {
     private readonly FIXED_TIMESTEP: number = 1/60;
     /** Event stack for event-driven features */
     private eventStack: EventStack | null = null;
+    /** Set of GameObjects already discovered and processed for auto-registration */
+    private discoveredObjects: Set<string> = new Set();
     /** Station focus state */
     private isStationFocused: boolean = false;
     private focusedStationId: string | null = null;
@@ -346,6 +350,59 @@ export class SceneManager {
     }
 
     /**
+     * Auto-discover and register GameObjects with RenderComponents
+     * This enables the Entity-Level Registration pattern where any GameObject
+     * with a RenderComponent is automatically picked up for rendering
+     */
+    private discoverAndRegisterRenderableObjects(): void {
+        // Get all active GameObjects by type (we need to check all known types)
+        const gameObjectTypes = ['train', 'trainCar', 'trainCarVoxel', 'station', 'rail', 'enemy', 'projectile', 'weapon'];
+        const allObjects: GameObject[] = [];
+        
+        for (const type of gameObjectTypes) {
+            const objectsOfType = ObjectTracker.getObjectsByType(type);
+            allObjects.push(...objectsOfType);
+        }
+        
+        for (const gameObject of allObjects) {
+            // Skip if we've already discovered and processed this object
+            if (this.discoveredObjects.has(gameObject.id)) {
+                continue;
+            }
+            
+            // Look for any RenderComponent on the GameObject
+            const renderComponent = gameObject.getComponent<RenderComponent>('render') || 
+                                  gameObject.getComponent<RenderComponent>('voxelRender');
+            
+            if (renderComponent) {
+                // Ensure the render component is attached
+                if (!renderComponent['_gameObject']) {
+                    renderComponent.attachTo(gameObject);
+                }
+                
+                // Make sure onAttach was called to create the visual
+                if (renderComponent['onAttach'] && !renderComponent.getMesh()) {
+                    renderComponent['onAttach']();
+                }
+                
+                // Get the mesh from the render component
+                const visual = renderComponent.getMesh();
+                if (visual) {
+                    this.registerGameObject(gameObject, visual);
+                } else {
+                    Logger.warn(LogCategory.RENDERING, `GameObject has RenderComponent but no visual mesh`, {
+                        objectId: gameObject.id,
+                        renderComponentType: renderComponent.type
+                    });
+                }
+            }
+            
+            // Mark as discovered (whether it had a render component or not)
+            this.discoveredObjects.add(gameObject.id);
+        }
+    }
+
+    /**
      * Update camera position based on tracking target
      */
     private updateCameraTracking(): void {
@@ -367,6 +424,9 @@ export class SceneManager {
      * @param deltaTime Time since last update (in seconds)
      */
     update(deltaTime: number): void {
+        // Auto-discover new GameObjects with RenderComponents
+        this.discoverAndRegisterRenderableObjects();
+        
         // Get the current game time scaling factor
         const timeScale = this.timeManager.getSpeed();
         
@@ -459,27 +519,37 @@ export class SceneManager {
             const posComponent = mapping.gameObject.getComponent<PositionComponent>("position");
             if (!posComponent) continue;
             
-            const pos = posComponent.getPosition();
-            const rot = posComponent.getRotation();
+            // Check if this GameObject has a RenderComponent that should handle its own positioning
+            const renderComponent = mapping.gameObject.getComponent<RenderComponent>('render') || 
+                                  mapping.gameObject.getComponent<RenderComponent>('voxelRender');
             
-            // Update visual position from component
-            // Only update if the visual is not a station mesh (they have fixed Y positions)
-            // For trains (TransformNode), we update the whole transform
-            if (!mapping.visual.name.includes("station_")) {
-                mapping.visual.position.x = pos.x;
-                mapping.visual.position.y = pos.y;
-                mapping.visual.position.z = pos.z;
+            if (renderComponent) {
+                // Let the RenderComponent handle positioning (includes Y offset, etc.)
+                renderComponent['updatePosition']?.();
             } else {
-                // For station visuals, only update X and Z
-                mapping.visual.position.x = pos.x;
-                mapping.visual.position.z = pos.z;
-                // Keep Y as set by the StationRenderer
+                // Legacy positioning for objects without RenderComponents
+                const pos = posComponent.getPosition();
+                const rot = posComponent.getRotation();
+                
+                // Update visual position from component
+                // Only update if the visual is not a station mesh (they have fixed Y positions)
+                // For trains (TransformNode), we update the whole transform
+                if (!mapping.visual.name.includes("station_")) {
+                    mapping.visual.position.x = pos.x;
+                    mapping.visual.position.y = pos.y;
+                    mapping.visual.position.z = pos.z;
+                } else {
+                    // For station visuals, only update X and Z
+                    mapping.visual.position.x = pos.x;
+                    mapping.visual.position.z = pos.z;
+                    // Keep Y as set by the StationRenderer
+                }
+                
+                // Update visual rotation
+                mapping.visual.rotation.x = rot.x;
+                mapping.visual.rotation.y = rot.y;
+                mapping.visual.rotation.z = rot.z;
             }
-            
-            // Update visual rotation
-            mapping.visual.rotation.x = rot.x;
-            mapping.visual.rotation.y = rot.y;
-            mapping.visual.rotation.z = rot.z;
             
             mapping.lastUpdateTime = performance.now();
         }

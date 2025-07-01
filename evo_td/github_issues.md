@@ -467,3 +467,52 @@ Create a sophisticated rendering system specifically for enemies, supporting ani
 - [ ] Animation system performs well with multiple enemies
 - [ ] Visual effects enhance combat and interaction feedback
 - [ ] System integrates seamlessly with existing enemy logic
+
+---
+
+## 11. Voxel-Based Architecture Implementation (COMPLETED ✅)
+
+**Title:** Implement Entity-Level Registration Pattern for Voxel-Based Train Cars
+
+**Labels:** architecture, rendering, voxels, enhancement
+
+**Description:**
+**STATUS: COMPLETED** - Successfully implemented a voxel-based architecture for train cars using the Entity-Level Registration pattern.
+
+### What Was Accomplished
+- **TrainCarVoxel entities**: Each voxel is now an individual GameObject with its own PositionComponent and HealthComponent
+- **VoxelRenderComponent**: Per-voxel rendering components that automatically register with SceneManager
+- **Entity-Level Registration**: Any GameObject with a RenderComponent is automatically discovered and rendered
+- **Auto-discovery system**: SceneManager automatically finds and registers renderable objects
+- **Component lifecycle fixes**: Fixed critical timing issues in VoxelRenderComponent.onAttach()
+
+### Technical Implementation
+- `TrainCarVoxel.ts`: Individual voxel entities with position, health, and rendering
+- `VoxelRenderComponent.ts`: Per-voxel render components with cube mesh creation
+- `SceneManager.ts`: Auto-discovery mechanism for objects with RenderComponents
+- `GameObject.ts`: Added scene property for Entity-Level Registration support
+- `TrainCar.ts`: Updated to create voxel grids using new architecture
+
+### Architecture Benefits
+- **Pure ECS pattern**: Each voxel is a full entity with its own components
+- **Flexible rendering**: No monolithic renderer dependencies
+- **Modular systems**: Easy to add/remove voxel-level functionality
+- **Performance ready**: Foundation for LoD and instancing optimizations
+- **Extensible**: Pattern ready for attachments, buildings, and other modular entities
+
+### Future Directions (Next Steps)
+- Apply the same Entity-Level Registration pattern to:
+  - **Attachments**: Replace monolithic attachment rendering
+  - **Buildings**: Modular station building components
+  - **Weapons**: Individual weapon rendering components
+- Implement LoD/asset coordination hooks for performance
+- Add instancing optimizations for repeated voxel types
+- Create voxel-level damage and destruction systems
+
+### Lessons Learned
+- Component lifecycle order is critical (set entity reference before calling super.onAttach())
+- Auto-discovery provides clean separation between rendering and game logic
+- Entity-Level Registration scales better than parent-managed rendering
+- SceneManager auto-discovery reduces coupling between systems
+
+---

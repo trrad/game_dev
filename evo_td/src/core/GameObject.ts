@@ -11,6 +11,7 @@ import type { Component } from './Component';
 import { Logger, LogCategory } from '../utils/Logger';
 import { ObjectTracker } from '../utils/ObjectTracker';
 import type { EventStack } from './EventStack';
+import type { Scene } from '@babylonjs/core';
 
 let nextGameObjectId = 1;
 
@@ -27,6 +28,8 @@ interface GameObjectEventEmitter {
 export class GameObject implements GameObjectEventEmitter {
     /** Unique identifier for this GameObject */
     public readonly id: string;
+    /** Scene reference for rendering */
+    public readonly scene?: Scene;
     /** Map of component type to component instance */
     private _components: Map<string, Component> = new Map();
     /** Event listeners map */
@@ -40,8 +43,9 @@ export class GameObject implements GameObjectEventEmitter {
     /** Central event system for unified logging and communication */
     protected eventStack?: EventStack;
 
-    constructor(public readonly type: string, eventStack?: EventStack) {
+    constructor(public readonly type: string, eventStack?: EventStack, scene?: Scene) {
         this.id = `${type}_${nextGameObjectId++}`;
+        this.scene = scene;
         this.eventStack = eventStack;
         ObjectTracker?.register?.(this);
         Logger?.log?.(LogCategory.PERFORMANCE, `GameObject created: ${this.id}`, { type });

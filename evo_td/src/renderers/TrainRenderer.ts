@@ -10,6 +10,9 @@ import { HealthComponent } from "../components/HealthComponent";
 import { PositionComponent } from "../components/PositionComponent";
 import { VoxelMaterial, CargoCapacityType } from "../components/TrainCarVoxelComponent";
 import { Logger, LogCategory } from "../utils/Logger";
+import { TrainRenderComponent } from "./TrainRenderComponent";
+import { CarRenderComponent } from "./CarRenderComponent";
+import { VoxelRenderComponent } from "./VoxelRenderComponent";
 
 /**
  * Individual voxel visual representation
@@ -218,29 +221,18 @@ export class TrainRenderer {
      * @returns The created train group containing references to car meshes
      */
     createTrainVisual(trainCars: TrainCar[], trainId: string): TransformNode {
-        Logger.log(LogCategory.RENDERING, `Creating train visual: ${trainId} with ${trainCars.length} cars`);
+        Logger.log(LogCategory.RENDERING, `Creating train visual: ${trainId} with ${trainCars.length} cars (LEGACY DISABLED - using Entity-Level Registration)`);
         
-        // Create a parent node for organizational purposes (not for positioning)
+        // Create a parent node for organizational purposes only
         const trainGroup = new TransformNode(`train_${trainId}`, this.scene);
         
-        // Create individual car visuals that will be positioned independently via PositionComponents
-        const carVisuals: TrainCarVisual[] = [];
+        // LEGACY SYSTEM DISABLED - Voxels now render themselves via Entity-Level Registration
+        // The new VoxelRenderComponents in each voxel handle rendering automatically
         
-        trainCars.forEach((car, index) => {
-            const carVisual = this.createTrainCarVisual(car, index);
-            
-            // No offset calculation - positioning is handled by TrainSystem via PositionComponents
-            carVisual.offsetDistance = 0; // Not used since positioning is authoritative
-            
-            carVisuals.push(carVisual);
-            
-            Logger.log(LogCategory.RENDERING, `Car ${index} created with ${carVisual.voxels.length} voxels`);
-        });
-        
-        // Store the train visual group for reference (mainly for cleanup)
+        // Store empty visual group for reference (for cleanup compatibility)
         const visualGroup: TrainVisualGroup = {
             parentNode: trainGroup,
-            cars: carVisuals,
+            cars: [], // Empty - no legacy car visuals created
             trainId: trainId
         };
         this.trainVisuals.set(trainId, visualGroup);
@@ -248,11 +240,12 @@ export class TrainRenderer {
         // Position the train group at the origin (it's just a reference node)
         trainGroup.position = new Vector3(0, 0, 0);
         
-        Logger.log(LogCategory.RENDERING, `Train visual created: ${trainId}`, {
+        Logger.log(LogCategory.RENDERING, `Train visual created: ${trainId} (Entity-Level Registration)`, {
             groupPosition: trainGroup.position.toString(),
-            carCount: carVisuals.length,
-            totalVoxels: carVisuals.reduce((sum, car) => sum + car.voxels.length, 0),
-            isEnabled: trainGroup.isEnabled()
+            carCount: trainCars.length,
+            totalVoxels: 0, // Voxels now render themselves
+            isEnabled: trainGroup.isEnabled(),
+            renderingSystem: "Entity-Level Registration"
         });
         
         return trainGroup;
@@ -615,3 +608,19 @@ export class TrainRenderer {
         };
     }
 }
+
+/**
+ * TODO: Future integration - these will replace the monolithic TrainRenderer
+ * The new component-based rendering system provides:
+ * - TrainRenderComponent: Manages entire train rendering
+ * - CarRenderComponent: Manages individual car rendering  
+ * - VoxelRenderComponent: Manages individual voxel rendering
+ * - AttachmentRenderComponent: Manages attachment rendering (when ready)
+ *
+ * Integration plan:
+ * 1. Create TrainRenderComponent instances for each train
+ * 2. Create CarRenderComponent instances for each car
+ * 3. VoxelRenderComponent instances are created automatically per voxel
+ * 4. Gradually migrate logic from this monolithic renderer to the component system
+ * 5. Eventually deprecate this TrainRenderer in favor of pure ECS component approach
+ */
