@@ -22,6 +22,7 @@ import { TrainRenderer } from "./renderers/TrainRenderer";
 import { EnemyRenderer } from "./renderers/EnemyRenderer";
 import { GroundRenderer } from "./renderers/GroundRenderer";
 import { LightRenderer } from "./renderers/LightRenderer";
+import { ProjectileRenderer } from "./renderers/ProjectileRenderer";
 
 // Import core ECS classes
 import { GameObject } from "./core/GameObject";
@@ -51,12 +52,12 @@ import { EventStack } from "./core/EventStack";
 import { Train } from "./entities/Train";
 import { TrainSystem } from "./systems/TrainSystem";
 import { EnemySystem } from "./systems/EnemySystem";
+import { ProjectileSystem } from "./systems/ProjectileSystem";
 
 // Import attachment system components
 import { AttachmentFactory } from "./components/AttachmentFactory";
 import { TrainCarModificationUI } from "./ui/TrainCarModificationUI";
 import { CSSLoader } from "./utils/CSSLoader";
-import { ExpandedStationIntegrationDemo } from "./examples/ExpandedStationIntegrationDemo";
 
 class ECSApp {
     private canvas: HTMLCanvasElement;
@@ -76,6 +77,7 @@ class ECSApp {
     private eventStack: EventStack;
     private trainSystem: TrainSystem;
     private enemySystem: EnemySystem;
+    private projectileSystem: ProjectileSystem;
     private stationManager: StationManager;
     
     // Renderers
@@ -85,6 +87,7 @@ class ECSApp {
     private enemyRenderer: EnemyRenderer;
     private groundRenderer: GroundRenderer;
     private lightRenderer: LightRenderer;
+    private projectileRenderer: ProjectileRenderer;
     
     // Game entities
     private stations: Map<string, Station> = new Map();
@@ -134,7 +137,7 @@ class ECSApp {
             {
                 fieldOfViewDistance: 500,
                 enableCulling: true,
-                maxVisibleObjects: 500,
+                maxVisibleObjects: 1500,
                 debugMode: false
             }
         );
@@ -171,6 +174,13 @@ class ECSApp {
             this.enemyRenderer = new EnemyRenderer(this.sceneManager.scene);
             this.groundRenderer = new GroundRenderer(this.sceneManager.scene);
             this.lightRenderer = new LightRenderer(this.sceneManager.scene);
+            this.projectileRenderer = new ProjectileRenderer(this.sceneManager.scene);
+            
+            // Initialize ProjectileSystem and connect it to other systems
+            this.projectileSystem = new ProjectileSystem(this.projectileRenderer);
+            this.projectileSystem.setTimeManager(this.timeManager);
+            this.projectileSystem.setEventStack(this.eventStack);
+            this.projectileSystem.setSceneManager(this.sceneManager);
             
             // Set up SceneManager event subscriptions for camera control
             this.sceneManager.subscribeToStationFocusEvents(this.eventStack);
@@ -216,10 +226,6 @@ class ECSApp {
             this.eventStack.logEvent(LogCategory.UI, 'controls_ready', 'Press F1 to toggle event log, M for train modification UI, Space to pause, 1-5 for time speed');
             this.eventStack.logEvent(LogCategory.UI, 'camera_controls', 'Camera controls: Q = Central Station, W = Eastern Depot, E = Northern Outpost, R = Release focus');
             
-            // Run integration demo to showcase expanded station features
-            ExpandedStationIntegrationDemo.demonstrateIntegration();
-            ExpandedStationIntegrationDemo.demonstrateEventFlows();
-            
             // Log current demo world configuration
             this.logCurrentDemoSetup();
             
@@ -250,6 +256,9 @@ class ECSApp {
             
             // Update enemy system with time-scaled delta
             this.enemySystem.update(deltaTime);
+            
+            // Update projectile system with time-scaled delta
+            this.projectileSystem.update(deltaTime);
         });
         
         // Register the render loop
@@ -820,15 +829,21 @@ class ECSApp {
         this.trains.set(train.id, train);
         this.sceneManager.registerGameObject(train, trainVisual);
         
-        // Register each individual train car with SceneManager for independent positioning
-        const carMeshes = this.trainRenderer.getTrainCarMeshes(train.id);
+        // Register each individual voxel with SceneManager for independent positioning
+        const voxelMeshes = this.trainRenderer.getTrainCarMeshes(train.id);
         const carEntities = train.getCars();
         
-        carMeshes.forEach((carMesh, index) => {
-            if (index < carEntities.length) {
-                const trainCar = carEntities[index];
-                this.sceneManager.registerGameObject(trainCar, carMesh.mesh);
-                Logger.log(LogCategory.SYSTEM, `Registered car with SceneManager: ${carMesh.carId}`);
+        voxelMeshes.forEach((voxelMesh) => {
+            // Find the car that owns this voxel
+            const owningCar = carEntities.find(car => car.carId === voxelMesh.carId);
+            if (owningCar) {
+                // Find the specific voxel GameObject
+                const voxels = owningCar.getVoxels();
+                const voxel = voxels.find(v => v.id === voxelMesh.voxelId);
+                if (voxel) {
+                    this.sceneManager.registerGameObject(voxel, voxelMesh.mesh);
+                    Logger.log(LogCategory.SYSTEM, `Registered voxel with SceneManager: ${voxelMesh.voxelId} (car: ${voxelMesh.carId})`);
+                }
             }
         });
         
@@ -866,50 +881,56 @@ class ECSApp {
     /**
      * Add demo attachments to a train for testing purposes
      */
-    private addDemoAttachments(train: Train): void {
+    private addDemoAttachments(train: Train): void { 
         const cars = train.getCars();
         if (cars.length === 0) return;
 
-        Logger.log(LogCategory.SYSTEM, `Adding demo attachments to train ${train.id}`);
+        Logger.log(LogCategory.SYSTEM, `Adding demo turret to train ${train.id}`);
 
-        // Add attachments to the engine car
+        // Add a single working turret to the front engine car
         const engineCar = cars[0];
         if (engineCar.carType === 'engine') {
-            // Add a basic turret on top
-            const turret = AttachmentFactory.createBasicTurret();
-            const turretSuccess = engineCar.addAttachment(turret, 'top', 1, 0, 2);
-            
-            // Add armor plating on the side
-            const armor = AttachmentFactory.createArmorPlating();
-            const armorSuccess = engineCar.addAttachment(armor, 'side_left', 0, 1, 1);
-            
-            Logger.log(LogCategory.SYSTEM, `Engine car demo attachments`, {
-                carId: engineCar.carId,
-                turretPlaced: turretSuccess,
-                armorPlaced: armorSuccess,
-                stats: engineCar.getAttachmentStats()
-            });
-        }
-
-        // Add attachments to cargo cars
-        cars.slice(1).forEach((car, index) => {
-            if (car.carType === 'cargo') {
-                // Add cargo containers on top
-                const container = AttachmentFactory.createCargoContainer();
-                const containerSuccess = car.addAttachment(container, 'top', 0, 0, index * 2);
-                
-                // Add shield generator internally
-                const shield = AttachmentFactory.createShieldGenerator();
-                const shieldSuccess = car.addAttachment(shield, 'internal', 1, 0, 1);
-                
-                Logger.log(LogCategory.SYSTEM, `Cargo car demo attachments`, {
-                    carId: car.carId,
-                    containerPlaced: containerSuccess,
-                    shieldPlaced: shieldSuccess,
-                    stats: car.getAttachmentStats()
-                });
+            const turret = AttachmentFactory.createBasicTurret(this.eventStack);
+            // Place on the top center of the engine car
+            // Grid coordinates: (X=middle of length, Y=middle of width, Z=top height)
+            const voxels = engineCar.getVoxels();
+            if (voxels.length > 0) {
+                // Find a voxel at the top of the car (highest Z value)
+                const topVoxels = voxels.filter(v => v.gridPosition.z === Math.max(...voxels.map(vox => vox.gridPosition.z)));
+                if (topVoxels.length > 0) {
+                    // Get a voxel near the center of the car
+                    const centerVoxel = topVoxels.find(v => v.gridPosition.x > 0 && v.gridPosition.y >= 0) || topVoxels[0];
+                    const { x, y, z } = centerVoxel.gridPosition;
+                    const success = engineCar.addAttachment(turret, 'top', x, y, z);
+                    
+                    Logger.log(LogCategory.SYSTEM, `Placing turret at grid position (${x}, ${y}, ${z})`);
+                    
+                    if (success) {
+                        // Update the visual representation to show the turret
+                        this.trainRenderer.updateCarAttachmentVisuals(engineCar);
+                        // Update slot visuals to show occupancy
+                        this.trainRenderer.updateSlotVisuals(engineCar);
+                        
+                        Logger.log(LogCategory.SYSTEM, `Added working turret to engine car`, {
+                            carId: engineCar.carId,
+                            turretName: turret.getConfig().name,
+                            damage: turret.getDamage(),
+                            range: turret.getAttackRange(),
+                            fireRate: turret.getFireRate(),
+                            gridPosition: `(${x}, ${y}, ${z})`
+                        });
+                    } else {
+                        Logger.warn(LogCategory.SYSTEM, `Failed to add demo turret to engine car`);
+                    }
+                } else {
+                    Logger.warn(LogCategory.SYSTEM, `No top voxels found on engine car`);
+                }
+            } else {
+                Logger.warn(LogCategory.SYSTEM, `No voxels found on engine car`);
             }
-        });
+        } else {
+            Logger.warn(LogCategory.SYSTEM, `Engine car not found for turret placement`);
+        }
 
         // Log final train state
         const totalStats = {
@@ -921,8 +942,8 @@ class ECSApp {
             }))
         };
 
-        this.eventStack.logEvent(LogCategory.TRAIN, 'demo_attachments_added', 
-            `Added demo attachments to train ${train.id}`, totalStats);
+        this.eventStack.logEvent(LogCategory.TRAIN, 'demo_attachments_complete', 
+            `Demo turret setup complete for train ${train.id}`, totalStats);
     }
     
     /**

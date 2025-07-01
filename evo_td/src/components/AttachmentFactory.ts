@@ -1,9 +1,10 @@
 /**
- * AttachmentFactory - Creates pre-configured attachment components for the modular train system
+ * AttachmentFactory - Creates pre-configured attachment entities for the modular train system
  */
 
-import { AttachmentComponent, AttachmentConfig, AttachmentType, AttachmentSlotType } from './AttachmentComponent';
+import { Attachment, AttachmentConfig, AttachmentType, AttachmentSlotType } from '../entities/Attachment';
 import { Logger, LogCategory } from '../utils/Logger';
+import { EventStack } from '../core/EventStack';
 
 /**
  * Pre-defined attachment configurations
@@ -13,32 +14,37 @@ export class AttachmentFactory {
     /**
      * Create a basic turret weapon attachment
      */
-    static createBasicTurret(): AttachmentComponent {
+    static createBasicTurret(eventStack?: EventStack): Attachment {
         const config: AttachmentConfig = {
             type: AttachmentType.WEAPON,
             name: 'Basic Turret',
             description: 'A simple automated turret for defending against enemies',
-            size: { width: 1, height: 2, depth: 1 },
+            size: { width: 1, height: 1, depth: 1 }, // Make it smaller and more reasonable
             allowedSlots: [AttachmentSlotType.TOP],
             weight: 150,
             health: 100,
             cost: 500,
             color: { r: 0.8, g: 0.2, b: 0.2 },
-            properties: new Map([
+            properties: new Map<string, any>([
                 ['damage', 25],
-                ['range', 10],
-                ['fireRate', 2.0], // shots per second
+                ['range', 15],
+                ['fireRate', 0.25], // shots per second (much slower - 1 shot every 4 seconds)
                 ['ammoCapacity', 100],
-                ['currentAmmo', 100]
+                ['currentAmmo', 100],
+                ['autoTarget', true],
+                ['targetTypes', 'enemy'], // What it can target
+                ['rotationSpeed', 180], // degrees per second
+                ['accuracy', 0.8] // 80% hit chance
             ])
         };
 
-        const attachment = new AttachmentComponent(config);
+        const attachment = new Attachment(config, eventStack);
         
         Logger.log(LogCategory.SYSTEM, `Created basic turret attachment`, {
             name: config.name,
             damage: config.properties.get('damage'),
-            range: config.properties.get('range')
+            range: config.properties.get('range'),
+            fireRate: config.properties.get('fireRate')
         });
 
         return attachment;
@@ -47,7 +53,7 @@ export class AttachmentFactory {
     /**
      * Create a heavy cannon attachment
      */
-    static createHeavyCannon(): AttachmentComponent {
+    static createHeavyCannon(): Attachment {
         const config: AttachmentConfig = {
             type: AttachmentType.WEAPON,
             name: 'Heavy Cannon',
@@ -68,19 +74,19 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create a cargo container attachment
      */
-    static createCargoContainer(): AttachmentComponent {
+    static createCargoContainer(): Attachment {
         const config: AttachmentConfig = {
             type: AttachmentType.CARGO,
             name: 'Cargo Container',
             description: 'Additional storage space for trade goods',
             size: { width: 2, height: 2, depth: 2 },
-            allowedSlots: [AttachmentSlotType.TOP, AttachmentSlotType.INTERNAL],
+            allowedSlots: [AttachmentSlotType.TOP],
             weight: 100,
             health: 80,
             cost: 200,
@@ -92,15 +98,15 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create armor plating attachment
      */
-    static createArmorPlating(): AttachmentComponent {
+    static createArmorPlating(): Attachment {
         const config: AttachmentConfig = {
-            type: AttachmentType.DEFENSIVE,
+            type: AttachmentType.ARMOR,
             name: 'Armor Plating',
             description: 'Protective plating to reduce incoming damage',
             size: { width: 1, height: 1, depth: 1 },
@@ -115,19 +121,19 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create a shield generator attachment
      */
-    static createShieldGenerator(): AttachmentComponent {
+    static createShieldGenerator(): Attachment {
         const config: AttachmentConfig = {
-            type: AttachmentType.DEFENSIVE,
+            type: AttachmentType.SHIELD,
             name: 'Shield Generator',
             description: 'Generates an energy shield to absorb damage',
             size: { width: 1, height: 2, depth: 1 },
-            allowedSlots: [AttachmentSlotType.TOP, AttachmentSlotType.INTERNAL],
+            allowedSlots: [AttachmentSlotType.TOP],
             weight: 120,
             health: 60,
             cost: 800,
@@ -140,19 +146,19 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create a repair system attachment
      */
-    static createRepairSystem(): AttachmentComponent {
+    static createRepairSystem(): Attachment {
         const config: AttachmentConfig = {
             type: AttachmentType.UTILITY,
             name: 'Auto-Repair System',
             description: 'Automatically repairs damage to the train over time',
             size: { width: 1, height: 1, depth: 1 },
-            allowedSlots: [AttachmentSlotType.INTERNAL],
+            allowedSlots: [AttachmentSlotType.BOTTOM],
             weight: 60,
             health: 40,
             cost: 600,
@@ -164,13 +170,13 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create a sensor array attachment
      */
-    static createSensorArray(): AttachmentComponent {
+    static createSensorArray(): Attachment {
         const config: AttachmentConfig = {
             type: AttachmentType.UTILITY,
             name: 'Sensor Array',
@@ -188,19 +194,19 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create a power generator attachment
      */
-    static createPowerGenerator(): AttachmentComponent {
+    static createPowerGenerator(): Attachment {
         const config: AttachmentConfig = {
-            type: AttachmentType.ENGINE,
+            type: AttachmentType.UTILITY,
             name: 'Auxiliary Power Unit',
             description: 'Additional power generation for energy-hungry systems',
             size: { width: 2, height: 1, depth: 2 },
-            allowedSlots: [AttachmentSlotType.INTERNAL],
+            allowedSlots: [AttachmentSlotType.BOTTOM],
             weight: 200,
             health: 80,
             cost: 700,
@@ -212,15 +218,15 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create a basic structural block
      */
-    static createStructuralBlock(): AttachmentComponent {
+    static createStructuralBlock(): Attachment {
         const config: AttachmentConfig = {
-            type: AttachmentType.STRUCTURAL,
+            type: AttachmentType.UTILITY,
             name: 'Structural Block',
             description: 'Basic building block for custom train car designs',
             size: { width: 1, height: 1, depth: 1 },
@@ -228,7 +234,7 @@ export class AttachmentFactory {
                 AttachmentSlotType.TOP,
                 AttachmentSlotType.SIDE_LEFT,
                 AttachmentSlotType.SIDE_RIGHT,
-                AttachmentSlotType.INTERNAL
+                AttachmentSlotType.BOTTOM
             ],
             weight: 50,
             health: 100,
@@ -240,13 +246,13 @@ export class AttachmentFactory {
             ])
         };
 
-        return new AttachmentComponent(config);
+        return new Attachment(config);
     }
 
     /**
      * Create an attachment by name
      */
-    static createByName(name: string): AttachmentComponent | null {
+    static createByName(name: string): Attachment | null {
         switch (name.toLowerCase()) {
             case 'basic_turret':
             case 'turret':
@@ -301,7 +307,7 @@ export class AttachmentFactory {
     /**
      * Get sample loadouts for different car types
      */
-    static getSampleLoadout(carType: string): AttachmentComponent[] {
+    static getSampleLoadout(carType: string): Attachment[] {
         switch (carType.toLowerCase()) {
             case 'engine':
                 return [

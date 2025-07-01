@@ -120,6 +120,15 @@ export class EnemySystem {
     // World references for spawning
     private rails: Map<string, Rail> = new Map();
 
+    // Enemies marked for delayed visual cleanup
+    private enemiesAwaitingCleanup: Map<string, {
+        enemy: Enemy;
+        projectileStart: { x: number; y: number; z: number };
+        projectileTarget: { x: number; y: number; z: number };
+        timeMarked: number;
+        scheduledCleanupTime?: number; // Optional for server-side timing
+    }> = new Map();
+
     constructor(enemyRenderer: EnemyRenderer, spawnConfig?: Partial<EnemySpawnConfig>) {
         this.enemyRenderer = enemyRenderer;
         this.spawnConfig = { ...DEFAULT_SPAWN_CONFIG, ...spawnConfig };
@@ -143,6 +152,30 @@ export class EnemySystem {
      */
     public setEventStack(eventStack: EventStack): void {
         this.eventStack = eventStack;
+        this.setupTurretCombatEvents();
+    }
+
+    /**
+     * Set up event listeners for turret combat system
+     */
+    private setupTurretCombatEvents(): void {
+        if (!this.eventStack) return;
+
+        // Listen for turret target requests
+        this.eventStack.subscribe('turret_request_target', (event) => {
+            if (event.payload) {
+                this.handleTurretTargetRequest(event.payload);
+            }
+        });
+
+        // Listen for projectile impacts for visual cleanup timing
+        this.eventStack.subscribe('projectile_impact_visual', (event) => {
+            if (event.payload && event.payload.targetId) {
+                this.handleDelayedEnemyCleanup(event.payload.targetId);
+            }
+        });
+
+        Logger.log(LogCategory.SYSTEM, "EnemySystem: Turret combat events configured");
     }
 
     /**
@@ -179,8 +212,14 @@ export class EnemySystem {
         // Update enemy health regeneration and growth
         this.updateEnemyHealth(deltaTime);
 
+        // Check for scheduled enemy cleanups (server-side timing)
+        this.updateScheduledCleanups();
+
         // Remove dead enemies
         this.cleanupDeadEnemies();
+
+        // Debug enemy states periodically
+        this.debugEnemyStates();
 
         // Update visuals
         this.updateVisuals();
@@ -548,14 +587,31 @@ export class EnemySystem {
      * Remove dead enemies
      */
     private cleanupDeadEnemies(): void {
-        const deadEnemies = Array.from(this.enemies.values()).filter(enemy => enemy.isDead());
+        const deadEnemies = Array.from(this.enemies.values()).filter(enemy => {
+            try {
+                return enemy.isDead();
+            } catch (error) {
+                // If there's an error checking isDead, assume the enemy is corrupted and should be removed
+                Logger.log(LogCategory.ERROR, `Error checking enemy death status for ${enemy.id}, removing enemy`, error);
+                return true;
+            }
+        });
 
         if (deadEnemies.length > 0) {
-            Logger.log(LogCategory.SYSTEM, `Cleaning up ${deadEnemies.length} dead enemies`);
+            Logger.log(LogCategory.SYSTEM, `Cleaning up ${deadEnemies.length} dead enemies`, {
+                deadEnemyIds: deadEnemies.map(e => e.id),
+                totalEnemies: this.enemies.size
+            });
         }
 
         for (const enemy of deadEnemies) {
-            this.removeEnemy(enemy.id);
+            try {
+                this.removeEnemy(enemy.id);
+            } catch (error) {
+                Logger.log(LogCategory.ERROR, `Error removing dead enemy ${enemy.id}`, error);
+                // Force removal from the map as a fallback
+                this.enemies.delete(enemy.id);
+            }
         }
     }
 
@@ -727,6 +783,369 @@ export class EnemySystem {
         const healthComponent = contactingEnemy.getComponent<HealthComponent>('health');
         if (healthComponent) {
             healthComponent.takeDamage(999, 'kinetic'); // Ensure death
+        }
+    }
+
+    /**
+     * Handle turret target request - find the best enemy target
+     */
+    private handleTurretTargetRequest(requestData: any): void {
+        const { attachmentId, range, worldPosition, targetTypes } = requestData;
+        
+        if (!worldPosition || !this.trainSystem) return;
+
+        // Find the car that has this attachment and calculate true world position
+        let actualWorldPosition = worldPosition;
+        const trains = this.trainSystem.getAllTrains();
+        
+        for (const train of trains) {
+            for (const car of train.getCars()) {
+                const attachments = car.getAttachments();
+                for (const attachment of attachments) {
+                    if (attachment.id === attachmentId) {
+                        // Found the attachment, calculate true world position
+                        const carPositionComponent = car.getComponent<PositionComponent>('position');
+                        if (carPositionComponent) {
+                            const carWorldPos = carPositionComponent.getPosition();
+                            actualWorldPosition = {
+                                x: carWorldPos.x + worldPosition.x,
+                                y: carWorldPos.y + worldPosition.y + 0.5, // Add height offset
+                                z: carWorldPos.z + worldPosition.z
+                            };
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Find enemies within range using the corrected world position
+        const enemiesInRange = this.findEnemiesInRange(actualWorldPosition, range);
+        
+        if (enemiesInRange.length > 0) {
+            // For now, target the closest enemy
+            const target = enemiesInRange[0];
+            const targetPosition = target.getPosition();
+            
+            // Find the train car with this attachment and trigger firing
+            this.triggerTurretFiring(attachmentId, targetPosition, target.id);
+        }
+    }
+
+    /**
+     * Find enemies within attack range of a position
+     */
+    private findEnemiesInRange(position: { x: number; y: number; z: number }, range: number): Enemy[] {
+        const enemiesInRange: Array<{ enemy: Enemy; distance: number }> = [];
+
+        for (const enemy of this.enemies.values()) {
+            if (enemy.isDead()) continue;
+
+            const enemyPos = enemy.getPosition();
+            const distance = Math.sqrt(
+                Math.pow(enemyPos.x - position.x, 2) +
+                Math.pow(enemyPos.y - position.y, 2) +
+                Math.pow(enemyPos.z - position.z, 2)
+            );
+
+            if (distance <= range) {
+                enemiesInRange.push({ enemy, distance });
+            }
+        }
+
+        // Sort by distance (closest first)
+        enemiesInRange.sort((a, b) => a.distance - b.distance);
+        return enemiesInRange.map(item => item.enemy);
+    }
+
+    /**
+     * Trigger turret firing by creating a projectile and applying immediate damage
+     */
+    private triggerTurretFiring(attachmentId: string, targetPosition: { x: number; y: number; z: number }, targetId: string): void {
+        // Find the train car with this attachment to get firing position and attack data
+        if (!this.trainSystem) return;
+
+        const trains = this.trainSystem.getAllTrains();
+        for (const train of trains) {
+            for (const car of train.getCars()) {
+                const attachments = car.getAttachments();
+                for (const attachment of attachments) {
+                    // Find matching attachment by checking if it can attack
+                    if (attachment.canAttack()) {
+                        // Get attachment's world position (should be properly calculated)
+                        const turretPosition = attachment.getWorldPosition();
+                        if (!turretPosition) continue;
+
+                        // Calculate attack result (hit/miss) - this is still server-side logic
+                        const accuracy = attachment.getAccuracy();
+                        const hitRoll = Math.random();
+                        const isHit = hitRoll <= accuracy;
+                        const damage = attachment.getDamage();
+
+                        // Consume ammo (same as original fireAtTarget)
+                        if (!attachment.hasAmmo()) continue;
+
+                        // IMMEDIATE DAMAGE APPLICATION (server-side logic)
+                        const enemy = this.enemies.get(targetId);
+                        if (enemy && isHit) {
+                            const healthBefore = enemy.getComponent<HealthComponent>('health')?.getHealth() || 0;
+                            enemy.takeDamage(damage);
+                            const healthAfter = enemy.getComponent<HealthComponent>('health')?.getHealth() || 0;
+                            
+                            this.eventStack?.logEvent(LogCategory.ENEMY, 'turret_hit_immediate', 
+                                `Turret hit enemy ${targetId} for ${damage} damage (immediate)`, {
+                                targetId, damage, healthBefore, healthAfter, weaponType: 'turret'
+                            });
+
+                            // Mark enemy for visual cleanup delay if killed
+                            if (enemy.isDead()) {
+                                this.markEnemyForServerSideDelayedCleanup(enemy, turretPosition, targetPosition, 15); // 15 = projectile speed
+                            }
+                        } else if (!isHit) {
+                            this.eventStack?.logEvent(LogCategory.ENEMY, 'turret_miss_immediate', 
+                                `Turret missed enemy ${targetId}`, { targetId, weaponType: 'turret' });
+                        }
+
+                        // VISUAL PROJECTILE (client-side effect)
+                        this.eventStack?.emit({
+                            type: 'turret_fire_projectile',
+                            payload: {
+                                startPosition: turretPosition,
+                                targetPosition: targetPosition,
+                                projectileType: this.getProjectileTypeForWeapon('turret'),
+                                speed: 15,
+                                attackData: {
+                                    targetId: targetId,
+                                    damage: damage,
+                                    weaponType: 'turret',
+                                    attachmentId: attachmentId,
+                                    isHit: isHit,
+                                    visualOnly: true // Mark as visual effect only
+                                }
+                            },
+                            source: 'enemy_system'
+                        });
+
+                        Logger.log(LogCategory.SYSTEM, `Fired projectile from turret ${attachmentId}`, {
+                            targetId,
+                            startPosition: turretPosition,
+                            targetPosition: targetPosition,
+                            isHit: isHit,
+                            damage: damage,
+                            immediateLogic: true
+                        });
+
+                        return; // Only fire one turret per request
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Get projectile type based on weapon type
+     */
+    private getProjectileTypeForWeapon(weaponType: string): 'bullet' | 'laser' | 'plasma' | 'missile' {
+        switch (weaponType.toLowerCase()) {
+            case 'laser':
+                return 'laser';
+            case 'plasma':
+                return 'plasma';
+            case 'missile':
+            case 'rocket':
+                return 'missile';
+            default:
+                return 'bullet';
+        }
+    }
+
+    /**
+     * Mark an enemy for delayed visual cleanup with server-side timing calculation
+     */
+    private markEnemyForServerSideDelayedCleanup(
+        enemy: Enemy, 
+        projectileStart: { x: number; y: number; z: number }, 
+        projectileTarget: { x: number; y: number; z: number },
+        projectileSpeed: number
+    ): void {
+        // Calculate distance and expected travel time
+        const distance = Math.sqrt(
+            Math.pow(projectileTarget.x - projectileStart.x, 2) +
+            Math.pow(projectileTarget.y - projectileStart.y, 2) +
+            Math.pow(projectileTarget.z - projectileStart.z, 2)
+        );
+        
+        const travelTimeMs = (distance / projectileSpeed) * 1000; // Convert to milliseconds
+        const cleanupTime = performance.now() + travelTimeMs;
+
+        this.enemiesAwaitingCleanup.set(enemy.id, {
+            enemy,
+            projectileStart,
+            projectileTarget,
+            timeMarked: performance.now(),
+            scheduledCleanupTime: cleanupTime
+        });
+
+        Logger.log(LogCategory.ENEMY, `Enemy ${enemy.id} marked for server-side delayed cleanup`, {
+            enemyId: enemy.id,
+            distance: distance.toFixed(2),
+            travelTimeMs: travelTimeMs.toFixed(0),
+            scheduledIn: travelTimeMs.toFixed(0) + 'ms'
+        });
+    }
+
+    /**
+     * Mark an enemy for delayed visual cleanup (enemy is dead but visual cleanup waits for projectile)
+     * @deprecated Use markEnemyForServerSideDelayedCleanup instead
+     */
+    private markEnemyForDelayedCleanup(enemy: Enemy, projectileStart: { x: number; y: number; z: number }, projectileTarget: { x: number; y: number; z: number }): void {
+        this.enemiesAwaitingCleanup.set(enemy.id, {
+            enemy,
+            projectileStart,
+            projectileTarget,
+            timeMarked: performance.now()
+        });
+
+        Logger.log(LogCategory.ENEMY, `Enemy ${enemy.id} marked for delayed cleanup`, {
+            enemyId: enemy.id,
+            projectileStart,
+            projectileTarget
+        });
+    }
+
+    /**
+     * Check for enemies scheduled for cleanup and handle them
+     */
+    private updateScheduledCleanups(): void {
+        const currentTime = performance.now();
+        const toCleanup: string[] = [];
+
+        for (const [enemyId, cleanupData] of this.enemiesAwaitingCleanup) {
+            if (cleanupData.scheduledCleanupTime && currentTime >= cleanupData.scheduledCleanupTime) {
+                toCleanup.push(enemyId);
+            }
+        }
+
+        // Execute scheduled cleanups
+        for (const enemyId of toCleanup) {
+            this.handleScheduledEnemyCleanup(enemyId);
+        }
+    }
+
+    /**
+     * Handle scheduled cleanup for an enemy (server-side timing)
+     */
+    private handleScheduledEnemyCleanup(targetId: string): void {
+        const cleanupData = this.enemiesAwaitingCleanup.get(targetId);
+        if (!cleanupData) return;
+
+        const { enemy } = cleanupData;
+        
+        // Now do the visual cleanup
+        this.handleEnemyDeath(enemy);
+        
+        // Remove from delayed cleanup tracking
+        this.enemiesAwaitingCleanup.delete(targetId);
+
+        Logger.log(LogCategory.ENEMY, `Completed scheduled cleanup for enemy ${targetId}`, {
+            delayTime: performance.now() - cleanupData.timeMarked,
+            wasScheduled: !!cleanupData.scheduledCleanupTime
+        });
+    }
+
+    /**
+     * Handle delayed cleanup when projectile impact occurs
+     */
+    private handleDelayedEnemyCleanup(targetId: string): void {
+        const cleanupData = this.enemiesAwaitingCleanup.get(targetId);
+        if (!cleanupData) return;
+
+        const { enemy } = cleanupData;
+        
+        // Now do the visual cleanup
+        this.handleEnemyDeath(enemy);
+        
+        // Remove from delayed cleanup tracking
+        this.enemiesAwaitingCleanup.delete(targetId);
+
+        Logger.log(LogCategory.ENEMY, `Completed delayed cleanup for enemy ${targetId}`, {
+            delayTime: performance.now() - cleanupData.timeMarked
+        });
+    }
+
+    /**
+     * Handle enemy death - cleanup and logging
+     */
+    private handleEnemyDeath(enemy: Enemy): void {
+        Logger.log(LogCategory.ENEMY, `Enemy killed: ${enemy.id}`, {
+            enemyId: enemy.id,
+            enemyType: 'basic' // Simplified for now
+        });
+
+        this.eventStack?.logEvent(LogCategory.ENEMY, 'enemy_killed', 
+            `Enemy ${enemy.id} was destroyed`, {
+            enemyId: enemy.id,
+            position: enemy.getPosition()
+        });
+
+        // Use the proper removal method which handles all cleanup
+        this.removeEnemy(enemy.id);
+    }
+
+    /**
+     * Periodic check for enemy health consistency - helps debug removal issues
+     */
+    private debugEnemyStates(): void {
+        const currentTime = this.timeManager?.getState().gameTime ?? 0;
+        const debugInterval = 10; // Every 10 seconds
+        
+        if (currentTime % debugInterval < 0.1) { // Close to debug interval
+            let suspiciousEnemies = 0;
+            let totalEnemies = 0;
+            let deadEnemies = 0;
+            
+            for (const enemy of this.enemies.values()) {
+                totalEnemies++;
+                
+                try {
+                    if (enemy.isDead()) {
+                        deadEnemies++;
+                        Logger.log(LogCategory.ERROR, `Found dead enemy still in system: ${enemy.id}`, {
+                            enemyId: enemy.id,
+                            health: enemy.getHealthPercentage(),
+                            position: enemy.getPosition()
+                        });
+                    }
+                    
+                    // Check for enemies with suspicious health states
+                    const healthComponent = enemy.getComponent<HealthComponent>('health');
+                    if (healthComponent) {
+                        const health = healthComponent.getHealth();
+                        if (health <= 0 && !healthComponent.isDead()) {
+                            suspiciousEnemies++;
+                            Logger.log(LogCategory.ERROR, `Enemy with 0 health but not marked dead: ${enemy.id}`, {
+                                health: health,
+                                isDead: healthComponent.isDead()
+                            });
+                        }
+                    } else {
+                        suspiciousEnemies++;
+                        Logger.log(LogCategory.ERROR, `Enemy missing health component: ${enemy.id}`);
+                    }
+                } catch (error) {
+                    suspiciousEnemies++;
+                    Logger.log(LogCategory.ERROR, `Error checking enemy state: ${enemy.id}`, error);
+                }
+            }
+            
+            if (deadEnemies > 0 || suspiciousEnemies > 0) {
+                Logger.log(LogCategory.SYSTEM, `Enemy health debug report`, {
+                    totalEnemies,
+                    deadEnemies,
+                    suspiciousEnemies,
+                    gameTime: currentTime
+                });
+            }
         }
     }
 }

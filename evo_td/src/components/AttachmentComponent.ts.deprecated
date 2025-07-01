@@ -5,6 +5,7 @@
 
 import { Component } from '../core/Component';
 import { Logger, LogCategory } from '../utils/Logger';
+import { EventStack } from '../core/EventStack';
 
 /**
  * Types of attachments available
@@ -94,10 +95,12 @@ export class AttachmentComponent extends Component {
     private config: AttachmentConfig;
     private state: AttachmentState;
     private mountInfo: AttachmentMountInfo | null = null;
+    private eventStack: EventStack | null = null;
 
-    constructor(config: AttachmentConfig) {
+    constructor(config: AttachmentConfig, eventStack?: EventStack) {
         super();
         this.config = { ...config };
+        this.eventStack = eventStack || null;
         this.state = {
             health: config.health,
             maxHealth: config.health,
@@ -316,16 +319,205 @@ export class AttachmentComponent extends Component {
     }
 
     /**
-     * Update attachment logic each frame
+     * Check if this attachment can attack (is a weapon and functional)
+     */
+    canAttack(): boolean {
+        return this.config.type === AttachmentType.WEAPON && 
+               this.isFunctional() && 
+               this.isMounted() &&
+               this.getProperty('autoTarget') === true;
+    }
+
+    /**
+     * Get the attack range of this attachment
+     */
+    getAttackRange(): number {
+        return this.getProperty('range') || 0;
+    }
+
+    /**
+     * Get the damage this attachment deals
+     */
+    getDamage(): number {
+        return this.getProperty('damage') || 0;
+    }
+
+    /**
+     * Get the fire rate (shots per second)
+     */
+    getFireRate(): number {
+        return this.getProperty('fireRate') || 1.0;
+    }
+
+    /**
+     * Get accuracy (0.0 to 1.0)
+     */
+    getAccuracy(): number {
+        return this.getProperty('accuracy') || 0.5;
+    }
+
+    /**
+     * Check if attachment has ammo to fire
+     */
+    hasAmmo(): boolean {
+        const currentAmmo = this.getProperty('currentAmmo') || 0;
+        return currentAmmo > 0;
+    }
+
+    /**
+     * Consume ammo when firing
+     */
+    consumeAmmo(amount: number = 1): boolean {
+        const currentAmmo = this.getProperty('currentAmmo') || 0;
+        if (currentAmmo >= amount) {
+            this.setProperty('currentAmmo', currentAmmo - amount);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get world position of this attachment for combat calculations
+     * Note: This returns the local mount position. The actual world position 
+     * calculation should be done by the system that has access to the parent car.
+     */
+    getWorldPosition(): { x: number; y: number; z: number } | null {
+        if (!this.mountInfo) {
+            return null;
+        }
+        
+        // Return the local mount position relative to the parent car
+        // The calling system should transform this by the parent car's world position
+        return {
+            x: this.mountInfo.x,
+            y: this.mountInfo.y,
+            z: this.mountInfo.z
+        };
+    }
+
+    /**
+     * Get the parent car ID for this attachment
+     */
+    getParentCarId(): string | null {
+        return this.mountInfo?.parentCarId || null;
+    }
+
+    /**
+     * Update method called each frame for weapon attachments
+     * Handles targeting and firing logic
      */
     update(deltaTime: number): void {
-        // Override in subclasses for specific attachment behavior
-        // For example, weapons might have cooling down, cargo might have decay, etc.
+        // Call parent update first
+        super.update?.(deltaTime);
         
-        // Base update logic - could include things like:
-        // - Self-repair over time for certain attachment types
-        // - Degradation over time
-        // - Status effect processing
+        // Handle weapon-specific updates
+        if (this.config.type === AttachmentType.WEAPON && this.canAttack()) {
+            this.updateWeaponBehavior(deltaTime);
+        }
+    }
+
+    /**
+     * Update weapon behavior - targeting and firing
+     */
+    private updateWeaponBehavior(_deltaTime: number): void {
+        // Get time since last shot
+        const lastShotTime = this.getProperty('lastShotTime') || 0;
+        const currentTime = performance.now();
+        const timeSinceLastShot = (currentTime - lastShotTime) / 1000; // Convert to seconds
+        
+        const fireRate = this.getFireRate();
+        const timeBetweenShots = 1.0 / fireRate;
+        
+        // Check if we can fire again
+        if (timeSinceLastShot >= timeBetweenShots && this.hasAmmo()) {
+            // Emit targeting event - let the combat system handle target finding
+            if (this.eventStack) {
+                this.eventStack.emit({
+                    type: 'turret_request_target',
+                    payload: {
+                        attachmentId: this.getUniqueId(),
+                        range: this.getAttackRange(),
+                        worldPosition: this.getWorldPosition(),
+                        targetTypes: this.getProperty('targetTypes') || 'enemy'
+                    },
+                    source: 'attachment_component'
+                });
+            } else if (this._gameObject) {
+                // Fallback to local event system
+                this._gameObject.emit('turret_request_target', {
+                    attachmentId: this.getUniqueId(),
+                    range: this.getAttackRange(),
+                    worldPosition: this.getWorldPosition(),
+                    targetTypes: this.getProperty('targetTypes') || 'enemy'
+                });
+            }
+        }
+    }
+
+    /**
+     * Fire at a target - called by combat system when target is found
+     */
+    fireAtTarget(targetPosition: { x: number; y: number; z: number }, targetId: string): boolean {
+        if (!this.canAttack() || !this.hasAmmo()) {
+            return false;
+        }
+
+        const accuracy = this.getAccuracy();
+        const hitRoll = Math.random();
+        const isHit = hitRoll <= accuracy;
+
+        // Consume ammo
+        this.consumeAmmo(1);
+
+        // Update last shot time
+        this.setProperty('lastShotTime', performance.now());
+
+        // Emit attack event
+        if (this.eventStack) {
+            this.eventStack.emit({
+                type: 'turret_attack',
+                payload: {
+                    attachmentId: this.getUniqueId(),
+                    targetId: targetId,
+                    targetPosition: targetPosition,
+                    damage: this.getDamage(),
+                    isHit: isHit,
+                    accuracy: accuracy,
+                    hitRoll: hitRoll,
+                    weaponType: 'turret'
+                },
+                source: 'attachment_component'
+            });
+        } else if (this._gameObject) {
+            // Fallback to local event system
+            this._gameObject.emit('turret_attack', {
+                attachmentId: this.getUniqueId(),
+                targetId: targetId,
+                targetPosition: targetPosition,
+                damage: this.getDamage(),
+                isHit: isHit,
+                accuracy: accuracy,
+                hitRoll: hitRoll,
+                weaponType: 'turret'
+            });
+        }
+
+        Logger.log(LogCategory.ATTACHMENT, `Turret fired at target`, {
+            attachmentId: this.getUniqueId(),
+            targetId: targetId,
+            damage: this.getDamage(),
+            isHit: isHit,
+            ammoRemaining: this.getProperty('currentAmmo')
+        });
+
+        return isHit;
+    }
+
+    /**
+     * Get a unique identifier for this attachment component
+     */
+    public getUniqueId(): string {
+        return `${this.config.name}_${this._gameObject?.id || 'unattached'}_${Date.now()}`;
     }
 
     /**

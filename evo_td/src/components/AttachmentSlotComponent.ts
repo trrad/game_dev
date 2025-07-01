@@ -4,7 +4,7 @@
  */
 
 import { Component } from '../core/Component';
-import { AttachmentComponent, AttachmentSlotType, AttachmentSize } from './AttachmentComponent';
+import { Attachment, AttachmentSlotType, AttachmentSize } from '../entities/Attachment';
 import { Logger, LogCategory } from '../utils/Logger';
 import { Vector3 } from '@babylonjs/core';
 
@@ -60,6 +60,7 @@ export class AttachmentSlotComponent extends Component {
     private config: AttachmentSlotConfig;
     private slots: Map<string, AttachmentSlot> = new Map();
     private attachmentToSlots: Map<string, string[]> = new Map(); // Maps attachment ID to slot IDs it occupies
+    private attachments: Map<string, Attachment> = new Map(); // Maps attachment ID to attachment instance
 
     constructor(config: AttachmentSlotConfig) {
         super();
@@ -93,6 +94,13 @@ export class AttachmentSlotComponent extends Component {
     }
 
     /**
+     * Get all attachments currently placed on this car
+     */
+    getAllAttachments(): Attachment[] {
+        return Array.from(this.attachments.values());
+    }
+
+    /**
      * Get slots occupied by a specific attachment
      */
     getSlotsOccupiedBy(attachmentId: string): AttachmentSlot[] {
@@ -104,7 +112,7 @@ export class AttachmentSlotComponent extends Component {
      * Check if an attachment can be placed at a specific grid position
      */
     canPlaceAttachment(
-        attachment: AttachmentComponent, 
+        attachment: Attachment, 
         slotType: AttachmentSlotType, 
         gridX: number, 
         gridY: number, 
@@ -173,7 +181,7 @@ export class AttachmentSlotComponent extends Component {
      * Place an attachment at a specific grid position
      */
     placeAttachment(
-        attachment: AttachmentComponent,
+        attachment: Attachment,
         slotType: AttachmentSlotType,
         gridX: number,
         gridY: number,
@@ -185,7 +193,7 @@ export class AttachmentSlotComponent extends Component {
             return placementCheck;
         }
 
-        const attachmentId = attachment.getConfig().name; // Use name as ID for now
+        const attachmentId = attachment.id; // Use GameObject ID
         const slotIds = placementCheck.occupiedSlots!;
 
         // Mark slots as occupied
@@ -197,6 +205,9 @@ export class AttachmentSlotComponent extends Component {
 
         // Track which slots this attachment occupies
         this.attachmentToSlots.set(attachmentId, slotIds);
+        
+        // Store the attachment instance
+        this.attachments.set(attachmentId, attachment);
 
         // Calculate world position for the attachment (center of occupied area)
         const centerSlot = this.slots.get(slotIds[0])!;
@@ -251,6 +262,7 @@ export class AttachmentSlotComponent extends Component {
 
         // Remove tracking
         this.attachmentToSlots.delete(attachmentId);
+        this.attachments.delete(attachmentId);
 
         Logger.log(LogCategory.SYSTEM, `Removed attachment ${attachmentId}`, {
             freedSlots: slotIds.length

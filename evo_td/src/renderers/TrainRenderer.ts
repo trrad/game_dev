@@ -1,16 +1,31 @@
 /**
  * TrainRenderer - Responsible for creating and managing visual representations of trains
+ * Now renders individual voxels rather than monolithic car meshes
  */
 import { Scene, MeshBuilder, StandardMaterial, Color3, Vector3, Mesh, TransformNode } from "@babylonjs/core";
 import { TrainCar } from "../entities/TrainCar";
-import { AttachmentComponent } from "../components/AttachmentComponent";
+import { TrainCarVoxel } from "../entities/TrainCarVoxel";
+import { Attachment } from "../entities/Attachment";
+import { HealthComponent } from "../components/HealthComponent";
+import { PositionComponent } from "../components/PositionComponent";
+import { VoxelMaterial, CargoCapacityType } from "../components/TrainCarVoxelComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 
 /**
- * Individual car visual representation
+ * Individual voxel visual representation
+ */
+export interface VoxelVisual {
+    mesh: Mesh;
+    voxelId: string;
+    gridPosition: { x: number; y: number; z: number };
+    carId: string;
+}
+
+/**
+ * Individual car visual representation (now contains voxels)
  */
 export interface TrainCarVisual {
-    mesh: Mesh;
+    voxels: VoxelVisual[];
     carId: string;
     carIndex: number;
     offsetDistance: number; // Distance from the front of the train
@@ -26,29 +41,29 @@ export interface TrainVisualGroup {
 }
 
 /**
- * Train visual style configuration
+ * Train visual style configuration for voxel-based rendering
  */
 export interface TrainVisualConfig {
-    carWidth: number;
-    carHeight: number;
-    carLength: number;
-    carSpacing: number;
-    yOffset: number;
+    voxelSize: number;     // Size of individual voxel cubes
+    carSpacing: number;    // Gap between cars (only used for reference, positioning is via PositionComponents)
+    yOffset: number;       // Position above ground
     engineColor: Color3;
-    carColor: Color3;
+    cargoColor: Color3;
+    structuralColor: Color3;
+    damagedColor: Color3;
 }
 
 /**
- * Default visual configuration for trains
+ * Default visual configuration for voxel-based trains
  */
 const DEFAULT_TRAIN_VISUAL: TrainVisualConfig = {
-    carWidth: 0.6,     // Train car width
-    carHeight: 0.5,    // Train car height
-    carLength: 1.4,    // Longer cars for better train-like proportions
-    carSpacing: 0.3,   // Gap between cars to prevent overlap
-    yOffset: 0.3,      // Position above ground
-    engineColor: new Color3(0.8, 0.2, 0.2), // Red engine
-    carColor: new Color3(0.2, 0.2, 0.8)     // Blue cars
+    voxelSize: 0.4,        // Size of each voxel cube (smaller)
+    carSpacing: 2.0,       // Gap between cars (reference only, positioning via PositionComponents)
+    yOffset: 0.4,          // Position above ground
+    engineColor: new Color3(0.8, 0.2, 0.2),      // Red engine voxels
+    cargoColor: new Color3(0.2, 0.2, 0.8),       // Blue cargo voxels
+    structuralColor: new Color3(0.6, 0.6, 0.6),  // Gray structural voxels
+    damagedColor: new Color3(0.8, 0.4, 0.1)      // Orange damaged voxels
 };
 
 /**
@@ -72,57 +87,128 @@ export class TrainRenderer {
     }
 
     /**
-     * Create a visual representation for a single train car
-     * @param trainCar Train car entity
-     * @param carIndex Index of the car in the train (0 = engine)
-     * @returns The created mesh
+     * Create a visual representation for individual voxels in a train car
+     * @param voxel The voxel to create visuals for
+     * @param carId The ID of the parent car
+     * @returns The created voxel visual
      */
-    createTrainCarVisual(trainCar: TrainCar, carIndex: number = 0): Mesh {
-        const carId = trainCar.id;
+    createVoxelVisual(voxel: TrainCarVoxel, carId: string): VoxelVisual {
+        const voxelId = voxel.id;
         
-        Logger.log(LogCategory.RENDERING, `Creating train car visual: ${carId} (index: ${carIndex})`);
+        Logger.log(LogCategory.RENDERING, `Creating voxel visual: ${voxelId}`);
         
-        // Create the train car mesh
-        const carMesh = MeshBuilder.CreateBox(
-            `traincar_${carId}`,
+        // Create the voxel mesh as a proper cube
+        const voxelMesh = MeshBuilder.CreateBox(
+            `voxel_${voxelId}`,
             {
-                width: this.visualConfig.carWidth,
-                height: this.visualConfig.carHeight,
-                depth: this.visualConfig.carLength
+                width: this.visualConfig.voxelSize,
+                height: this.visualConfig.voxelSize,
+                depth: this.visualConfig.voxelSize
             },
             this.scene
         );
         
-        Logger.log(LogCategory.RENDERING, `Train car mesh created: ${carMesh.name}`, {
-            dimensions: `${this.visualConfig.carWidth} x ${this.visualConfig.carHeight} x ${this.visualConfig.carLength}`,
-            yOffset: this.visualConfig.yOffset,
-            isDisposed: carMesh.isDisposed()
-        });
-        
-        // Position the mesh
-        carMesh.position = new Vector3(0, this.visualConfig.yOffset, 0);
+        // Get the voxel's world position from its PositionComponent (authoritative)
+        const positionComponent = voxel.getComponent<PositionComponent>('position');
+        if (positionComponent) {
+            const worldPos = positionComponent.getPosition();
+            voxelMesh.position = new Vector3(worldPos.x, worldPos.y + this.visualConfig.yOffset, worldPos.z);
+        } else {
+            Logger.warn(LogCategory.RENDERING, `Voxel ${voxelId} missing PositionComponent, using fallback position`);
+            // Fallback to origin if no position component
+            voxelMesh.position = new Vector3(0, this.visualConfig.yOffset, 0);
+        }
         
         // Ensure the mesh is visible
-        carMesh.isVisible = true;
-        carMesh.checkCollisions = false;
-        carMesh.alwaysSelectAsActiveMesh = true; // Force rendering
+        voxelMesh.isVisible = true;
+        voxelMesh.checkCollisions = false;
+        voxelMesh.alwaysSelectAsActiveMesh = true;
         
-        // Add material with appropriate color
-        const material = new StandardMaterial(`traincar_${carId}_mat`, this.scene);
-        const color = carIndex === 0 ? this.visualConfig.engineColor : this.visualConfig.carColor;
+        // Add material based on voxel properties
+        const material = new StandardMaterial(`voxel_${voxelId}_mat`, this.scene);
+        const color = this.getVoxelColor(voxel);
         material.diffuseColor = color;
         material.specularColor = new Color3(0.2, 0.2, 0.2);
-        material.emissiveColor = new Color3(0.1, 0.1, 0.1); // Add some glow to make it more visible
-        carMesh.material = material;
+        material.emissiveColor = new Color3(0.05, 0.05, 0.05);
+        voxelMesh.material = material;
         
-        Logger.log(LogCategory.RENDERING, `Train car visual setup complete: ${carId}`, {
-            position: carMesh.position.toString(),
-            visible: carMesh.isVisible,
-            hasMaterial: !!carMesh.material,
-            materialColor: `(${color.r.toFixed(2)}, ${color.g.toFixed(2)}, ${color.b.toFixed(2)})`
+        // Store the mesh in the voxel for easy access
+        voxel.mesh = voxelMesh;
+        
+        Logger.log(LogCategory.RENDERING, `Voxel visual created: ${voxelId}`, {
+            position: voxelMesh.position.toString(),
+            gridPosition: `(${voxel.gridPosition.x}, ${voxel.gridPosition.y}, ${voxel.gridPosition.z})`,
+            cargoType: voxel.cargoType,
+            material: voxel.material
         });
         
-        return carMesh;
+        return {
+            mesh: voxelMesh,
+            voxelId: voxelId,
+            gridPosition: voxel.gridPosition,
+            carId: carId
+        };
+    }
+
+    /**
+     * Get the appropriate color for a voxel based on its properties
+     */
+    private getVoxelColor(voxel: TrainCarVoxel): Color3 {
+        // Check health status first
+        const healthComponent = voxel.getComponent<HealthComponent>('health');
+        if (healthComponent && healthComponent.getHealthPercentage() < 0.5) {
+            return this.visualConfig.damagedColor;
+        }
+
+        // Color based on cargo type
+        switch (voxel.cargoType) {
+            case CargoCapacityType.STRUCTURAL:
+                return this.visualConfig.structuralColor;
+            case CargoCapacityType.STANDARD:
+                return this.visualConfig.cargoColor;
+            case CargoCapacityType.HAZARDOUS:
+                return new Color3(0.8, 0.8, 0.1); // Yellow for hazardous
+            case CargoCapacityType.LIQUID:
+                return new Color3(0.1, 0.6, 0.8); // Cyan for liquid
+            case CargoCapacityType.PERISHABLE:
+                return new Color3(0.1, 0.8, 0.1); // Green for perishable
+            default:
+                return this.visualConfig.cargoColor;
+        }
+    }
+
+    /**
+     * Create a visual representation for a complete train car using voxels
+     * @param trainCar Train car entity
+     * @param carIndex Index of the car in the train (0 = engine)
+     * @returns The created car visual containing voxel meshes
+     */
+    createTrainCarVisual(trainCar: TrainCar, carIndex: number = 0): TrainCarVisual {
+        const carId = trainCar.carId;
+        
+        Logger.log(LogCategory.RENDERING, `Creating train car visual: ${carId} (index: ${carIndex})`);
+        
+        // Get all voxels from the train car
+        const voxels = trainCar.getVoxels();
+        const voxelVisuals: VoxelVisual[] = [];
+        
+        // Create visual for each voxel
+        voxels.forEach(voxel => {
+            const voxelVisual = this.createVoxelVisual(voxel, carId);
+            voxelVisuals.push(voxelVisual);
+        });
+        
+        Logger.log(LogCategory.RENDERING, `Train car visual created: ${carId}`, {
+            voxelCount: voxelVisuals.length,
+            carIndex: carIndex
+        });
+        
+        return {
+            voxels: voxelVisuals,
+            carId: carId,
+            carIndex: carIndex,
+            offsetDistance: 0 // Will be calculated by caller
+        };
     }
 
     /**
@@ -137,36 +223,18 @@ export class TrainRenderer {
         // Create a parent node for organizational purposes (not for positioning)
         const trainGroup = new TransformNode(`train_${trainId}`, this.scene);
         
-        // Create individual car visuals that will be positioned independently
+        // Create individual car visuals that will be positioned independently via PositionComponents
         const carVisuals: TrainCarVisual[] = [];
-        let currentOffset = 0;
         
         trainCars.forEach((car, index) => {
-            const carMesh = this.createTrainCarVisual(car, index);
+            const carVisual = this.createTrainCarVisual(car, index);
             
-            // Calculate this car's offset distance from the front of the train
-            const carVisual: TrainCarVisual = {
-                mesh: carMesh,
-                carId: car.id,
-                carIndex: index,
-                offsetDistance: currentOffset
-            };
-            
-            // Position the car initially at origin - TrainSystem will handle actual positioning
-            carMesh.position = new Vector3(0, this.visualConfig.yOffset, 0);
-            
-            // Don't parent cars to the train group - they will be positioned independently
-            // Each car will be registered separately with SceneManager
-            
-            // Create slot visuals for this car (debug/development feature)
-            this.createSlotVisuals(car, carMesh);
+            // No offset calculation - positioning is handled by TrainSystem via PositionComponents
+            carVisual.offsetDistance = 0; // Not used since positioning is authoritative
             
             carVisuals.push(carVisual);
             
-            // Update offset for next car (car length + spacing)
-            currentOffset += car.length + this.visualConfig.carSpacing;
-            
-            Logger.log(LogCategory.RENDERING, `Car ${index} positioned with offset: ${carVisual.offsetDistance}`);
+            Logger.log(LogCategory.RENDERING, `Car ${index} created with ${carVisual.voxels.length} voxels`);
         });
         
         // Store the train visual group for reference (mainly for cleanup)
@@ -183,7 +251,7 @@ export class TrainRenderer {
         Logger.log(LogCategory.RENDERING, `Train visual created: ${trainId}`, {
             groupPosition: trainGroup.position.toString(),
             carCount: carVisuals.length,
-            totalLength: currentOffset,
+            totalVoxels: carVisuals.reduce((sum, car) => sum + car.voxels.length, 0),
             isEnabled: trainGroup.isEnabled()
         });
         
@@ -229,9 +297,11 @@ export class TrainRenderer {
     removeTrainVisual(trainId: string): void {
         const visualGroup = this.trainVisuals.get(trainId);
         if (visualGroup) {
-            // Dispose of all car meshes
+            // Dispose of all voxel meshes in each car
             visualGroup.cars.forEach(carVisual => {
-                carVisual.mesh.dispose();
+                carVisual.voxels.forEach(voxelVisual => {
+                    voxelVisual.mesh.dispose();
+                });
             });
             
             // Dispose of the parent node
@@ -245,77 +315,27 @@ export class TrainRenderer {
     }
 
     /**
-     * Create visual representations for attachment slots on a train car
+     * Create visual representations for attachment slots on a train car (simplified for voxel system)
      * @param trainCar The train car to create slot visuals for
      * @param parentNode The parent node to attach slot indicators to
      */
     createSlotVisuals(trainCar: TrainCar, parentNode: TransformNode): void {
-        const slotComponent = trainCar.getSlotComponent();
-        if (!slotComponent) {
-            Logger.warn(LogCategory.RENDERING, `No slot component found for car ${trainCar.carId}`);
-            return;
-        }
-
-        const slots = slotComponent.getAllSlots();
-        Logger.log(LogCategory.RENDERING, `Creating ${slots.length} slot visuals for car ${trainCar.carId}`);
-
-        slots.forEach(slot => {
-            // Create a small visual indicator for each slot
-            const slotIndicator = MeshBuilder.CreateSphere(
-                `slot_${slot.id}`,
-                { diameter: 0.08 }, // Much smaller for the new car size
-                this.scene
-            );
-
-            // Position the indicator at the slot's position, scaled and adjusted for new car dimensions
-            // The slot positions need to be scaled down significantly to match our smaller car scale
-            const scaledPosition = slot.worldPosition.clone().scale(0.3); // Scale much smaller to match car
-            slotIndicator.position = scaledPosition;
-            slotIndicator.parent = parentNode;
-
-            // Color code by slot type and occupancy
-            const material = new StandardMaterial(`slot_${slot.id}_mat`, this.scene);
-            
-            if (slot.isOccupied) {
-                material.diffuseColor = new Color3(1, 0, 0); // Red for occupied
-                material.emissiveColor = new Color3(0.2, 0, 0);
-            } else {
-                // Different colors for different slot types
-                switch (slot.type) {
-                    case 'top':
-                        material.diffuseColor = new Color3(0, 1, 0); // Green for top
-                        break;
-                    case 'side_left':
-                    case 'side_right':
-                        material.diffuseColor = new Color3(0, 0, 1); // Blue for sides
-                        break;
-                    case 'front':
-                    case 'rear':
-                        material.diffuseColor = new Color3(1, 1, 0); // Yellow for front/rear
-                        break;
-                    case 'internal':
-                        material.diffuseColor = new Color3(1, 0, 1); // Magenta for internal
-                        break;
-                    default:
-                        material.diffuseColor = new Color3(0.5, 0.5, 0.5); // Gray for unknown
-                }
-                material.emissiveColor = material.diffuseColor.scale(0.2);
-            }
-
-            slotIndicator.material = material;
-            
-            // Make slot indicators semi-transparent and non-colliding
-            material.alpha = 0.7;
-            slotIndicator.checkCollisions = false;
-        });
+        // For now, skip slot visuals since we need to adapt this to work with external voxel faces
+        // In the new voxel system, attachment slots should be generated from external voxel faces
+        Logger.log(LogCategory.RENDERING, `Skipping slot visuals for car ${trainCar.carId} - voxel-based slots not yet implemented`);
+        
+        // TODO: Implement slot visuals based on external voxel faces:
+        // 1. Get external voxels from trainCar.getExternalVoxels()
+        // 2. For each external voxel, create slot visuals on its available faces
+        // 3. Position slot visuals relative to each voxel's world position
     }
 
     /**
-     * Create visual representation for an attached component
+     * Create visual representation for an attached component (simplified for voxel system)
      * @param attachment The attachment component to visualize
-     * @param parentNode The parent node to attach the visual to
+     * @param parentNode The parent node to attach the visual to (first voxel mesh)
      */
-    createAttachmentVisual(attachment: AttachmentComponent, parentNode: TransformNode): Mesh {
+    createAttachmentVisual(attachment: Attachment, parentNode: TransformNode): Mesh {
         const config = attachment.getConfig();
         const mountInfo = attachment.getMountInfo();
         
@@ -323,68 +343,65 @@ export class TrainRenderer {
             throw new Error(`Cannot create visual for unmounted attachment ${config.name}`);
         }
 
-        // Create attachment mesh based on size, scaled to fit new car dimensions
+        // Create attachment mesh based on size, scaled for voxel system
         const size = attachment.getSize();
         const attachmentMesh = MeshBuilder.CreateBox(
             `attachment_${config.name}`,
             {
-                width: size.width * 0.15,   // Scale down significantly to fit smaller cars
-                height: size.height * 0.15, // Scale down significantly to fit smaller cars
-                depth: size.depth * 0.15    // Scale down significantly to fit smaller cars
+                width: size.width * 0.4,   // Scale for voxel system
+                height: size.height * 0.4,
+                depth: size.depth * 0.4
             },
             this.scene
         );
 
-        // Position at mount location - ensure it's properly attached to the car surface
-        const adjustedMountInfo = {
-            x: mountInfo.x * 0.3, // Scale down the offset positions significantly
-            y: mountInfo.y * 0.3, // Scale down the offset positions significantly
-            z: mountInfo.z * 0.3  // Scale down the offset positions significantly
-        };
+        // Position attachment based on its type and mounting face
+        const attachmentConfig = attachment.getConfig();
+        let visualPosition: Vector3;
         
-        attachmentMesh.position = new Vector3(adjustedMountInfo.x, adjustedMountInfo.y, adjustedMountInfo.z);
-        attachmentMesh.parent = parentNode;
-
-        // Apply rotation if specified
-        if (mountInfo.rotation) {
-            attachmentMesh.rotation = new Vector3(
-                mountInfo.rotation.x,
-                mountInfo.rotation.y,
-                mountInfo.rotation.z
-            );
+        if (attachmentConfig.type === 'weapon') {
+            // Place weapons directly on top face of voxels
+            visualPosition = new Vector3(0, this.visualConfig.voxelSize * 0.5, 0);
+        } else {
+            // Place other attachments directly on side face of voxels
+            visualPosition = new Vector3(this.visualConfig.voxelSize * 0.5, 0, 0);
         }
+        
+        attachmentMesh.position = visualPosition;
+        attachmentMesh.parent = parentNode;
 
         // Create material based on attachment type
         const material = new StandardMaterial(`attachment_${config.name}_mat`, this.scene);
         
         // Color based on attachment type
-        switch (config.type) {
+        switch (attachmentConfig.type) {
             case 'weapon':
                 material.diffuseColor = new Color3(0.8, 0.2, 0.2); // Red for weapons
                 break;
             case 'cargo':
                 material.diffuseColor = new Color3(0.6, 0.4, 0.2); // Brown for cargo
                 break;
-            case 'defensive':
-                material.diffuseColor = new Color3(0.3, 0.3, 0.8); // Blue for defense
+            case 'armor':
+                material.diffuseColor = new Color3(0.3, 0.3, 0.8); // Blue for armor
                 break;
             case 'utility':
                 material.diffuseColor = new Color3(0.5, 0.8, 0.2); // Green for utility
                 break;
-            case 'engine':
-                material.diffuseColor = new Color3(0.2, 0.2, 0.2); // Dark gray for engine parts
+            case 'shield':
+                material.diffuseColor = new Color3(0.2, 0.2, 0.2); // Dark gray for shield generators
                 break;
             default:
                 material.diffuseColor = new Color3(0.5, 0.5, 0.5); // Gray for unknown
         }
 
         // Add custom color if specified
-        if (config.color) {
-            material.diffuseColor = new Color3(config.color.r, config.color.g, config.color.b);
+        if (attachmentConfig.color) {
+            material.diffuseColor = new Color3(attachmentConfig.color.r, attachmentConfig.color.g, attachmentConfig.color.b);
         }
 
         // Adjust material properties based on health
-        const healthPercentage = attachment.getHealthPercentage();
+        const healthComponent = attachment.getComponent<HealthComponent>('HealthComponent');
+        const healthPercentage = healthComponent ? healthComponent.getHealthPercentage() : 1.0;
         if (healthPercentage < 0.5) {
             material.emissiveColor = new Color3(0.3, 0.1, 0.1); // Reddish glow for damaged
         } else if (healthPercentage < 0.8) {
@@ -398,11 +415,10 @@ export class TrainRenderer {
         attachmentMesh.material = material;
         attachmentMesh.checkCollisions = false;
 
-        Logger.log(LogCategory.RENDERING, `Created attachment visual: ${config.name}`, {
-            type: config.type,
-            originalSize: `${size.width}x${size.height}x${size.depth}`,
-            scaledSize: `${(size.width * 0.15).toFixed(2)}x${(size.height * 0.15).toFixed(2)}x${(size.depth * 0.15).toFixed(2)}`,
-            position: `(${adjustedMountInfo.x.toFixed(2)}, ${adjustedMountInfo.y.toFixed(2)}, ${adjustedMountInfo.z.toFixed(2)})`,
+        Logger.log(LogCategory.RENDERING, `Created attachment visual: ${attachmentConfig.name}`, {
+            type: attachmentConfig.type,
+            scaledSize: `${(size.width * 0.4).toFixed(2)}x${(size.height * 0.4).toFixed(2)}x${(size.depth * 0.4).toFixed(2)}`,
+            visualPosition: `(${visualPosition.x.toFixed(2)}, ${visualPosition.y.toFixed(2)}, ${visualPosition.z.toFixed(2)})`,
             health: `${(healthPercentage * 100).toFixed(1)}%`,
             functional: attachment.isFunctional()
         });
@@ -411,17 +427,191 @@ export class TrainRenderer {
     }
 
     /**
-     * Get all car meshes for a train (for registering with SceneManager)
+     * Get all voxel meshes for a train (for registering with SceneManager)
      * @param trainId The train ID
-     * @returns Array of car meshes with their corresponding car IDs
+     * @returns Array of voxel meshes with their corresponding car and voxel IDs
      */
-    getTrainCarMeshes(trainId: string): Array<{ carId: string, mesh: Mesh }> {
+    getTrainCarMeshes(trainId: string): Array<{ carId: string, voxelId: string, mesh: Mesh }> {
         const visualGroup = this.trainVisuals.get(trainId);
         if (!visualGroup) return [];
         
-        return visualGroup.cars.map(carVisual => ({
-            carId: carVisual.carId,
-            mesh: carVisual.mesh
-        }));
+        const allVoxelMeshes: Array<{ carId: string, voxelId: string, mesh: Mesh }> = [];
+        
+        visualGroup.cars.forEach(carVisual => {
+            carVisual.voxels.forEach(voxelVisual => {
+                allVoxelMeshes.push({
+                    carId: carVisual.carId,
+                    voxelId: voxelVisual.voxelId,
+                    mesh: voxelVisual.mesh
+                });
+            });
+        });
+        
+        return allVoxelMeshes;
+    }
+
+    /**
+     * Update attachment visuals for a specific train car
+     * Call this after attachments are added or removed
+     */
+    updateCarAttachmentVisuals(trainCar: TrainCar): void {
+        Logger.log(LogCategory.RENDERING, `Updating attachment visuals for car ${trainCar.carId}`);
+        
+        // Get current attachments and create visuals for them
+        const attachments = trainCar.getAttachments();
+        Logger.log(LogCategory.RENDERING, `Creating visuals for ${attachments.length} attachments on car ${trainCar.carId}`);
+
+        attachments.forEach(attachment => {
+            try {
+                const attachmentConfig = attachment.getConfig();
+                const carMesh = this.getCarMesh(trainCar.carId, attachmentConfig.type);
+                
+                if (!carMesh) {
+                    Logger.warn(LogCategory.RENDERING, `Cannot update attachment: car mesh not found for ${trainCar.carId}`);
+                    return;
+                }
+
+                // Remove existing attachment visual if it exists
+                const existingAttachment = carMesh.getChildren().find(child => 
+                    child.name === `attachment_${attachmentConfig.name}`
+                );
+                if (existingAttachment) {
+                    existingAttachment.dispose();
+                }
+
+                const attachmentVisual = this.createAttachmentVisual(attachment, carMesh);
+                Logger.log(LogCategory.RENDERING, `Created visual for attachment: ${attachment.getConfig().name}`, {
+                    position: attachmentVisual.position.toString(),
+                    visible: attachmentVisual.isVisible,
+                    enabled: attachmentVisual.isEnabled(),
+                    parent: attachmentVisual.parent?.name || 'no parent'
+                });
+            } catch (error) {
+                Logger.warn(LogCategory.RENDERING, `Failed to create visual for attachment ${attachment.getConfig().name}:`, error);
+            }
+        });
+    }
+
+    /**
+     * Update slot visuals for a specific train car to reflect occupancy changes
+     */
+    updateSlotVisuals(trainCar: TrainCar): void {
+        const carMesh = this.getCarMesh(trainCar.carId);
+        if (!carMesh) {
+            Logger.warn(LogCategory.RENDERING, `Cannot update slot visuals: car mesh not found for ${trainCar.carId}`);
+            return;
+        }
+
+        // Remove existing slot visuals
+        const existingSlots = carMesh.getChildren().filter(child => 
+            child.name.startsWith('slot_panel_')
+        );
+        existingSlots.forEach(child => child.dispose());
+
+        // Recreate slot visuals with updated occupancy
+        this.createSlotVisuals(trainCar, carMesh);
+        
+        Logger.log(LogCategory.RENDERING, `Updated slot visuals for car ${trainCar.carId}`);
+    }
+
+    /**
+     * Get the appropriate voxel mesh for a specific car by car ID and attachment type
+     * For weapons, find a voxel with TOP face available
+     * For other attachments, use the first available voxel
+     */
+    private getCarMesh(carId: string, attachmentType?: string): Mesh | null {
+        // Look through all train visuals to find the car's voxels
+        for (const trainVisual of this.trainVisuals.values()) {
+            const carVisual = trainVisual.cars.find(car => car.carId === carId);
+            if (carVisual && carVisual.voxels.length > 0) {
+                
+                // For weapon attachments, try to find a voxel with TOP face available
+                if (attachmentType === 'weapon') {
+                    // Find voxel with highest Y position (topmost)
+                    let topmostVoxel = carVisual.voxels[0];
+                    let highestY = topmostVoxel.gridPosition.y;
+                    
+                    for (const voxelVisual of carVisual.voxels) {
+                        if (voxelVisual.gridPosition.y > highestY) {
+                            highestY = voxelVisual.gridPosition.y;
+                            topmostVoxel = voxelVisual;
+                        }
+                    }
+                    
+                    return topmostVoxel.mesh;
+                }
+                
+                // For other attachments, return the first voxel mesh
+                return carVisual.voxels[0].mesh;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get the visual world position of an attachment for accurate projectile firing
+     */
+    getAttachmentVisualWorldPosition(trainCar: TrainCar, attachment: Attachment): { x: number; y: number; z: number } | null {
+        const attachmentConfig = attachment.getConfig();
+        const carMesh = this.getCarMesh(trainCar.carId, attachmentConfig.type);
+        if (!carMesh) {
+            return null;
+        }
+
+        const mountInfo = attachment.getMountInfo();
+        if (!mountInfo) {
+            return null;
+        }
+
+        // Find the attachment visual mesh
+        const attachmentMesh = carMesh.getChildren().find(child => 
+            child.name === `attachment_${attachmentConfig.name}`
+        ) as Mesh;
+
+        if (attachmentMesh) {
+            // Use the actual rendered position of the attachment mesh
+            const worldMatrix = attachmentMesh.getWorldMatrix();
+            const worldPosition = Vector3.TransformCoordinates(Vector3.Zero(), worldMatrix);
+            
+            Logger.log(LogCategory.RENDERING, `Attachment visual position found`, {
+                attachmentName: attachmentConfig.name,
+                meshPosition: `(${worldPosition.x.toFixed(2)}, ${worldPosition.y.toFixed(2)}, ${worldPosition.z.toFixed(2)})`,
+                meshExists: true
+            });
+            
+            return {
+                x: worldPosition.x,
+                y: worldPosition.y,
+                z: worldPosition.z
+            };
+        }
+
+        // Fallback: calculate position based on the parent voxel and attachment type
+        const parentVoxelMatrix = carMesh.getWorldMatrix();
+        const parentVoxelPos = Vector3.TransformCoordinates(Vector3.Zero(), parentVoxelMatrix);
+        
+        // Apply the same offset logic as in createAttachmentVisual
+        let visualOffset: Vector3;
+        if (attachmentConfig.type === 'weapon') {
+            visualOffset = new Vector3(0, this.visualConfig.voxelSize * 0.5, 0);
+        } else {
+            visualOffset = new Vector3(this.visualConfig.voxelSize * 0.5, 0, 0);
+        }
+        
+        const finalPosition = parentVoxelPos.add(visualOffset);
+        
+        Logger.log(LogCategory.RENDERING, `Attachment visual position calculated`, {
+            attachmentName: attachmentConfig.name,
+            parentVoxelPos: `(${parentVoxelPos.x.toFixed(2)}, ${parentVoxelPos.y.toFixed(2)}, ${parentVoxelPos.z.toFixed(2)})`,
+            visualOffset: `(${visualOffset.x.toFixed(2)}, ${visualOffset.y.toFixed(2)}, ${visualOffset.z.toFixed(2)})`,
+            finalPosition: `(${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})`,
+            meshExists: false
+        });
+
+        return {
+            x: finalPosition.x,
+            y: finalPosition.y,
+            z: finalPosition.z
+        };
     }
 }

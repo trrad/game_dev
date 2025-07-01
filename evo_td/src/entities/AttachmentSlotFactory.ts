@@ -3,7 +3,7 @@
  */
 
 import { Vector3 } from '@babylonjs/core';
-import { AttachmentSlotType, AttachmentSize } from '../components/AttachmentComponent';
+import { AttachmentSlotType, AttachmentSize } from '../entities/Attachment';
 import { AttachmentSlot, SlotGrid, AttachmentSlotConfig } from '../components/AttachmentSlotComponent';
 import { Logger, LogCategory } from '../utils/Logger';
 
@@ -213,7 +213,7 @@ export class AttachmentSlotFactory {
             for (let z = 1; z < spec.gridUnits.depth - 1; z++) {
                 slots.push({
                     id: `cargo_internal_${x}_${z}`,
-                    type: AttachmentSlotType.INTERNAL,
+                    type: AttachmentSlotType.BOTTOM,
                     gridPosition: { x, y: 1, z },
                     worldPosition: new Vector3(
                         (x - spec.gridUnits.width / 2) * grid.unitSize,
@@ -230,7 +230,7 @@ export class AttachmentSlotFactory {
             totalSlots: slots.length,
             topSlots: slots.filter(s => s.type === AttachmentSlotType.TOP).length,
             sideSlots: slots.filter(s => s.type === AttachmentSlotType.SIDE_LEFT || s.type === AttachmentSlotType.SIDE_RIGHT).length,
-            internalSlots: slots.filter(s => s.type === AttachmentSlotType.INTERNAL).length
+            internalSlots: slots.filter(s => s.type === AttachmentSlotType.BOTTOM).length
         });
 
         return {
@@ -406,7 +406,7 @@ export class AttachmentSlotFactory {
             for (let z = 2; z < spec.gridUnits.depth - 2; z += 2) {
                 slots.push({
                     id: `passenger_internal_${x}_${z}`,
-                    type: AttachmentSlotType.INTERNAL,
+                    type: AttachmentSlotType.BOTTOM,
                     gridPosition: { x, y: 1, z },
                     worldPosition: new Vector3(
                         (x - spec.gridUnits.width / 2) * grid.unitSize,
@@ -423,7 +423,7 @@ export class AttachmentSlotFactory {
             totalSlots: slots.length,
             topSlots: slots.filter(s => s.type === AttachmentSlotType.TOP).length,
             sideSlots: slots.filter(s => s.type === AttachmentSlotType.SIDE_LEFT || s.type === AttachmentSlotType.SIDE_RIGHT).length,
-            internalSlots: slots.filter(s => s.type === AttachmentSlotType.INTERNAL).length
+            internalSlots: slots.filter(s => s.type === AttachmentSlotType.BOTTOM).length
         });
 
         return {

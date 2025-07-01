@@ -4,7 +4,7 @@
 
 import { Logger, LogCategory } from '../utils/Logger';
 import { TrainCar } from '../entities/TrainCar';
-import { AttachmentComponent, AttachmentSlotType } from '../components/AttachmentComponent';
+import { Attachment, AttachmentSlotType } from '../entities/Attachment';
 import { AttachmentFactory } from '../components/AttachmentFactory';
 import { AttachmentSlotComponent } from '../components/AttachmentSlotComponent';
 

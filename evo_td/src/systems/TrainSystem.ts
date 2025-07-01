@@ -11,11 +11,13 @@ import { MovementComponent } from '../components/MovementComponent';
 import { RailPositionComponent } from '../components/RailPositionComponent';
 import { RailMovementComponent } from '../components/RailMovementComponent';
 import { TrainCarPositionComponent } from '../components/TrainCarPositionComponent';
+import { TrainCarVoxelComponent } from '../components/TrainCarVoxelComponent';
 import { Rail } from '../entities/Rail';
 import { TimeManager } from '../core/TimeManager';
 import { Vector3 } from '@babylonjs/core';
 import { TrainRenderer } from '../renderers/TrainRenderer';
 import { EventStack } from '../core/EventStack';
+import type { TrainCar } from '../entities/TrainCar';
 
 export class TrainSystem {
     private trains: Map<string, Train> = new Map();
@@ -299,8 +301,8 @@ export class TrainSystem {
         const trainCars = train.getCars();
         const frontProgress = railPosition.getProgress();
         
-        // Get spacing configuration
-        const carSpacing = ConfigManager.get<number>('train.carSpacing') || 0.8;
+        // Get spacing configuration - increase for voxel-based cars
+        const carSpacing = ConfigManager.get<number>('train.carSpacing') || 2.0;
         const engineLength = 1.4; // TODO: Move to config
         
         // Start offset with train engine length + spacing for first car
@@ -351,10 +353,72 @@ export class TrainSystem {
                     y: carRotationY,
                     z: 0
                 });
+                
+                // Update all voxels in this car to match the car's new position
+                this.updateCarVoxelPositions(car, carWorldPosition, carRotationY);
             }
             
-            // Update offset for next car (this car's length + spacing)
-            currentOffset += car.length + carSpacing;
+            // Update offset for next car (calculate actual voxel-based length + spacing)
+            const voxelComponent = car.getComponent<TrainCarVoxelComponent>('trainCarVoxel');
+            const actualCarLength = voxelComponent 
+                ? voxelComponent.getDimensions().length * 0.5  // Use voxel spacing from TrainCar
+                : car.length; // Fallback to logical length
+            
+            currentOffset += actualCarLength + carSpacing;
+        }
+    }
+
+    /**
+     * Update all voxel positions within a train car to match the car's position and rotation
+     */
+    private updateCarVoxelPositions(car: TrainCar, carWorldPosition: Vector3, carRotationY: number): void {
+        const voxelComponent = car.getComponent<TrainCarVoxelComponent>('trainCarVoxel');
+        if (!voxelComponent) return;
+
+        // Get the car's base position for calculating voxel world positions
+        const carPosition = {
+            x: carWorldPosition.x,
+            y: carWorldPosition.y,
+            z: carWorldPosition.z
+        };
+
+        // Get all voxels in the car
+        const voxels = car.getVoxels();
+        
+        for (const voxel of voxels) {
+            const voxelPos = voxel.getComponent<PositionComponent>('position');
+            if (!voxelPos) continue;
+
+            // Get the voxel's local grid position
+            const gridPos = voxelComponent.getVoxelLocalPosition(
+                voxel.gridPosition.x,
+                voxel.gridPosition.y, 
+                voxel.gridPosition.z
+            );
+            
+            // Apply rotation around Y-axis
+            const cos = Math.cos(carRotationY);
+            const sin = Math.sin(carRotationY);
+            const rotatedX = gridPos.x * cos - gridPos.z * sin;
+            const rotatedZ = gridPos.x * sin + gridPos.z * cos;
+            
+            // Calculate final world position
+            // X-axis: along the length of the train car (forward/backward)
+            // Y-axis: vertical (up/down)
+            // Z-axis: across the width of the train car (left/right)
+            const worldPosition = {
+                x: carPosition.x + rotatedX,
+                y: carPosition.y + gridPos.y,
+                z: carPosition.z + rotatedZ
+            };
+            
+            // Update voxel position
+            voxelPos.setPosition(worldPosition);
+            voxelPos.setRotation({
+                x: 0,
+                y: carRotationY,
+                z: 0
+            });
         }
     }
 
@@ -591,5 +655,19 @@ export class TrainSystem {
                 }
             }
         });
+    }
+
+    /**
+     * Get the TrainRenderer reference
+     */
+    getTrainRenderer(): TrainRenderer | null {
+        return this.trainRenderer;
+    }
+
+    /**
+     * Get the EventStack reference
+     */
+    getEventStack(): EventStack | null {
+        return this.eventStack;
     }
 }
