@@ -18,7 +18,6 @@ import {
 // Import renderers
 import { StationRenderer } from "./renderers/StationRenderer";
 import { RailRenderer } from "./renderers/RailRenderer";
-import { TrainRenderer } from "./renderers/TrainRenderer";
 import { EnemyRenderer } from "./renderers/EnemyRenderer";
 import { GroundRenderer } from "./renderers/GroundRenderer";
 import { LightRenderer } from "./renderers/LightRenderer";
@@ -83,7 +82,6 @@ class ECSApp {
     // Renderers
     private stationRenderer: StationRenderer;
     private railRenderer: RailRenderer;
-    private trainRenderer: TrainRenderer;
     private enemyRenderer: EnemyRenderer;
     private groundRenderer: GroundRenderer;
     private lightRenderer: LightRenderer;
@@ -170,7 +168,7 @@ class ECSApp {
             // Initialize renderers
             this.stationRenderer = new StationRenderer(this.sceneManager.scene);
             this.railRenderer = new RailRenderer(this.sceneManager.scene);
-            this.trainRenderer = new TrainRenderer(this.sceneManager.scene);
+            // TrainRenderer removed - trains now use Entity-Level Registration pattern via SceneManager
             this.enemyRenderer = new EnemyRenderer(this.sceneManager.scene);
             this.groundRenderer = new GroundRenderer(this.sceneManager.scene);
             this.lightRenderer = new LightRenderer(this.sceneManager.scene);
@@ -205,8 +203,7 @@ class ECSApp {
             this.enemySystem.setSceneManager(this.sceneManager);
             this.enemySystem.setTrainSystem(this.trainSystem);
             
-            // Connect TrainRenderer to TrainSystem for visual updates
-            this.trainSystem.setTrainRenderer(this.trainRenderer);
+            // TrainRenderer connection removed - trains now use Entity-Level Registration pattern
             
             // Set up camera, lights, and ground
             this.setupCamera();
@@ -796,55 +793,19 @@ class ECSApp {
             expectedPosition: `(${startPosition.x}, ${startPosition.y}, ${startPosition.z})`
         });
         
-        // Create visual representation for the train
-        const trainVisual = this.trainRenderer.createTrainVisual(trainCars, train.id);
+        // With the new Entity-Level Registration pattern, trains and their voxels
+        // automatically register their render components via SceneManager.
+        // No manual visual creation needed - the Train entity and its voxels handle this.
         
-        // Position the train visual to match the train entity's position exactly
-        const currentTrainPosition = trainPosComponent ? trainPosComponent.getPosition() : startPosition;
-        trainVisual.position = new Vector3(currentTrainPosition.x, currentTrainPosition.y, currentTrainPosition.z);
-        
-        Logger.log(LogCategory.RENDERING, `Train visual positioned`, {
-            trainId: train.id,
-            visualPosition: trainVisual.position.toString(),
-            entityPosition: `(${currentTrainPosition.x}, ${currentTrainPosition.y}, ${currentTrainPosition.z})`,
-            stationPosition: `(${startPosition.x}, ${startPosition.y}, ${startPosition.z})`,
-            childMeshes: trainVisual.getChildren().length,
-            isEnabled: trainVisual.isEnabled(),
-            isDisposed: trainVisual.isDisposed(),
-            sceneId: trainVisual.getScene()?.uid || 'no scene'
-        });
-        
-        // Debug: List all child meshes
-        trainVisual.getChildren().forEach((child, index) => {
-            Logger.log(LogCategory.RENDERING, `Train child ${index}:`, {
-                name: child.name,
-                position: (child as any).position?.toString() || 'no position',
-                isVisible: (child as any).isVisible || 'unknown',
-                isEnabled: child.isEnabled(),
-                type: child.getClassName()
-            });
-        });
-        
-        // Store the train and register it with SceneManager (now supports TransformNode)
+        // Store the train - SceneManager will auto-discover render components
         this.trains.set(train.id, train);
-        this.sceneManager.registerGameObject(train, trainVisual);
         
-        // Register each individual voxel with SceneManager for independent positioning
-        const voxelMeshes = this.trainRenderer.getTrainCarMeshes(train.id);
-        const carEntities = train.getCars();
-        
-        voxelMeshes.forEach((voxelMesh) => {
-            // Find the car that owns this voxel
-            const owningCar = carEntities.find(car => car.carId === voxelMesh.carId);
-            if (owningCar) {
-                // Find the specific voxel GameObject
-                const voxels = owningCar.getVoxels();
-                const voxel = voxels.find(v => v.id === voxelMesh.voxelId);
-                if (voxel) {
-                    this.sceneManager.registerGameObject(voxel, voxelMesh.mesh);
-                    Logger.log(LogCategory.SYSTEM, `Registered voxel with SceneManager: ${voxelMesh.voxelId} (car: ${voxelMesh.carId})`);
-                }
-            }
+        // With the new Entity-Level Registration pattern, voxels register themselves automatically
+        // through their VoxelRenderComponent when created in TrainCar
+        Logger.log(LogCategory.SYSTEM, `Train created with Entity-Level Registration pattern`, {
+            trainId: train.id,
+            carCount: train.getCars().length,
+            totalVoxels: train.getCars().reduce((total, car) => total + car.getVoxels().length, 0)
         });
         
         // Set up camera tracking for the train
@@ -852,7 +813,6 @@ class ECSApp {
         
         Logger.log(LogCategory.SYSTEM, `Created initial train: ${train.id} at station_a`, {
             trainPosition: `(${startPosition.x}, ${startPosition.y}, ${startPosition.z})`,
-            visualPosition: trainVisual.position.toString(),
             carCount: trainCars.length,
             totalCapacity: trainConfig.cargoCapacity
         });
@@ -906,10 +866,9 @@ class ECSApp {
                     Logger.log(LogCategory.SYSTEM, `Placing turret at grid position (${x}, ${y}, ${z})`);
                     
                     if (success) {
-                        // Update the visual representation to show the turret
-                        this.trainRenderer.updateCarAttachmentVisuals(engineCar);
-                        // Update slot visuals to show occupancy
-                        this.trainRenderer.updateSlotVisuals(engineCar);
+                        // With the new Entity-Level Registration pattern, attachment visuals
+                        // will be handled by the car's render component automatically
+                        // TODO: Implement attachment visual updates in CarRenderComponent
                         
                         Logger.log(LogCategory.SYSTEM, `Added working turret to engine car`, {
                             carId: engineCar.carId,

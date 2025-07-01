@@ -15,7 +15,6 @@ import { TrainCarVoxelComponent } from '../components/TrainCarVoxelComponent';
 import { Rail } from '../entities/Rail';
 import { TimeManager } from '../core/TimeManager';
 import { Vector3 } from '@babylonjs/core';
-import { TrainRenderer } from '../renderers/TrainRenderer';
 import { EventStack } from '../core/EventStack';
 import type { TrainCar } from '../entities/TrainCar';
 
@@ -24,7 +23,6 @@ export class TrainSystem {
     private metrics: Map<string, number> = new Map();
     private rails: Map<string, Rail> = new Map(); // Reference to rails for movement calculations
     private timeManager: TimeManager | null = null; // Reference to TimeManager
-    private trainRenderer: TrainRenderer | null = null; // Reference to TrainRenderer for visual updates
     private eventStack: EventStack | null = null; // Reference to EventStack for event logging
 
     constructor() {
@@ -42,14 +40,6 @@ export class TrainSystem {
         Logger.log(LogCategory.SYSTEM, `TimeManager connected to TrainSystem`);
     }
     
-    /**
-     * Set the TrainRenderer reference for visual updates
-     */
-    setTrainRenderer(trainRenderer: TrainRenderer): void {
-        this.trainRenderer = trainRenderer;
-        Logger.log(LogCategory.SYSTEM, `TrainRenderer connected to TrainSystem`);
-    }
-
     /**
      * Set the EventStack reference for event logging
      */
@@ -655,13 +645,6 @@ export class TrainSystem {
                 }
             }
         });
-    }
-
-    /**
-     * Get the TrainRenderer reference
-     */
-    getTrainRenderer(): TrainRenderer | null {
-        return this.trainRenderer;
     }
 
     /**

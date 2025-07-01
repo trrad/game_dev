@@ -7,6 +7,7 @@ import { Scene, MeshBuilder, StandardMaterial, Color3, Mesh } from "@babylonjs/c
 import { RenderComponent, RenderConfig } from "./RenderComponent";
 import { TrainCarVoxel } from "../entities/TrainCarVoxel";
 import { HealthComponent } from "../components/HealthComponent";
+import { PositionComponent } from "../components/PositionComponent";
 import { CargoCapacityType, VoxelMaterial } from "../components/TrainCarVoxelComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 
@@ -32,7 +33,7 @@ const DEFAULT_VOXEL_CONFIG: VoxelRenderConfig = {
  * Renders individual voxels as cubes with materials based on cargo type and health
  */
 export class VoxelRenderComponent extends RenderComponent {
-    public readonly type = 'voxelRender';
+    public readonly type = 'render'; // Override with voxel-specific behavior
     
     private voxelConfig: VoxelRenderConfig;
     private voxelEntity?: TrainCarVoxel; // Reference to the voxel entity for properties
@@ -229,5 +230,28 @@ export class VoxelRenderComponent extends RenderComponent {
      */
     deserialize(data: VoxelRenderConfig): void {
         this.updateConfig(data);
+    }
+
+    /**
+     * Update mesh position from PositionComponent with train orientation alignment
+     */
+    protected updatePosition(): void {
+        if (!this.mesh || !this._gameObject) return;
+        
+        const positionComponent = this._gameObject.getComponent<PositionComponent>('position');
+        if (!positionComponent) return;
+        
+        const pos = positionComponent.getPosition();
+        const rot = positionComponent.getRotation();
+        
+        // Apply position with Y offset for voxels
+        this.mesh.position.x = pos.x;
+        this.mesh.position.y = pos.y + (this.config.yOffset || 0);
+        this.mesh.position.z = pos.z;
+        
+        // Apply rotation - this aligns voxels with train direction
+        this.mesh.rotation.x = rot.x;
+        this.mesh.rotation.y = rot.y; // This is the key for train rail alignment
+        this.mesh.rotation.z = rot.z;
     }
 }
