@@ -5,6 +5,35 @@
 
 export class CSSLoader {
     private loadedStyles: Set<string> = new Set();
+    private static instance: CSSLoader | null = null;
+
+    /**
+     * Get singleton instance
+     */
+    public static getInstance(): CSSLoader {
+        if (!CSSLoader.instance) {
+            CSSLoader.instance = new CSSLoader();
+        }
+        return CSSLoader.instance;
+    }
+
+    /**
+     * Static method to inject CSS directly into the page
+     */
+    public static injectCSS(css: string, id?: string): void {
+        const style = document.createElement('style');
+        style.type = 'text/css';
+        if (id) {
+            style.id = id;
+            // Remove existing style with same ID
+            const existing = document.getElementById(id);
+            if (existing) {
+                existing.remove();
+            }
+        }
+        style.textContent = css;
+        document.head.appendChild(style);
+    }
 
     /**
      * Load a CSS file from the assets/ui directory

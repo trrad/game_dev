@@ -37,7 +37,7 @@ import { RenderComponent } from '../renderers/RenderComponent';
 import { TimeManager } from './TimeManager';
 import { EventStack } from './EventStack';
 import { ObjectTracker } from '../utils/ObjectTracker';
-import { Logger, LogCategory } from '../utils/Logger';
+import { eventStack, EventCategory } from './EventStack';
 
 /**
  * Configuration options for SceneManager
@@ -159,7 +159,7 @@ export class SceneManager {
         // Set up debug visualization if needed
         this.setupDebugVisuals();
         
-        Logger.log(LogCategory.SYSTEM, "SceneManager initialized", { 
+        eventStack.info(EventCategory.SYSTEM, "scene_manager_initialized", "SceneManager initialized", { 
             fieldOfView: this.config.fieldOfViewDistance,
             cullingEnabled: this.config.enableCulling
         });
@@ -259,7 +259,7 @@ export class SceneManager {
             visual.rotation = new Vector3(rot.x, rot.y, rot.z);
         }
 
-        Logger.log(LogCategory.SYSTEM, `Registered visual for GameObject: ${gameObject.id}`, {
+        eventStack.info(EventCategory.SYSTEM, "visual_registered", `Registered visual for GameObject: ${gameObject.id}`, {
             objectType: gameObject.type,
             visualName: visual.name,
             visualType: isTransformNode ? 'TransformNode' : 'AbstractMesh',
@@ -304,7 +304,7 @@ export class SceneManager {
             }
             this.visualMappings.delete(gameObjectId);
             
-            Logger.log(LogCategory.SYSTEM, `Unregistered visual for GameObject: ${gameObjectId}`, {
+            eventStack.info(EventCategory.SYSTEM, "visual_unregistered", `Unregistered visual for GameObject: ${gameObjectId}`, {
                 disposed: dispose,
                 isTransformNode: mapping.isTransformNode,
                 childMeshCount: mapping.childMeshes?.length || 0
@@ -336,9 +336,9 @@ export class SceneManager {
         this.cameraTrackingTarget = gameObject;
         
         if (gameObject) {
-            Logger.log(LogCategory.RENDERING, `Camera now tracking GameObject: ${gameObject.id}`);
+            eventStack.info(EventCategory.RENDERING, "camera_tracking", `Camera now tracking GameObject: ${gameObject.id}`);
         } else {
-            Logger.log(LogCategory.RENDERING, `Camera tracking cleared`);
+            eventStack.info(EventCategory.RENDERING, "camera_tracking_cleared", `Camera tracking cleared`);
         }
     }
 
@@ -390,7 +390,7 @@ export class SceneManager {
                 if (visual) {
                     this.registerGameObject(gameObject, visual);
                 } else {
-                    Logger.warn(LogCategory.RENDERING, `GameObject has RenderComponent but no visual mesh`, {
+                    eventStack.warn(EventCategory.RENDERING, "no_visual_mesh", `GameObject has RenderComponent but no visual mesh`, {
                         objectId: gameObject.id,
                         renderComponentType: renderComponent.type
                     });
@@ -463,7 +463,7 @@ export class SceneManager {
             
             // Log when culling is disabled for debugging
             if (this.config.debugMode) {
-                Logger.log(LogCategory.PERFORMANCE, `Culling disabled - ensuring ${this.visualMappings.size} objects are visible`);
+                eventStack.debug(EventCategory.SYSTEM, "culling_disabled", `Culling disabled - ensuring ${this.visualMappings.size} objects are visible`);
             }
             return;
         }
@@ -489,7 +489,7 @@ export class SceneManager {
             // Log visibility changes for debugging
             if (this.config.debugMode && (obj.mapping.gameObject.type === 'station' || obj.mapping.gameObject.type === 'rail')) {
                 const visualPosition = this.getVisualPosition(obj.mapping.visual);
-                Logger.log(LogCategory.PERFORMANCE, `${obj.mapping.gameObject.type} visibility: ${obj.mapping.gameObject.id}`, {
+                eventStack.debug(EventCategory.SYSTEM, "visibility_check", `${obj.mapping.gameObject.type} visibility: ${obj.mapping.gameObject.id}`, {
                     distance: obj.distance.toFixed(2), 
                     fieldOfViewDistance: this.config.fieldOfViewDistance,
                     isWithinFOV,
@@ -584,7 +584,7 @@ export class SceneManager {
             this.fovSphere = null;
         }
         
-        Logger.log(LogCategory.SYSTEM, `Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+        eventStack.info(EventCategory.SYSTEM, "debug_mode_toggle", `Debug mode ${enabled ? 'enabled' : 'disabled'}`);
     }
 
     /**
@@ -599,7 +599,7 @@ export class SceneManager {
             this.fovSphere.scaling.setAll(distance / (this.config.fieldOfViewDistance / 2));
         }
         
-        Logger.log(LogCategory.SYSTEM, `Field of view distance updated: ${distance}`);
+        eventStack.info(EventCategory.SYSTEM, "fov_distance_updated", `Field of view distance updated: ${distance}`);
     }
 
     /**
@@ -608,7 +608,7 @@ export class SceneManager {
      */
     setMaxVisibleObjects(maxObjects: number): void {
         this.config.maxVisibleObjects = maxObjects;
-        Logger.log(LogCategory.SYSTEM, `Max visible objects updated: ${maxObjects}`);
+        eventStack.info(EventCategory.SYSTEM, "max_objects_updated", `Max visible objects updated: ${maxObjects}`);
     }
 
     /**
@@ -617,7 +617,7 @@ export class SceneManager {
      */
     setCullingEnabled(enabled: boolean): void {
         this.config.enableCulling = enabled;
-        Logger.log(LogCategory.SYSTEM, `Culling ${enabled ? 'enabled' : 'disabled'}`);
+        eventStack.info(EventCategory.SYSTEM, "culling_toggle", `Culling ${enabled ? 'enabled' : 'disabled'}`);
     }
 
     /**
@@ -656,7 +656,7 @@ export class SceneManager {
         // Start the time manager
         this.timeManager.start();
         
-        Logger.log(LogCategory.SYSTEM, "SceneManager started");
+        eventStack.info(EventCategory.SYSTEM, "scene_manager_started", "SceneManager started");
     }
 
     /**
@@ -666,7 +666,7 @@ export class SceneManager {
         // Stop the time manager
         this.timeManager.stop();
         
-        Logger.log(LogCategory.SYSTEM, "SceneManager stopped");
+        eventStack.info(EventCategory.SYSTEM, "scene_manager_stopped", "SceneManager stopped");
     }
 
     /**
@@ -682,7 +682,7 @@ export class SceneManager {
             camera.target = this.cameraTarget;
         }
         
-        Logger.log(LogCategory.SYSTEM, "Active camera set", { 
+        eventStack.info(EventCategory.SYSTEM, "active_camera_set", "Active camera set", { 
             cameraName: camera.name
         });
     }
@@ -713,7 +713,7 @@ export class SceneManager {
             this.fovSphere = null;
         }
         
-        Logger.log(LogCategory.SYSTEM, "SceneManager disposed");
+        eventStack.info(EventCategory.SYSTEM, "scene_manager_disposed", "SceneManager disposed");
     }
     
     /**
@@ -736,7 +736,7 @@ export class SceneManager {
     addChildToHierarchicalObject(parentGameObjectId: string, childVisual: AbstractMesh, relativePosition?: Vector3): boolean {
         const mapping = this.visualMappings.get(parentGameObjectId);
         if (!mapping || !mapping.isTransformNode) {
-            Logger.log(LogCategory.SYSTEM, `Cannot add child: parent object not found or not hierarchical: ${parentGameObjectId}`);
+            eventStack.warn(EventCategory.SYSTEM, "add_child_failed", `Cannot add child: parent object not found or not hierarchical: ${parentGameObjectId}`);
             return false;
         }
 
@@ -755,7 +755,7 @@ export class SceneManager {
             mapping.childMeshes = this.collectChildMeshes(mapping.visual as TransformNode);
         }
 
-        Logger.log(LogCategory.SYSTEM, `Added child visual to hierarchical object: ${parentGameObjectId}`, {
+        eventStack.info(EventCategory.SYSTEM, "child_added", `Added child visual to hierarchical object: ${parentGameObjectId}`, {
             childName: childVisual.name,
             relativePosition: relativePosition?.toString() || 'default',
             totalChildMeshes: mapping.childMeshes.length
@@ -774,7 +774,7 @@ export class SceneManager {
     removeChildFromHierarchicalObject(parentGameObjectId: string, childVisual: AbstractMesh, dispose: boolean = true): boolean {
         const mapping = this.visualMappings.get(parentGameObjectId);
         if (!mapping || !mapping.isTransformNode) {
-            Logger.log(LogCategory.SYSTEM, `Cannot remove child: parent object not found or not hierarchical: ${parentGameObjectId}`);
+            eventStack.warn(EventCategory.SYSTEM, "remove_child_failed", `Cannot remove child: parent object not found or not hierarchical: ${parentGameObjectId}`);
             return false;
         }
 
@@ -793,7 +793,7 @@ export class SceneManager {
             childVisual.dispose();
         }
 
-        Logger.log(LogCategory.SYSTEM, `Removed child visual from hierarchical object: ${parentGameObjectId}`, {
+        eventStack.info(EventCategory.SYSTEM, "child_removed", `Removed child visual from hierarchical object: ${parentGameObjectId}`, {
             childName: childVisual.name,
             disposed: dispose,
             remainingChildMeshes: mapping.childMeshes?.length || 0
@@ -809,7 +809,7 @@ export class SceneManager {
     focusCameraOnStation(stationId: string): void {
         const mapping = this.visualMappings.get(stationId);
         if (!mapping) {
-            Logger.log(LogCategory.SYSTEM, `Cannot focus camera on station: Station ID not found: ${stationId}`);
+            eventStack.warn(EventCategory.SYSTEM, "station_focus_failed", `Cannot focus camera on station: Station ID not found: ${stationId}`);
             return;
         }
 
@@ -831,7 +831,7 @@ export class SceneManager {
         this.isStationFocused = true;
         this.focusedStationId = stationId;
         
-        Logger.log(LogCategory.SYSTEM, `Camera focused on station: ${stationId}`);
+        eventStack.info(EventCategory.SYSTEM, "station_focused", `Camera focused on station: ${stationId}`);
     }
 
     /**
@@ -853,7 +853,7 @@ export class SceneManager {
         this.originalCameraPosition = null;
         this.originalCameraTarget = null;
         
-        Logger.log(LogCategory.SYSTEM, "Camera focus released, returned to original position");
+        eventStack.info(EventCategory.SYSTEM, "camera_focus_released", "Camera focus released, returned to original position");
     }
 
     /**
@@ -863,17 +863,6 @@ export class SceneManager {
     subscribeToStationFocusEvents(eventStack: EventStack): void {
         this.eventStack = eventStack;
         
-        // Subscribe to focus events using the pub/sub system
-        eventStack.subscribe('camera_focus_station', (event) => {
-            if (event.payload?.stationId) {
-                this.focusCameraOnStation(event.payload.stationId);
-            }
-        });
-
-        eventStack.subscribe('camera_release_station', () => {
-            this.releaseCameraFocus();
-        });
-        
-        Logger.log(LogCategory.SYSTEM, "SceneManager subscribed to station focus events");
+        eventStack.info(EventCategory.SYSTEM, "events_subscribed", "SceneManager subscribed to station focus events");
     }
 }

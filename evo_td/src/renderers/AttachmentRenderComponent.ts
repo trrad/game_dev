@@ -1,118 +1,108 @@
 /**
  * AttachmentRenderComponent - Handles rendering of train car attachments (weapons, turrets, etc.)
- * Part of the ECS-based rendering system refactor
+ * Part of the ECS-based rendering system refactor using Entity-Level Registration pattern
  */
 import { Mesh, Scene, Vector3, StandardMaterial, Color3, AbstractMesh } from "@babylonjs/core";
-import { RenderComponent } from "./RenderComponent";
+import { RenderComponent, RenderConfig } from "./RenderComponent";
+import { Attachment } from "../entities/Attachment";
+import { PositionComponent } from "../components/PositionComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 
 /**
- * Attachment-specific render configuration
- */
-export interface AttachmentRenderConfig {
-    scene: Scene;
-    attachmentType: string;
-    mountPosition?: Vector3;
-    color?: Color3;
-}
-
-/**
  * Attachment render component that handles visual representation of attachments
+ * Uses Entity-Level Registration pattern - automatically discovered by SceneManager
  */
 export class AttachmentRenderComponent extends RenderComponent {
-    private attachment: any; // TODO: Replace with proper Attachment type when available
-    private attachmentType: string;
-    private mountPosition: Vector3;
-    private color: Color3;
+    private attachment?: Attachment; // Set in onAttach()
 
-    constructor(attachment: any, config: AttachmentRenderConfig) {
-        super(config.scene);
-        this.attachment = attachment;
-        this.attachmentType = config.attachmentType;
-        this.mountPosition = config.mountPosition || Vector3.Zero();
-        this.color = config.color || new Color3(0.8, 0.2, 0.2); // Default red for weapons
+    constructor(scene: Scene, config: RenderConfig = {}) {
+        super(scene, config);
         
-        this.createVisual();
+        Logger.log(LogCategory.RENDERING, `AttachmentRenderComponent created`);
+    }
+
+    /**
+     * Called when component is attached to entity - automatically creates visuals
+     */
+    onAttach(): void {
+        // Cast the GameObject to Attachment to access attachment properties
+        // IMPORTANT: This must be done BEFORE calling super.onAttach() 
+        // because super.onAttach() calls createVisual() which needs this.attachment
+        this.attachment = this._gameObject as Attachment;
         
-        Logger.log(LogCategory.RENDERING, `AttachmentRenderComponent created for attachment type: ${this.attachmentType}`);
+        if (!this.attachment) {
+            Logger.warn(LogCategory.RENDERING, `AttachmentRenderComponent attached to non-attachment entity: ${this._gameObject?.id}`);
+            return; // Don't proceed if we can't cast to Attachment
+        }
+
+        Logger.log(LogCategory.RENDERING, `AttachmentRenderComponent onAttach called`, {
+            attachmentId: this.attachment.id,
+            attachmentType: this.attachment.getConfig().type,
+            entityId: this._gameObject?.id
+        });
+        
+        // Now call super.onAttach() which will trigger createVisual()
+        super.onAttach();
+        
+        Logger.log(LogCategory.RENDERING, `AttachmentRenderComponent onAttach completed`, {
+            attachmentId: this.attachment.id,
+            hasMesh: !!this.mesh,
+            meshName: this.mesh?.name || 'none'
+        });
     }
 
     /**
      * Create the visual representation of the attachment
      */
     protected createVisual(): void {
-        if (this.attachmentType === 'weapon') {
+        if (!this.attachment) {
+            Logger.warn(LogCategory.RENDERING, `Cannot create visual - attachment not set`);
+            return;
+        }
+        
+        const config = this.attachment.getConfig();
+        Logger.log(LogCategory.RENDERING, `Creating visual for attachment`, {
+            attachmentId: this.attachment.id,
+            attachmentType: config.type,
+            attachmentName: config.name,
+            color: config.color
+        });
+        
+        if (config.type === 'weapon') {
             this.createWeaponMesh();
         } else {
             this.createGenericAttachmentMesh();
         }
+        
+        Logger.log(LogCategory.RENDERING, `Visual created for attachment`, {
+            attachmentId: this.attachment.id,
+            meshName: this.mesh?.name || 'none',
+            meshPosition: this.mesh ? `(${this.mesh.position.x}, ${this.mesh.position.y}, ${this.mesh.position.z})` : 'none',
+            meshVisible: this.mesh?.isVisible || false
+        });
     }
 
     /**
-     * Create a weapon mesh (typically a turret)
-     */
-    private createWeaponMesh(): void {
-        const weaponMesh = Mesh.CreateCylinder(
-            `weapon_${this.attachment.id || 'unknown'}`,
-            0.8,  // height
-            0.3,  // top diameter
-            0.4,  // bottom diameter
-            8,    // tessellation
-            1,    // subdivisions
-            this.scene
-        );
-
-        // Create material
-        const material = new StandardMaterial(`weapon_material_${this.attachment.id || 'unknown'}`, this.scene);
-        material.diffuseColor = this.color;
-        material.specularColor = new Color3(0.1, 0.1, 0.1);
-        weaponMesh.material = material;
-
-        // Position the weapon on the mount
-        weaponMesh.position = this.mountPosition.clone();
-        weaponMesh.position.y += 0.4; // Raise slightly above the mount surface
-
-        this.mesh = weaponMesh;
-    }
-
-    /**
-     * Create a generic attachment mesh
-     */
-    private createGenericAttachmentMesh(): void {
-        const attachmentMesh = Mesh.CreateBox(
-            `attachment_${this.attachment.id || 'unknown'}`,
-            0.6,
-            this.scene
-        );
-
-        // Create material
-        const material = new StandardMaterial(`attachment_material_${this.attachment.id || 'unknown'}`, this.scene);
-        material.diffuseColor = this.color;
-        material.specularColor = new Color3(0.1, 0.1, 0.1);
-        attachmentMesh.material = material;
-
-        // Position the attachment on the mount
-        attachmentMesh.position = this.mountPosition.clone();
-        attachmentMesh.position.y += 0.3; // Raise slightly above the mount surface
-
-        this.mesh = attachmentMesh;
-    }
-
-    /**
-     * Update the attachment's visual representation
+     * Update the visual representation - required by base class
      */
     protected updateVisual(): void {
-        if (!this.mesh) return;
+        if (!this.mesh || !this.attachment) return;
 
-        // Update position if attachment has moved
-        if (this.attachment.position) {
-            this.mesh.position.copyFrom(this.attachment.position);
-            this.mesh.position.y += 0.4; // Keep raised above surface
-        }
-
-        // Update rotation if attachment has rotated
-        if (this.attachment.rotation) {
-            this.mesh.rotation.copyFrom(this.attachment.rotation);
+        // Get position from PositionComponent
+        const positionComponent = this.attachment.getComponent('position') as PositionComponent;
+        if (positionComponent) {
+            const position = positionComponent.getPosition();
+            const oldPosition = `(${this.mesh.position.x}, ${this.mesh.position.y}, ${this.mesh.position.z})`;
+            this.mesh.position.set(position.x, position.y, position.z);
+            
+            Logger.debug(LogCategory.RENDERING, `Updated attachment visual position`, {
+                attachmentId: this.attachment.id,
+                oldPosition: oldPosition,
+                newPosition: `(${position.x}, ${position.y}, ${position.z})`,
+                meshPosition: `(${this.mesh.position.x}, ${this.mesh.position.y}, ${this.mesh.position.z})`
+            });
+        } else {
+            Logger.warn(LogCategory.RENDERING, `No position component found for attachment: ${this.attachment.id}`);
         }
 
         // TODO: Future LoD system integration
@@ -123,38 +113,103 @@ export class AttachmentRenderComponent extends RenderComponent {
     }
 
     /**
-     * Update the mount position
+     * Create a weapon mesh (typically a turret)
      */
-    updateMountPosition(newPosition: Vector3): void {
-        this.mountPosition = newPosition.clone();
-        if (this.mesh) {
-            this.mesh.position.copyFrom(this.mountPosition);
-            this.mesh.position.y += 0.4; // Keep raised above surface
-        }
+    private createWeaponMesh(): void {
+        if (!this.attachment) return;
+        
+        const config = this.attachment.getConfig();
+        const weaponMesh = Mesh.CreateCylinder(
+            `weapon_${this.attachment.id}`,
+            0.8,  // height
+            0.3,  // top diameter
+            0.4,  // bottom diameter
+            8,    // tessellation
+            1,    // subdivisions
+            this.scene
+        );
+
+        // Create material
+        const material = new StandardMaterial(`weapon_material_${this.attachment.id}`, this.scene);
+        const color = config.color;
+        material.diffuseColor = new Color3(color.r, color.g, color.b);
+        material.specularColor = new Color3(0.1, 0.1, 0.1);
+        weaponMesh.material = material;
+
+        // Position will be updated by updateVisual() using PositionComponent
+        weaponMesh.position.y += 0.4; // Raise slightly above the mount surface
+
+        this.mesh = weaponMesh;
     }
 
     /**
-     * Update the attachment color
+     * Create a generic attachment mesh
      */
-    updateColor(newColor: Color3): void {
-        this.color = newColor;
-        if (this.mesh && this.mesh.material instanceof StandardMaterial) {
-            this.mesh.material.diffuseColor = this.color;
-        }
+    private createGenericAttachmentMesh(): void {
+        if (!this.attachment) return;
+        
+        const config = this.attachment.getConfig();
+        const attachmentMesh = Mesh.CreateBox(
+            `attachment_${this.attachment.id}`,
+            0.6,
+            this.scene
+        );
+
+        // Create material
+        const material = new StandardMaterial(`attachment_material_${this.attachment.id}`, this.scene);
+        const color = config.color;
+        material.diffuseColor = new Color3(color.r, color.g, color.b);
+        material.specularColor = new Color3(0.1, 0.1, 0.1);
+        attachmentMesh.material = material;
+
+        // Position will be updated by updateVisual() using PositionComponent
+        attachmentMesh.position.y += 0.3; // Raise slightly above the mount surface
+
+        this.mesh = attachmentMesh;
+    }
+    /**
+     * Get the attachment entity
+     */
+    getAttachment(): Attachment | undefined {
+        return this.attachment;
     }
 
     /**
      * Get the attachment type
      */
     getAttachmentType(): string {
-        return this.attachmentType;
+        return this.attachment?.getConfig().type || 'unknown';
     }
 
     /**
-     * Get the mount position
+     * Get the current mount position from PositionComponent
      */
     getMountPosition(): Vector3 {
-        return this.mountPosition.clone();
+        if (!this.attachment) return Vector3.Zero();
+        
+        const positionComponent = this.attachment.getComponent('position') as PositionComponent;
+        if (positionComponent) {
+            const pos = positionComponent.getPosition();
+            return new Vector3(pos.x, pos.y, pos.z);
+        }
+        return Vector3.Zero();
+    }
+
+    /**
+     * Update the attachment's mount position (updates PositionComponent)
+     */
+    updateMountPosition(newPosition: Vector3): void {
+        if (!this.attachment) return;
+        
+        const positionComponent = this.attachment.getComponent('position') as PositionComponent;
+        if (positionComponent) {
+            positionComponent.setPosition({
+                x: newPosition.x,
+                y: newPosition.y,
+                z: newPosition.z
+            });
+            // Visual will be updated automatically via updateVisual()
+        }
     }
 
     /**
@@ -178,7 +233,7 @@ export class AttachmentRenderComponent extends RenderComponent {
     private updateAttachmentAssets(): void {
         // Mock implementation for future asset system
         // if (this.shouldLoadCustomAttachmentModel()) {
-        //     this.loadCustomAttachmentModel(this.attachmentType);
+        //     this.loadCustomAttachmentModel(this.getAttachmentType());
         // }
     }
 
@@ -187,6 +242,6 @@ export class AttachmentRenderComponent extends RenderComponent {
      */
     dispose(): void {
         super.dispose();
-        Logger.log(LogCategory.RENDERING, `AttachmentRenderComponent disposed for type: ${this.attachmentType}`);
+        Logger.log(LogCategory.RENDERING, `AttachmentRenderComponent disposed for type: ${this.getAttachmentType()}`);
     }
 }

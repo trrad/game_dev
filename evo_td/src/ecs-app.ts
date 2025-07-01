@@ -39,8 +39,10 @@ import { TrainCar, TrainCarConfig } from "./entities/TrainCar";
 import { TrainConfig } from "./entities/Train";
 
 // Import UI and utility systems
+import { eventStack, EventCategory } from "./core/EventStack";
 import { Logger, LogCategory } from "./utils/Logger";
 import { UISystem } from "./systems/UISystem";
+
 import { UIFactory } from "./ui/UIFactory";
 import { EventLogUI } from "./ui/EventLogUI";
 import { TrainJourneyControlsUI } from "./ui/TrainJourneyControlsUI";
@@ -73,7 +75,6 @@ class ECSApp {
     // Core ECS systems
     private sceneManager: SceneManager;
     private timeManager: TimeManager;
-    private eventStack: EventStack;
     private trainSystem: TrainSystem;
     private enemySystem: EnemySystem;
     private projectileSystem: ProjectileSystem;
@@ -93,7 +94,22 @@ class ECSApp {
     private trains: Map<string, Train> = new Map();
     
     constructor() {
-        Logger.log(LogCategory.SYSTEM, "Initializing ECS App");
+        eventStack.info(EventCategory.SYSTEM, 'app_init', "Initializing ECS App");
+        
+        // Initialize file-based logging
+        // Remove the legacy file logging initialization
+        eventStack.info(EventCategory.SYSTEM, 'logging_ready', 'Event logging system ready');
+        
+        // Add debug helpers to window for console access
+        if (typeof window !== 'undefined') {
+            (window as any).exportLogs = () => eventStack.exportLogs();
+            (window as any).clearLogs = () => eventStack.clearLogs();
+            (window as any).toggleConsole = () => eventStack.toggleConsoleOutput();
+            (window as any).toggleVerbose = () => eventStack.toggleVerboseMode();
+            eventStack.info(EventCategory.SYSTEM, 'debug_helpers', "Debug helpers added: window.exportLogs(), window.clearLogs(), window.toggleConsole(), window.toggleVerbose()");
+            
+            eventStack.info(EventCategory.SYSTEM, 'manual_logging', "Manual log generation available via Generate Logs button or window.exportLogs()");
+        }
         
         // Load CSS for UI components
         this.loadUIStyles();
@@ -122,9 +138,9 @@ class ECSApp {
                 powerPreference: "default"
             });
             
-            Logger.log(LogCategory.SYSTEM, "Babylon.js engine initialized successfully");
+            eventStack.info(EventCategory.SYSTEM, 'babylon_init_success', "Babylon.js engine initialized successfully");
         } catch (error) {
-            Logger.log(LogCategory.SYSTEM, "Failed to initialize Babylon.js engine:", error);
+            eventStack.error(EventCategory.SYSTEM, 'babylon_init_error', "Failed to initialize Babylon.js engine", { error: error.toString() });
             this.showEngineError(error);
             return;
         }
@@ -147,14 +163,14 @@ class ECSApp {
         try {
             // Initialize core ECS systems
             this.timeManager = new TimeManager();
-            this.eventStack = new EventStack();
+            // Use global eventStack instance
             
             // Initialize UI system
             this.uiSystem = new UISystem();
             this.uiFactory = new UIFactory(this.uiSystem);
             
             // Initialize StationManager for expanded station features
-            this.stationManager = new StationManager(this.timeManager, this.eventStack, {
+            this.stationManager = new StationManager(this.timeManager, eventStack, {
                 minStationDistance: 30, // Adjusted for close station network
                 defaultPerimeterRadius: 50,
                 maxStationsPerWorld: 20
@@ -163,7 +179,7 @@ class ECSApp {
             // Initialize Train System and connect TimeManager and EventStack
             this.trainSystem = new TrainSystem();
             this.trainSystem.setTimeManager(this.timeManager);
-            this.trainSystem.setEventStack(this.eventStack);
+            this.trainSystem.setEventStack(eventStack);
             
             // Initialize renderers
             this.stationRenderer = new StationRenderer(this.sceneManager.scene);
@@ -177,11 +193,11 @@ class ECSApp {
             // Initialize ProjectileSystem and connect it to other systems
             this.projectileSystem = new ProjectileSystem(this.projectileRenderer);
             this.projectileSystem.setTimeManager(this.timeManager);
-            this.projectileSystem.setEventStack(this.eventStack);
+            this.projectileSystem.setEventStack(eventStack);
             this.projectileSystem.setSceneManager(this.sceneManager);
             
             // Set up SceneManager event subscriptions for camera control
-            this.sceneManager.subscribeToStationFocusEvents(this.eventStack);
+            this.sceneManager.subscribeToStationFocusEvents(eventStack);
             
             // Initialize Enemy System with custom spawn configuration
             this.enemySystem = new EnemySystem(this.enemyRenderer, {
@@ -199,7 +215,7 @@ class ECSApp {
             
             // Connect systems with TimeManager, EventStack, and SceneManager
             this.enemySystem.setTimeManager(this.timeManager);
-            this.enemySystem.setEventStack(this.eventStack);
+            this.enemySystem.setEventStack(eventStack);
             this.enemySystem.setSceneManager(this.sceneManager);
             this.enemySystem.setTrainSystem(this.trainSystem);
             
@@ -219,17 +235,17 @@ class ECSApp {
             this.initializeRenderLoop();
             
             // Add some initial events to the event log for demonstration
-            this.eventStack.logEvent(LogCategory.SYSTEM, 'app_initialized', 'ECS Train Trading Game initialized successfully');
-            this.eventStack.logEvent(LogCategory.UI, 'controls_ready', 'Press F1 to toggle event log, M for train modification UI, Space to pause, 1-5 for time speed');
-            this.eventStack.logEvent(LogCategory.UI, 'camera_controls', 'Camera controls: Q = Central Station, W = Eastern Depot, E = Northern Outpost, R = Release focus');
+            eventStack.info(EventCategory.SYSTEM, 'app_initialized', 'ECS Train Trading Game initialized successfully');
+            eventStack.info(EventCategory.UI, 'controls_ready', 'Press F1 to toggle event log, M for train modification UI, Space to pause, 1-5 for time speed');
+            eventStack.info(EventCategory.UI, 'camera_controls', 'Camera controls: Q = Central Station, W = Eastern Depot, E = Northern Outpost, R = Release focus');
             
             // Log current demo world configuration
             this.logCurrentDemoSetup();
             
-            Logger.log(LogCategory.SYSTEM, "ECS App initialized successfully with expanded station network");
+            eventStack.info(EventCategory.SYSTEM, 'ecs_app_success', "ECS App initialized successfully with expanded station network");
             
         } catch (error) {
-            Logger.log(LogCategory.SYSTEM, "Failed to initialize ECS App:", error);
+            eventStack.error(EventCategory.SYSTEM, 'ecs_app_init_error', "Failed to initialize ECS App", { error: error.toString() });
             this.showEngineError(error);
             return;
         }
@@ -246,7 +262,7 @@ class ECSApp {
         // Register tick handler for time-based events
         this.timeManager.onTick((deltaTime: number, _gameTime: number) => {
             // Process any queued events
-            this.eventStack.processAll();
+            eventStack.processGameEvents();
             
             // Update train system with time-scaled delta
             this.trainSystem.update(deltaTime);
@@ -307,7 +323,7 @@ class ECSApp {
                     if (this.timeManager.isPausedState()) {
                         this.timeManager.setPaused(false);
                     }
-                    this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', `Time speed set to ${speed}x via keyboard`);
+                    eventStack.info(EventCategory.UI, 'keyboard_shortcut', `Time speed set to ${speed}x via keyboard`);
                 }
             }
             
@@ -316,49 +332,30 @@ class ECSApp {
                 ev.preventDefault();
                 const wasPaused = this.timeManager.isPausedState();
                 this.timeManager.setPaused(!wasPaused);
-                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', `Game ${wasPaused ? 'unpaused' : 'paused'} via spacebar`);
+                eventStack.info(EventCategory.UI, 'keyboard_shortcut', `Game ${wasPaused ? 'unpaused' : 'paused'} via spacebar`);
             }
             
             // Station camera focus shortcuts (Q, W, E keys)
             if (ev.key === 'q' || ev.key === 'Q') {
                 ev.preventDefault();
-                this.eventStack.emit({
-                    type: 'camera_focus_station',
-                    payload: { stationId: 'station_a' },
-                    source: 'keyboard_shortcut'
-                });
-                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focused on Central Station via Q key');
+                // Camera focus functionality to be implemented later
+                eventStack.info(EventCategory.UI, 'keyboard_shortcut', 'Camera focused on Central Station via Q key');
             }
             
             if (ev.key === 'w' || ev.key === 'W') {
                 ev.preventDefault();
-                this.eventStack.emit({
-                    type: 'camera_focus_station',
-                    payload: { stationId: 'station_b' },
-                    source: 'keyboard_shortcut'
-                });
-                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focused on Eastern Depot via W key');
+                eventStack.info(EventCategory.UI, 'keyboard_shortcut', 'Camera focused on Eastern Depot via W key');
             }
             
             if (ev.key === 'e' || ev.key === 'E') {
                 ev.preventDefault();
-                this.eventStack.emit({
-                    type: 'camera_focus_station',
-                    payload: { stationId: 'station_c' },
-                    source: 'keyboard_shortcut'
-                });
-                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focused on Northern Outpost via E key');
+                eventStack.info(EventCategory.UI, 'keyboard_shortcut', 'Camera focused on Northern Outpost via E key');
             }
             
             // Release camera focus (R key)
             if (ev.key === 'r' || ev.key === 'R') {
                 ev.preventDefault();
-                this.eventStack.emit({
-                    type: 'camera_release_station',
-                    payload: {},
-                    source: 'keyboard_shortcut'
-                });
-                this.eventStack.logEvent(LogCategory.UI, 'keyboard_shortcut', 'Camera focus released via R key');
+                eventStack.info(EventCategory.UI, 'keyboard_shortcut', 'Camera focus released via R key');
             }
         });
     }
@@ -389,7 +386,7 @@ class ECSApp {
         this.sceneManager.setCameraTarget(centralStationPosition);
         
         // Log camera setup
-        Logger.log(LogCategory.RENDERING, "Camera setup complete", {
+        eventStack.info(EventCategory.RENDERING, 'camera_setup', "Camera setup complete", {
             position: camera.position.toString(),
             target: camera.target.toString(),
             radius: camera.radius
@@ -418,7 +415,7 @@ class ECSApp {
      * TODO: Replace this manual setup with WorldSystem for procedural generation
      */
     private createStationNetwork(): void {
-        Logger.log(LogCategory.SYSTEM, "Creating expanded station network with StationManager");
+        eventStack.info(EventCategory.SYSTEM, 'station_network_init', "Creating expanded station network with StationManager");
         
         // Define standard station configurations that work with existing StationConfig interface
         const stationConfigs: StationConfig[] = [
@@ -467,7 +464,7 @@ class ECSApp {
             // Store the station
             this.stations.set(config.id, station);
             
-            Logger.log(LogCategory.SYSTEM, `Created expanded station: ${config.name} with perimeter radius ${config.perimeterRadius}`);
+            eventStack.info(EventCategory.SYSTEM, "station_created", `Created expanded station: ${config.name} with perimeter radius ${config.perimeterRadius}`);
         }
         
         // Define rail configurations
@@ -526,14 +523,14 @@ class ECSApp {
             // Store the rail
             this.rails.set(config.id, rail);
             
-            Logger.log(LogCategory.SYSTEM, `Created rail: ${config.name}`, {
+            eventStack.info(EventCategory.SYSTEM, "rail_created", `Created rail: ${config.name}`, {
                 id: config.id,
                 stationA: config.stationA,
                 stationB: config.stationB
             });
         }
         
-        Logger.log(LogCategory.SYSTEM, `Created ${this.stations.size} stations and ${this.rails.size} rail lines`);
+        eventStack.info(EventCategory.SYSTEM, "world_created", `Created ${this.stations.size} stations and ${this.rails.size} rail lines`);
         
         // Create initial train
         this.createInitialTrain();
@@ -552,7 +549,7 @@ class ECSApp {
      */
     private createUI(): void {
         // Create event log window first
-        this.eventLogUI = new EventLogUI(this.eventStack);
+        this.eventLogUI = new EventLogUI(eventStack);
         
         // Create train car modification UI
         this.trainModificationUI = new TrainCarModificationUI();
@@ -577,9 +574,27 @@ class ECSApp {
             }
         );
         
+        // Create logs button using the UI framework
+        const logsButtonGameObject = this.uiFactory.createLogsButton(
+            'logs-button',
+            'Generate Logs',
+            () => eventStack.exportLogs(),
+            {
+                style: {
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    padding: '8px 16px',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
+                    zIndex: '1000',
+                    right: '120px' // Position to the left of exit button
+                }
+            }
+        );
+        
         // Log the UI creation - this will appear in the event log
-        this.eventStack.logEvent(LogCategory.UI, 'ui_created', 'UI elements created successfully', { 
+        eventStack.info(EventCategory.UI, 'ui_created', 'UI elements created successfully', { 
             exitButton: 'exit-button',
+            logsButton: 'logs-button',
             timeControls: 'time-controls',
             eventLog: 'event-log'
         });
@@ -587,6 +602,7 @@ class ECSApp {
         // Log UI creation to traditional logger as well
         Logger.log(LogCategory.UI, 'UI elements created', { 
             exitButton: 'exit-button',
+            logsButton: 'logs-button',
             timeControls: 'time-controls',
             eventLog: 'event-log'
         });
@@ -648,7 +664,7 @@ class ECSApp {
                 updateSpeedDisplay();
                 // Log to both traditional logger and event stack
                 Logger.log(LogCategory.UI, `Time speed changed to ${speed}x`);
-                this.eventStack.logEvent(LogCategory.UI, 'time_speed_changed', `Time speed changed to ${speed}x via UI button`);
+                eventStack.info(EventCategory.UI, 'time_speed_changed', `Time speed changed to ${speed}x via UI button`);
             };
             
             speedButtons.push(timeButton);
@@ -666,7 +682,7 @@ class ECSApp {
             updateSpeedDisplay();
             // Log to both traditional logger and event stack
             Logger.log(LogCategory.UI, `Game ${wasPaused ? 'unpaused' : 'paused'}`);
-            this.eventStack.logEvent(LogCategory.UI, 'game_pause_toggle', `Game ${wasPaused ? 'unpaused' : 'paused'} via UI button`);
+            eventStack.info(EventCategory.UI, 'game_pause_toggle', `Game ${wasPaused ? 'unpaused' : 'paused'} via UI button`);
         };
 
         // Game time display
@@ -747,7 +763,7 @@ class ECSApp {
         ];
         
         // Create the train cars with scene for Entity-Level Registration
-        const trainCars = carConfigs.map(config => new TrainCar(config, this.eventStack, this.scene));
+        const trainCars = carConfigs.map(config => new TrainCar(config, eventStack, this.scene));
         
         // Get the starting station (Station A)
         const startingStation = this.stations.get('station_a');
@@ -818,7 +834,7 @@ class ECSApp {
         });
         
         // Set up smooth movement: start journey to station B after 3 seconds
-        this.eventStack.logEvent(LogCategory.TRAIN, 'train_created', `Initial train ${train.id} created at Central Station with ${trainCars.length} cars`, {
+        eventStack.info(EventCategory.TRAIN, 'train_created', `Initial train ${train.id} created at Central Station with ${trainCars.length} cars`, {
             trainId: train.id,
             position: startPosition,
             carCount: trainCars.length,
@@ -829,7 +845,7 @@ class ECSApp {
         this.trainJourneyControlsUI = new TrainJourneyControlsUI(
             train,
             this.trainSystem,
-            this.eventStack,
+            eventStack,
             this.stations,
             this.rails
         );
@@ -850,7 +866,7 @@ class ECSApp {
         // Add a single working turret to the front engine car
         const engineCar = cars[0];
         if (engineCar.carType === 'engine') {
-            const turret = AttachmentFactory.createBasicTurret(this.eventStack);
+            const turret = AttachmentFactory.createBasicTurret(eventStack);
             // Place on the top center of the engine car
             // Grid coordinates: (X=middle of length, Y=middle of width, Z=top height)
             const voxels = engineCar.getVoxels();
@@ -901,7 +917,7 @@ class ECSApp {
             }))
         };
 
-        this.eventStack.logEvent(LogCategory.TRAIN, 'demo_attachments_complete', 
+        eventStack.info(EventCategory.TRAIN, 'demo_attachments_complete', 
             `Demo turret setup complete for train ${train.id}`, totalStats);
     }
     
@@ -917,7 +933,7 @@ class ECSApp {
                 railId,
                 targetStationId
             });
-            this.eventStack.logEvent(LogCategory.TRAIN, 'journey_started', `Train ${trainId} started journey to ${targetStationId} via ${railId}`, {
+            eventStack.info(EventCategory.TRAIN, 'journey_started', `Train ${trainId} started journey to ${targetStationId} via ${railId}`, {
                 trainId,
                 railId,
                 targetStationId
@@ -928,7 +944,7 @@ class ECSApp {
                 railId,
                 targetStationId
             });
-            this.eventStack.logEvent(LogCategory.ERROR, 'journey_failed', `Failed to start train journey for ${trainId}`, {
+            eventStack.error(EventCategory.ERROR, 'journey_failed', `Failed to start train journey for ${trainId}`, {
                 trainId,
                 railId,
                 targetStationId
@@ -980,7 +996,7 @@ class ECSApp {
         
         if (confirmExit) {
             Logger.log(LogCategory.UI, "Exiting ECS App...");
-            this.eventStack.logEvent(LogCategory.SYSTEM, 'app_exit', 'ECS App is shutting down...');
+            eventStack.info(EventCategory.SYSTEM, 'app_exit', 'ECS App is shutting down...');
             
             // Stop the render loop
             this.engine.stopRenderLoop();
@@ -1113,7 +1129,7 @@ class ECSApp {
             document.head.appendChild(link);
         });
         
-        Logger.log(LogCategory.UI, 'UI CSS files loaded', { files: cssFiles });
+        eventStack.info(EventCategory.UI, 'ui_css_loaded', 'UI CSS files loaded', { files: cssFiles });
     }
     
     /**
@@ -1123,7 +1139,7 @@ class ECSApp {
         if (this.eventLogUI) {
             this.eventLogUI.toggle();
             const isVisible = !this.eventLogUI.getCollapsedState();
-            this.eventStack.logEvent(LogCategory.UI, 'event_log_toggle', `Event log ${isVisible ? 'shown' : 'hidden'}`);
+            eventStack.info(EventCategory.UI, 'event_log_toggle', `Event log ${isVisible ? 'shown' : 'hidden'}`);
         }
     }
 
@@ -1159,7 +1175,7 @@ class ECSApp {
                         cargoCapacity: 50,
                         maxHealth: 100
                     };
-                    const demoCar = new TrainCar(demoCarConfig, this.eventStack, this.scene);
+                    const demoCar = new TrainCar(demoCarConfig, eventStack, this.scene);
                     this.trainModificationUI.setCar(demoCar);
                     this.trainModificationUI.show();
                     
@@ -1167,7 +1183,7 @@ class ECSApp {
                 }
             }
             
-            this.eventStack.logEvent(LogCategory.UI, 'train_modification_ui_toggle', `Train modification UI ${isCurrentlyVisible ? 'hidden' : 'shown'}`);
+            eventStack.info(EventCategory.UI, 'train_modification_ui_toggle', `Train modification UI ${isCurrentlyVisible ? 'hidden' : 'shown'}`);
         }
     }
 

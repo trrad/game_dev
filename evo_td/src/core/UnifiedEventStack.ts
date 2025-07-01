@@ -1,10 +1,10 @@
 /**
- * Event & Logging System
+ * Unified Event & Logging System
  * Simple fancy print messages with categories and levels
  */
 
 export enum EventCategory {
-    // Game/User events (visible to players) - ALWAYS enabled by default
+    // Game/User events (visible to players)
     GAME = 'game',
     TRAIN = 'train',
     ENEMY = 'enemy',
@@ -12,38 +12,13 @@ export enum EventCategory {
     ECONOMY = 'economy',
     STATION = 'station',
     
-    // Technical/Debug events (for developers) - disabled by default, enable as needed
+    // Technical/Debug events (for developers)
     RENDERING = 'rendering',
     ATTACHMENT = 'attachment',
     SYSTEM = 'system',
     UI = 'ui',
-    
-    // Error events - ALWAYS enabled
     ERROR = 'error'
 }
-
-/**
- * Categories that are enabled by default (game events + errors)
- */
-export const DEFAULT_ENABLED_CATEGORIES: EventCategory[] = [
-    EventCategory.GAME,
-    EventCategory.TRAIN,
-    EventCategory.ENEMY,
-    EventCategory.COMBAT,
-    EventCategory.ECONOMY,
-    EventCategory.STATION,
-    EventCategory.ERROR
-];
-
-/**
- * Debug categories that can be enabled for specific development tasks
- */
-export const DEBUG_CATEGORIES: EventCategory[] = [
-    EventCategory.RENDERING,
-    EventCategory.ATTACHMENT,
-    EventCategory.SYSTEM,
-    EventCategory.UI
-];
 
 export enum LogLevel {
     ERROR = 0,
@@ -81,9 +56,9 @@ export interface EventStackConfig {
 export type EventListener = (entry: EventEntry) => void;
 
 /**
- * Event Stack - handles all logging and events
+ * Unified Event Stack - handles all logging and events
  */
-export class EventStack {
+export class UnifiedEventStack {
     private config: EventStackConfig;
     private eventBuffer: EventEntry[] = [];
     private listeners: EventListener[] = [];
@@ -92,25 +67,21 @@ export class EventStack {
     // Executable events (for game state changes)
     private gameEvents: Array<{ type: string; execute: () => void; payload?: any }> = [];
 
-    // Subscribers for specific game events
-    private eventSubscribers: Map<string, Array<(event: any) => void>> = new Map();
-
     constructor(config: Partial<EventStackConfig> = {}) {
         this.config = {
             maxBufferSize: 1000,
             consoleOutputEnabled: false, // Off by default as requested
             fileLoggingEnabled: true,
-            enabledCategories: new Set(DEFAULT_ENABLED_CATEGORIES), // Only game events + errors by default
+            enabledCategories: new Set(Object.values(EventCategory)),
             minLogLevel: LogLevel.INFO,
             showVerboseEvents: false, // Simple boolean for high-frequency events
             ...config
         };
 
-        this.info(EventCategory.SYSTEM, 'eventstack_init', 'Event Stack initialized', {
+        this.info(EventCategory.SYSTEM, 'eventstack_init', 'Unified Event Stack initialized', {
             showVerboseEvents: this.config.showVerboseEvents,
             minLogLevel: LogLevel[this.config.minLogLevel],
-            enabledCategories: Array.from(this.config.enabledCategories),
-            debugCategoriesAvailable: DEBUG_CATEGORIES
+            enabledCategories: Array.from(this.config.enabledCategories)
         });
     }
 
@@ -237,82 +208,6 @@ export class EventStack {
     }
 
     /**
-     * Emit a game event (not a log event) that other systems can subscribe to
-     */
-    emit(event: { type: string; payload?: any; source?: string }): void {
-        // Add to game events queue for processing
-        this.pushGameEvent({
-            type: event.type,
-            execute: () => {
-                // Notify specific event subscribers
-                this.notifyEventSubscribers(event.type, event);
-            },
-            payload: event.payload
-        });
-        
-        // Also log it as a debug event
-        this.debug(
-            EventCategory.GAME,
-            'game_event_emitted',
-            `Game event emitted: ${event.type}`,
-            event.payload,
-            event.source || 'Unknown'
-        );
-    }
-
-    /**
-     * Subscribe to specific game event types
-     */
-    subscribe(eventType: string, callback: (event: any) => void): () => void {
-        if (!this.eventSubscribers.has(eventType)) {
-            this.eventSubscribers.set(eventType, []);
-        }
-        
-        this.eventSubscribers.get(eventType)!.push(callback);
-        
-        this.debug(
-            EventCategory.SYSTEM,
-            'event_subscription',
-            `Subscribed to event type: ${eventType}`,
-            { eventType },
-            'EventStack'
-        );
-        
-        // Return unsubscribe function
-        return () => {
-            const callbacks = this.eventSubscribers.get(eventType);
-            if (callbacks) {
-                const index = callbacks.indexOf(callback);
-                if (index > -1) {
-                    callbacks.splice(index, 1);
-                }
-            }
-        };
-    }
-
-    /**
-     * Notify subscribers of specific event types
-     */
-    private notifyEventSubscribers(eventType: string, event: any): void {
-        const callbacks = this.eventSubscribers.get(eventType);
-        if (callbacks) {
-            callbacks.forEach(callback => {
-                try {
-                    callback(event);
-                } catch (error) {
-                    this.error(
-                        EventCategory.ERROR,
-                        'event_callback_error',
-                        `Error in event subscriber for ${eventType}`,
-                        { eventType, error: error.toString() },
-                        'EventStack'
-                    );
-                }
-            });
-        }
-    }
-
-    /**
      * Buffer management
      */
     private addToBuffer(entry: EventEntry): void {
@@ -389,15 +284,6 @@ export class EventStack {
         }
     }
 
-    /**
-     * Subscribe to event log entries (UI compatibility method)
-     * Returns an unsubscribe function
-     */
-    onEventLog(callback: (entry: EventEntry) => void): () => void {
-        this.addListener(callback);
-        return () => this.removeListener(callback);
-    }
-
     private notifyListeners(entry: EventEntry): void {
         this.listeners.forEach(listener => {
             try {
@@ -425,13 +311,6 @@ export class EventStack {
 
     getRecentEvents(maxCount: number = 100): EventEntry[] {
         return this.getAllEvents().slice(-maxCount);
-    }
-
-    /**
-     * Get recent event log entries (UI compatibility method)
-     */
-    getRecentEventLog(maxCount: number = 100): EventEntry[] {
-        return this.getRecentEvents(maxCount);
     }
 
     /**
@@ -563,195 +442,7 @@ export class EventStack {
         this.gameEvents = [];
         this.info(EventCategory.SYSTEM, 'eventstack_disposed', 'Event stack disposed');
     }
-
-    /**
-     * Scene-level debug category management
-     */
-    
-    /**
-     * Enable a debug category for development work
-     */
-    enableDebugCategory(category: EventCategory): boolean {
-        if (!DEBUG_CATEGORIES.includes(category)) {
-            this.warn(EventCategory.SYSTEM, 'invalid_debug_category', 
-                `Cannot enable ${category} - not a debug category`, 
-                { category, availableDebugCategories: DEBUG_CATEGORIES });
-            return false;
-        }
-        
-        const wasEnabled = this.config.enabledCategories.has(category);
-        this.config.enabledCategories.add(category);
-        
-        if (!wasEnabled) {
-            this.info(EventCategory.SYSTEM, 'debug_category_enabled', 
-                `Debug category '${category}' enabled for this session`, 
-                { category, totalEnabledCategories: this.config.enabledCategories.size });
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Disable a debug category to reduce log noise
-     */
-    disableDebugCategory(category: EventCategory): boolean {
-        if (category === EventCategory.ERROR) {
-            this.warn(EventCategory.SYSTEM, 'cannot_disable_errors', 
-                'Cannot disable ERROR category - errors are always logged');
-            return false;
-        }
-        
-        const wasEnabled = this.config.enabledCategories.has(category);
-        this.config.enabledCategories.delete(category);
-        
-        if (wasEnabled) {
-            this.info(EventCategory.SYSTEM, 'debug_category_disabled', 
-                `Debug category '${category}' disabled for this session`, 
-                { category, totalEnabledCategories: this.config.enabledCategories.size });
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Enable multiple debug categories at once
-     */
-    enableDebugCategories(categories: EventCategory[]): EventCategory[] {
-        const enabled: EventCategory[] = [];
-        categories.forEach(category => {
-            if (this.enableDebugCategory(category)) {
-                enabled.push(category);
-            }
-        });
-        
-        if (enabled.length > 0) {
-            this.info(EventCategory.SYSTEM, 'multiple_debug_categories_enabled', 
-                `Enabled ${enabled.length} debug categories`, 
-                { enabledCategories: enabled });
-        }
-        
-        return enabled;
-    }
-    
-    /**
-     * Disable multiple debug categories at once
-     */
-    disableDebugCategories(categories: EventCategory[]): EventCategory[] {
-        const disabled: EventCategory[] = [];
-        categories.forEach(category => {
-            if (this.disableDebugCategory(category)) {
-                disabled.push(category);
-            }
-        });
-        
-        if (disabled.length > 0) {
-            this.info(EventCategory.SYSTEM, 'multiple_debug_categories_disabled', 
-                `Disabled ${disabled.length} debug categories`, 
-                { disabledCategories: disabled });
-        }
-        
-        return disabled;
-    }
-    
-    /**
-     * Enable all debug categories (for comprehensive debugging)
-     */
-    enableAllDebugCategories(): void {
-        const previouslyEnabled = Array.from(this.config.enabledCategories);
-        DEBUG_CATEGORIES.forEach(category => {
-            this.config.enabledCategories.add(category);
-        });
-        
-        this.info(EventCategory.SYSTEM, 'all_debug_categories_enabled', 
-            'All debug categories enabled for comprehensive debugging', 
-            { 
-                previouslyEnabled,
-                nowEnabled: Array.from(this.config.enabledCategories),
-                debugCategoriesEnabled: DEBUG_CATEGORIES
-            });
-    }
-    
-    /**
-     * Reset to default categories (game events + errors only)
-     */
-    resetToDefaultCategories(): void {
-        const previousCategories = Array.from(this.config.enabledCategories);
-        this.config.enabledCategories = new Set(DEFAULT_ENABLED_CATEGORIES);
-        
-        this.info(EventCategory.SYSTEM, 'categories_reset_to_default', 
-            'Event categories reset to default (game events + errors only)', 
-            { 
-                previousCategories,
-                defaultCategories: DEFAULT_ENABLED_CATEGORIES,
-                disabledDebugCategories: DEBUG_CATEGORIES
-            });
-    }
-    
-    /**
-     * Get current category status
-     */
-    getCategoryStatus(): { enabled: EventCategory[], disabled: EventCategory[], debugAvailable: EventCategory[] } {
-        const allCategories = Object.values(EventCategory);
-        const enabled = allCategories.filter(cat => this.config.enabledCategories.has(cat));
-        const disabled = allCategories.filter(cat => !this.config.enabledCategories.has(cat));
-        
-        return {
-            enabled,
-            disabled,
-            debugAvailable: DEBUG_CATEGORIES
-        };
-    }
 }
 
-// Create and export the global eventStack instance
-export const eventStack = new EventStack();
-
-// Type alias for backward compatibility with UI
-export type EventLogEntry = EventEntry;
-
-// =============================================================================
-// GLOBAL CONVENIENCE FUNCTIONS for Debug Category Management
-// =============================================================================
-
-/**
- * Quick functions for enabling debug categories during development
- * These can be called from anywhere in the codebase or browser console
- */
-
-// Enable specific debug categories
-export const enableRenderingDebug = () => eventStack.enableDebugCategory(EventCategory.RENDERING);
-export const enableSystemDebug = () => eventStack.enableDebugCategory(EventCategory.SYSTEM);
-export const enableUIDebug = () => eventStack.enableDebugCategory(EventCategory.UI);
-export const enableAttachmentDebug = () => eventStack.enableDebugCategory(EventCategory.ATTACHMENT);
-
-// Disable specific debug categories
-export const disableRenderingDebug = () => eventStack.disableDebugCategory(EventCategory.RENDERING);
-export const disableSystemDebug = () => eventStack.disableDebugCategory(EventCategory.SYSTEM);
-export const disableUIDebug = () => eventStack.disableDebugCategory(EventCategory.UI);
-export const disableAttachmentDebug = () => eventStack.disableDebugCategory(EventCategory.ATTACHMENT);
-
-// Bulk operations
-export const enableAllDebugCategories = () => eventStack.enableAllDebugCategories();
-export const resetToGameEventsOnly = () => eventStack.resetToDefaultCategories();
-
-// Status checking
-export const getDebugCategoryStatus = () => eventStack.getCategoryStatus();
-
-// Quick debug category combinations for common development scenarios
-export const enableCombatDebug = () => {
-    eventStack.enableDebugCategories([EventCategory.ATTACHMENT, EventCategory.SYSTEM]);
-    eventStack.info(EventCategory.SYSTEM, 'combat_debug_enabled', 
-        'Combat debug mode enabled - showing attachment and system events');
-};
-
-export const enableVisualDebug = () => {
-    eventStack.enableDebugCategories([EventCategory.RENDERING, EventCategory.UI]);
-    eventStack.info(EventCategory.SYSTEM, 'visual_debug_enabled', 
-        'Visual debug mode enabled - showing rendering and UI events');
-};
-
-export const enableTrainDebug = () => {
-    eventStack.enableDebugCategories([EventCategory.SYSTEM]);
-    eventStack.info(EventCategory.SYSTEM, 'train_debug_enabled', 
-        'Train debug mode enabled - showing system events for train operations');
-};
+// Create and export a global instance
+export const eventStack = new UnifiedEventStack();

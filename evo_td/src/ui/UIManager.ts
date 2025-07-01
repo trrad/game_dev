@@ -9,7 +9,7 @@ import { EventLogUI } from "./EventLogUI";
 import { UIFactory } from "./UIFactory";
 import { UISystem } from "../systems/UISystem";
 import { TimeManager } from "../core/TimeManager";
-import { EventStack } from "../core/EventStack";
+import { EventStack, EventCategory } from "../core/EventStack";
 import { Logger, LogCategory } from "../utils/Logger";
 
 export class UIManager {
@@ -77,7 +77,7 @@ export class UIManager {
             this.setupKeyboardShortcuts();
             
             // Log successful creation
-            eventStack.logEvent(LogCategory.UI, 'ui_initialized', 'UI components created successfully');
+            eventStack.info(EventCategory.UI, 'ui_initialized', 'UI components created successfully', null, 'UIManager');
             
             Logger.log(LogCategory.UI, 'UI components created', { 
                 exitButton: 'exit-button',

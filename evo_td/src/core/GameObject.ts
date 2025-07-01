@@ -11,6 +11,7 @@ import type { Component } from './Component';
 import { Logger, LogCategory } from '../utils/Logger';
 import { ObjectTracker } from '../utils/ObjectTracker';
 import type { EventStack } from './EventStack';
+import { EventCategory } from './EventStack';
 import type { Scene } from '@babylonjs/core';
 
 let nextGameObjectId = 1;
@@ -52,8 +53,8 @@ export class GameObject implements GameObjectEventEmitter {
         
         // Log creation event to EventStack if available
         if (this.eventStack) {
-            this.eventStack.logEvent(LogCategory.SYSTEM, 'object_created', 
-                `${this.type} ${this.id} created`, { objectId: this.id, type: this.type });
+            this.eventStack.info(EventCategory.SYSTEM, 'object_created', 
+                `${this.type} ${this.id} created`, { objectId: this.id, type: this.type }, 'GameObject');
         }
     }
 
@@ -178,7 +179,9 @@ export class GameObject implements GameObjectEventEmitter {
                 timestamp: Date.now()
             };
             
-            this.eventStack.logEvent(eventCategory, event, eventMessage, eventPayload);
+            // Map LogCategory to EventCategory
+            const mappedCategory = this.mapToEventCategory(eventCategory);
+            this.eventStack.info(mappedCategory, event, eventMessage, eventPayload, 'GameObject');
         }
         
         // Log event for observability (local)
@@ -202,6 +205,40 @@ export class GameObject implements GameObjectEventEmitter {
         
         // Default to SYSTEM for general game object events
         return LogCategory.SYSTEM;
+    }
+
+    /**
+     * Map LogCategory to EventCategory for EventStack compatibility.
+     */
+    private mapToEventCategory(logCategory: LogCategory): EventCategory {
+        switch (logCategory) {
+            case LogCategory.TRAIN:
+                return EventCategory.TRAIN;
+            case LogCategory.ENEMY:
+                return EventCategory.ENEMY;
+            case LogCategory.UI:
+                return EventCategory.UI;
+            case LogCategory.ECONOMY:
+                return EventCategory.ECONOMY;
+            case LogCategory.ATTACHMENT:
+                return EventCategory.ATTACHMENT;
+            case LogCategory.RENDERING:
+                return EventCategory.RENDERING;
+            case LogCategory.ERROR:
+                return EventCategory.ERROR;
+            case LogCategory.GAME:
+                return EventCategory.GAME;
+            case LogCategory.STATION:
+                return EventCategory.STATION;
+            case LogCategory.COMBAT:
+                return EventCategory.COMBAT;
+            case LogCategory.SYSTEM:
+            case LogCategory.NETWORK:
+            case LogCategory.PERFORMANCE:
+            case LogCategory.DEBUG:
+            default:
+                return EventCategory.SYSTEM;
+        }
     }
 
     /**
@@ -240,8 +277,8 @@ export class GameObject implements GameObjectEventEmitter {
         
         // Log disposal to EventStack before cleanup
         if (this.eventStack) {
-            this.eventStack.logEvent(LogCategory.SYSTEM, 'object_disposed', 
-                `${this.type} ${this.id} disposed`, { objectId: this.id, type: this.type });
+            this.eventStack.info(EventCategory.SYSTEM, 'object_disposed', 
+                `${this.type} ${this.id} disposed`, { objectId: this.id, type: this.type }, 'GameObject');
         }
         
         this.emitEvent({ type: 'object_disposing', objectId: this.id });

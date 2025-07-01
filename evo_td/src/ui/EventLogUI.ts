@@ -3,7 +3,7 @@
  * Provides a toggleable event/console log window for game events
  */
 
-import { EventStack, EventLogEntry } from "../core/EventStack";
+import { EventStack, EventLogEntry, EventCategory } from "../core/EventStack";
 import { LogCategory } from "../utils/Logger";
 import { CSS_CLASSES, defaultUIConfig } from "./assets/ui-config";
 
@@ -225,10 +225,45 @@ export class EventLogUI {
     }
 
     /**
+     * Map LogCategory to EventCategory for EventStack compatibility.
+     */
+    private mapToEventCategory(logCategory: LogCategory): EventCategory {
+        switch (logCategory) {
+            case LogCategory.TRAIN:
+                return EventCategory.TRAIN;
+            case LogCategory.ENEMY:
+                return EventCategory.ENEMY;
+            case LogCategory.UI:
+                return EventCategory.UI;
+            case LogCategory.ECONOMY:
+                return EventCategory.ECONOMY;
+            case LogCategory.ATTACHMENT:
+                return EventCategory.ATTACHMENT;
+            case LogCategory.RENDERING:
+                return EventCategory.RENDERING;
+            case LogCategory.ERROR:
+                return EventCategory.ERROR;
+            case LogCategory.GAME:
+                return EventCategory.GAME;
+            case LogCategory.STATION:
+                return EventCategory.STATION;
+            case LogCategory.COMBAT:
+                return EventCategory.COMBAT;
+            case LogCategory.SYSTEM:
+            case LogCategory.NETWORK:
+            case LogCategory.PERFORMANCE:
+            case LogCategory.DEBUG:
+            default:
+                return EventCategory.SYSTEM;
+        }
+    }
+
+    /**
      * Add a custom event to the log
      */
     public logEvent(category: LogCategory, message: string, payload?: any): void {
-        this.eventStack.logEvent(category, 'ui_event', message, payload);
+        const eventCategory = this.mapToEventCategory(category);
+        this.eventStack.info(eventCategory, 'ui_event', message, payload, 'EventLogUI');
     }
 
     /**
@@ -236,7 +271,6 @@ export class EventLogUI {
      */
     public setMaxEntries(max: number): void {
         this.maxEntries = max;
-        this.eventStack.setMaxLogEntries(max);
         
         // Trim existing entries if needed
         while (this.content.children.length > this.maxEntries) {

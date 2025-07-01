@@ -5,7 +5,7 @@
 import { Projectile, ProjectileConfig } from '../entities/Projectile';
 import { ProjectileRenderer } from '../renderers/ProjectileRenderer';
 import { TimeManager } from '../core/TimeManager';
-import { EventStack } from '../core/EventStack';
+import { EventStack, EventCategory } from '../core/EventStack';
 import { SceneManager } from '../core/SceneManager';
 import { Logger, LogCategory } from '../utils/Logger';
 
@@ -109,13 +109,13 @@ export class ProjectileSystem {
         this.projectiles.set(projectile.id, projectile);
 
         // Log projectile creation
-        this.eventStack?.logEvent(LogCategory.ATTACHMENT, 'projectile_fired', 
+        this.eventStack?.info(EventCategory.ATTACHMENT, 'projectile_fired', 
             `Projectile fired from ${projectileData.attackData.attachmentId}`, {
                 projectileId: projectile.id,
                 projectileType: projectileConfig.projectileType,
                 targetId: projectileData.attackData.targetId,
                 speed: projectileConfig.speed
-            });
+            }, 'ProjectileSystem');
 
         Logger.log(LogCategory.SYSTEM, `Created projectile: ${projectile.id}`, {
             type: projectileConfig.projectileType,
@@ -192,14 +192,14 @@ export class ProjectileSystem {
         }
 
         // Log the impact
-        this.eventStack?.logEvent(LogCategory.ATTACHMENT, 'projectile_impact', 
+        this.eventStack?.info(EventCategory.ATTACHMENT, 'projectile_impact', 
             `Projectile reached target ${attackData.targetId}`, {
                 projectileId: projectile.id,
                 targetId: attackData.targetId,
                 damage: attackData.damage,
                 isHit: attackData.isHit,
                 visualOnly: attackData.visualOnly || false
-            });
+            }, 'ProjectileSystem');
 
         Logger.log(LogCategory.SYSTEM, `Projectile impact: ${projectile.id}`, {
             targetId: attackData.targetId,

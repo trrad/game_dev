@@ -46,6 +46,17 @@ const DefaultStyles = {
         margin: '5px 0',
         pointerEvents: 'auto',
         transition: 'background-color 0.2s'
+    },
+    LOGS_BUTTON: {
+        backgroundColor: '#3366aa',
+        color: 'white',
+        padding: '8px 16px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        border: 'none',
+        margin: '5px 0',
+        pointerEvents: 'auto',
+        transition: 'background-color 0.2s'
     }
 };
 
@@ -192,6 +203,55 @@ export class UIFactory {
         return this.uiSystem.createUIElement(config);
     }
     
+    /**
+     * Create a logs button with the default style
+     */
+    createLogsButton(
+        id: string,
+        text: string = 'Generate Logs',
+        onClick: () => void,
+        options: {
+            parent?: string;
+            position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+            style?: Partial<UIElementStyle>;
+        } = {}
+    ): GameObject {
+        // Calculate position based on option
+        let positionStyle: Partial<UIElementStyle> = {};
+        switch(options.position) {
+            case 'top-left':
+                positionStyle = { position: 'absolute', top: '10px', left: '10px' };
+                break;
+            case 'top-right':
+                positionStyle = { position: 'absolute', top: '10px', right: '10px' };
+                break;
+            case 'bottom-left':
+                positionStyle = { position: 'absolute', bottom: '10px', left: '10px' };
+                break;
+            case 'bottom-right':
+                positionStyle = { position: 'absolute', bottom: '10px', right: '10px' };
+                break;
+            default:
+                positionStyle = { position: 'absolute', top: '10px', right: '120px' }; // Default to right of exit button
+                break;
+        }
+        
+        const config: UIElementConfig = {
+            id,
+            type: UIElementType.BUTTON,
+            text,
+            parent: options.parent,
+            onClick,
+            style: {
+                ...DefaultStyles.LOGS_BUTTON,
+                ...positionStyle,
+                ...options.style
+            }
+        };
+        
+        return this.uiSystem.createUIElement(config);
+    }
+
     /**
      * Create a label with the default style
      */

@@ -11,7 +11,7 @@ import { MovementComponent } from '../components/MovementComponent';
 import { RailMovementComponent } from '../components/RailMovementComponent';
 import { AIBehaviorComponent, AIState, HuntingStrategy, SocialBehavior } from '../components/AIBehaviorComponent';
 import { TimeManager } from '../core/TimeManager';
-import { EventStack } from '../core/EventStack';
+import { EventStack, EventCategory } from '../core/EventStack';
 import { SceneManager } from '../core/SceneManager';
 import { Rail } from '../entities/Rail';
 import { Train } from '../entities/Train';
@@ -304,12 +304,12 @@ export class EnemySystem {
         this.enemies.set(enemy.id, enemy);
 
         // Log spawn event
-        this.eventStack?.logEvent(LogCategory.ENEMY, 'enemy_spawned', `${enemyType} enemy spawned`, {
+        this.eventStack?.info(EventCategory.ENEMY, 'enemy_spawned', `${enemyType} enemy spawned`, {
             enemyId: enemy.id,
             enemyType,
             position: spawnPosition,
             totalEnemies: this.enemies.size
-        });
+        }, 'EnemySystem');
 
         Logger.log(LogCategory.SYSTEM, `Spawned ${enemyType} enemy: ${enemy.id} (${this.enemies.size}/${this.spawnConfig.maxEnemies})`, {
             position: spawnPosition,
@@ -634,10 +634,10 @@ export class EnemySystem {
         this.enemies.delete(enemyId);
 
         // Log removal event
-        this.eventStack?.logEvent(LogCategory.ENEMY, 'enemy_removed', `Enemy destroyed`, {
+        this.eventStack?.info(EventCategory.ENEMY, 'enemy_removed', `Enemy destroyed`, {
             enemyId,
             remainingEnemies: this.enemies.size
-        });
+        }, 'EnemySystem');
 
         Logger.log(LogCategory.SYSTEM, `Removed enemy: ${enemyId}`, {
             remainingEnemies: this.enemies.size
@@ -772,12 +772,12 @@ export class EnemySystem {
         Logger.log(LogCategory.ENEMY, `Enemy ${contactingEnemy.id} reached train! Dealing ${damage} damage`);
 
         // Log the contact event
-        this.eventStack?.logEvent(LogCategory.ENEMY, 'enemy_train_contact',
+        this.eventStack?.info(EventCategory.ENEMY, 'enemy_train_contact',
             `Enemy reached train and dealt ${damage} damage`, {
                 enemyId: contactingEnemy.id,
                 damage,
                 position: enemyPos
-            });
+            }, 'EnemySystem');
 
         // Destroy the enemy (they sacrifice themselves in the attack)
         const healthComponent = contactingEnemy.getComponent<HealthComponent>('health');
@@ -892,18 +892,18 @@ export class EnemySystem {
                             enemy.takeDamage(damage);
                             const healthAfter = enemy.getComponent<HealthComponent>('health')?.getHealth() || 0;
                             
-                            this.eventStack?.logEvent(LogCategory.ENEMY, 'turret_hit_immediate', 
+                            this.eventStack?.info(EventCategory.ENEMY, 'turret_hit_immediate', 
                                 `Turret hit enemy ${targetId} for ${damage} damage (immediate)`, {
                                 targetId, damage, healthBefore, healthAfter, weaponType: 'turret'
-                            });
+                            }, 'EnemySystem');
 
                             // Mark enemy for visual cleanup delay if killed
                             if (enemy.isDead()) {
                                 this.markEnemyForServerSideDelayedCleanup(enemy, turretPosition, targetPosition, 15); // 15 = projectile speed
                             }
                         } else if (!isHit) {
-                            this.eventStack?.logEvent(LogCategory.ENEMY, 'turret_miss_immediate', 
-                                `Turret missed enemy ${targetId}`, { targetId, weaponType: 'turret' });
+                            this.eventStack?.info(EventCategory.ENEMY, 'turret_miss_immediate', 
+                                `Turret missed enemy ${targetId}`, { targetId, weaponType: 'turret' }, 'EnemySystem');
                         }
 
                         // VISUAL PROJECTILE (client-side effect)
@@ -1082,11 +1082,11 @@ export class EnemySystem {
             enemyType: 'basic' // Simplified for now
         });
 
-        this.eventStack?.logEvent(LogCategory.ENEMY, 'enemy_killed', 
+        this.eventStack?.info(EventCategory.ENEMY, 'enemy_killed', 
             `Enemy ${enemy.id} was destroyed`, {
             enemyId: enemy.id,
             position: enemy.getPosition()
-        });
+        }, 'EnemySystem');
 
         // Use the proper removal method which handles all cleanup
         this.removeEnemy(enemy.id);

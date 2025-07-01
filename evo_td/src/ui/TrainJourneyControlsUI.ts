@@ -6,7 +6,7 @@
 import { Train } from "../entities/Train";
 import { Station } from "../entities/Station";
 import { TrainSystem } from "../systems/TrainSystem";
-import { EventStack } from "../core/EventStack";
+import { EventStack, EventCategory } from "../core/EventStack";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 
@@ -172,11 +172,11 @@ export class TrainJourneyControlsUI {
         this.container.style.display = 'block';
         
         // Log to event stack
-        this.eventStack.logEvent(LogCategory.UI, 'station_ui_shown', `Journey controls shown for ${stationConfig.name}`, {
+        this.eventStack.info(EventCategory.UI, 'station_ui_shown', `Journey controls shown for ${stationConfig.name}`, {
             stationId: stationConfig.id,
             stationName: stationConfig.name,
             availableDestinations: journeyOptions.length
-        });
+        }, 'TrainJourneyControlsUI');
     }
 
     /**
@@ -187,7 +187,7 @@ export class TrainJourneyControlsUI {
             this.container.style.display = 'none';
             this.currentStationId = null;
             
-            this.eventStack.logEvent(LogCategory.UI, 'station_ui_hidden', 'Journey controls hidden - train not at station');
+            this.eventStack.info(EventCategory.UI, 'station_ui_hidden', 'Journey controls hidden - train not at station', null, 'TrainJourneyControlsUI');
         }
     }
 
@@ -232,23 +232,23 @@ export class TrainJourneyControlsUI {
             const destinationStation = this.stations.get(destinationStationId);
             const destinationName = destinationStation ? (destinationStation as any)._config.name : destinationStationId;
             
-            this.eventStack.logEvent(LogCategory.TRAIN, 'journey_initiated_by_player', `Player started journey to ${destinationName}`, {
+            this.eventStack.info(EventCategory.TRAIN, 'journey_initiated_by_player', `Player started journey to ${destinationName}`, {
                 trainId: this.train.id,
                 railId,
                 destinationStationId,
                 destinationName
-            });
+            }, 'TrainJourneyControlsUI');
         } else {
             // If journey failed, we might want to show controls again after a brief delay
             setTimeout(() => {
                 this.updateUI();
             }, 100);
             
-            this.eventStack.logEvent(LogCategory.ERROR, 'journey_start_failed', `Failed to start journey to ${destinationStationId}`, {
+            this.eventStack.error(EventCategory.ERROR, 'journey_start_failed', `Failed to start journey to ${destinationStationId}`, {
                 trainId: this.train.id,
                 railId,
                 destinationStationId
-            });
+            }, 'TrainJourneyControlsUI');
         }
     }
 
