@@ -325,10 +325,9 @@ Remember: This is an ECS-based game engine. Always think in terms of entities, c
 
 ### Common Gotchas for AI Assistants
 - **Don't reference** non-existent managers (InputManager, NetworkManager, AudioManager)
-- **Entry point** is ecs-app.ts, not app.ts or main.ts
 - **Components** have methods and behavior, not just data (it's a pragmatic ECS)
 - **No initialize()** methods - everything initializes in constructors
-- **Math operations** should use MathUtils/GeometryUtils, not inline calculations
+- **Math operations** should often use MathUtils/GeometryUtils, not inline calculations
 - **Logging** should use Logger with proper categories, not console.log
 - **All entities** inherit from GameObject and use component composition
 

@@ -11,11 +11,15 @@ Every class should include built-in observability from creation, not added as an
 
 ```typescript
 // ✅ GOOD: Built-in observability
-export class TrainSystem extends SystemManager {
+export class TrainSystem {
+    private metrics: Map<string, number> = new Map();
+    
     constructor() {
-        super('TrainSystem');
+        // Initialize metrics tracking
         this.metrics.set('trains_updated', 0);
         this.metrics.set('journeys_started', 0);
+        
+        Logger.log(LogCategory.SYSTEM, 'TrainSystem initialized');
     }
     
     private updateTrain(train: Train): void {
@@ -23,8 +27,8 @@ export class TrainSystem extends SystemManager {
         
         // ... update logic ...
         
-        this.logMetric('trains_updated', 1);
-        this.logMetric('update_time_ms', performance.now() - startTime);
+        this.metrics.set('trains_updated', this.metrics.get('trains_updated')! + 1);
+        this.metrics.set('update_time_ms', performance.now() - startTime);
     }
 }
 
@@ -60,17 +64,29 @@ export class MovableTrain extends InventoryTrain extends BaseTrain {
 Systems communicate through events, not direct method calls, to maintain loose coupling.
 
 ```typescript
-// ✅ GOOD: Event-driven
-export class TrainSystem extends SystemManager {
+// ✅ GOOD: Event-driven communication using EventStack
+export class TrainSystem {
+    private eventStack: EventStack | null = null;
+    
+    constructor() {
+        // System initialization
+        Logger.log(LogCategory.SYSTEM, 'TrainSystem initialized');
+    }
+    
+    setEventStack(eventStack: EventStack): void {
+        this.eventStack = eventStack;
+    }
+    
     private startJourney(train: Train, railId: string): void {
         // ... journey logic ...
         
-        this.emitEvent({
-            type: 'journey_started',
-            trainId: train.id,
-            railId: railId,
-            timestamp: performance.now()
-        });
+        if (this.eventStack) {
+            this.eventStack.logEvent(EventCategory.SYSTEM, 'journey_started', {
+                trainId: train.id,
+                railId: railId,
+                timestamp: performance.now()
+            });
+        }
     }
 }
 
@@ -386,25 +402,36 @@ export class Train extends GameObject {
 ## System Design Patterns
 
 ### System Structure
-- **SystemManager Base**: Extend SystemManager for consistent interfaces
-- **Event Integration**: Subscribe to relevant events in constructor
-- **Metrics Collection**: Track performance and behavior metrics
-- **Error Resilience**: Handle component failures gracefully
+- **Plain System Classes**: Systems are regular TypeScript classes with standard patterns
+- **Dependency Injection**: Systems receive dependencies via setter methods (setTimeManager, setEventStack)
+- **Metrics Collection**: Track performance and behavior metrics using Map-based storage
+- **Error Resilience**: Handle component failures gracefully with try-catch blocks
+
+> **TODO**: Consider implementing a general SystemManager base class that individual systems can extend for consistency. Currently systems are plain classes following established patterns.
 
 ```typescript
-// ✅ GOOD: Well-structured system
-export class TrainSystem extends SystemManager {
+// ✅ GOOD: Well-structured system following current patterns
+export class TrainSystem {
     private trains = new Map<string, Train>();
+    private metrics = new Map<string, number>();
+    private timeManager: TimeManager | null = null;
+    private eventStack: EventStack | null = null;
     
     constructor() {
-        super('TrainSystem');
-        
         // Initialize metrics
         this.metrics.set('active_trains', 0);
         this.metrics.set('journeys_completed', 0);
         this.metrics.set('average_update_time', 0);
         
         Logger.log(LogCategory.SYSTEM, 'TrainSystem initialized');
+    }
+    
+    setTimeManager(timeManager: TimeManager): void {
+        this.timeManager = timeManager;
+    }
+    
+    setEventStack(eventStack: EventStack): void {
+        this.eventStack = eventStack;
     }
     
     public update(deltaTime: number): void {
@@ -444,6 +471,12 @@ export class TrainSystem extends SystemManager {
 - **Centralized Utilities**: Use `MathUtils` and `GeometryUtils` for common operations
 - **Performance Considerations**: Avoid unnecessary calculations in hot paths
 - **Precision Handling**: Use appropriate precision for game requirements
+
+### Babylon.JS Integration
+- **Scene Management**: Use SceneManager for coordinating 3D rendering with Babylon.JS
+- **Standard Patterns**: Follow Babylon.JS best practices for mesh creation, materials, and scene organization
+- **Resource Management**: Properly dispose of Babylon.JS resources (meshes, textures, materials)
+- **Performance**: Leverage Babylon.JS optimization features (culling, level of detail, etc.)
 
 ```typescript
 // ✅ GOOD: Using centralized utilities
@@ -624,16 +657,22 @@ describe('HealthComponent', () => {
 
 ### 🔨 Partially Implemented Standards
 - **Observable by Design**: Some systems have metrics (TrainSystem, EnemySystem), but not all classes include built-in observability
-- **Event-Driven Communication**: Basic event emission exists on GameObject, but full event-driven system communication is incomplete
+- **Event-Driven Communication**: Basic event logging exists via EventStack, but full event-driven system communication is incomplete
 - **Error Handling**: Basic try-catch exists in some places, but comprehensive error boundaries and handling patterns need expansion
 - **Testing Structure**: Test files exist but comprehensive coverage is incomplete
 
 ### 📋 Standards Needing Implementation  
 - **Deterministic Game Logic**: No seeded RNG system implemented yet (still uses Math.random() in some places)
-- **Performance Monitoring**: No systematic performance metrics collection
-- **Resource Management**: No object pooling or systematic resource lifecycle management
+- **Performance Monitoring**: No systematic performance metrics collection across all systems
+- **Resource Management**: Limited object pooling or systematic resource lifecycle management
 - **Network-Ready Patterns**: Code is not fully prepared for multiplayer synchronization
 - **Comprehensive Testing**: Limited unit test coverage
+
+### 🎯 Future Architectural Patterns (Planned)
+- **SystemManager Base Class**: Optional pattern for system consistency (currently all systems are plain classes)
+- **UIManager Integration**: Centralized UI management (exists but not used in main app)
+- **WorldSystem Expansion**: Procedural world generation (basic structure exists, mostly TODO)
+- **Enhanced Babylon.JS Integration**: Better leverage of Babylon.JS optimization features
 
 ### Key Implementation Notes
 - **Current RNG**: Most random generation still uses Math.random() - needs conversion to seeded system
