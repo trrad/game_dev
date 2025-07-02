@@ -15,8 +15,9 @@ import { TrainCarVoxelComponent } from '../components/TrainCarVoxelComponent';
 import { Rail } from '../entities/Rail';
 import { TimeManager } from '../core/TimeManager';
 import { Vector3 } from '@babylonjs/core';
-import { EventStack } from '../core/EventStack';
+import { EventStack, EventCategory } from '../core/EventStack';
 import type { TrainCar } from '../entities/TrainCar';
+import { VoxelRenderComponent } from '../renderers/VoxelRenderComponent';
 
 export class TrainSystem {
     private trains: Map<string, Train> = new Map();
@@ -385,25 +386,36 @@ export class TrainSystem {
         // Get all voxels in the car
         const voxels = car.getVoxels();
         
+        // Calculate the car's forward direction vector in world space
+        const forwardX = Math.sin(carRotationY); // Forward direction X component
+        const forwardZ = Math.cos(carRotationY); // Forward direction Z component
+        
+        // Log car orientation for debugging
+        Logger.log(LogCategory.TRAIN, 
+            `Car ${car.id} orientation: rotation=${(carRotationY * 180 / Math.PI).toFixed(1)}°, ` +
+            `forward=(${forwardX.toFixed(2)}, 0, ${forwardZ.toFixed(2)})`
+        );
+        
+        // Process all voxels in this car
         for (const voxel of voxels) {
             const voxelPos = voxel.getComponent<PositionComponent>('position');
             if (!voxelPos) continue;
 
-            // Get the voxel's local grid position
+            // Get the voxel's local grid position relative to car center
             const gridPos = voxelComponent.getVoxelLocalPosition(
                 voxel.gridPosition.x,
                 voxel.gridPosition.y, 
                 voxel.gridPosition.z
             );
             
-            // Apply rotation around Y-axis
+            // Apply car's rotation to the voxel's local position
             const cos = Math.cos(carRotationY);
             const sin = Math.sin(carRotationY);
             const rotatedX = gridPos.x * cos - gridPos.z * sin;
             const rotatedZ = gridPos.x * sin + gridPos.z * cos;
             
             // Calculate final world position
-            // CRITICAL: Ensure voxel grid alignment with track direction
+            // CRITICAL: Grid coordinate mapping:
             // X-axis: along the length of the train car (forward/backward along track)
             // Y-axis: vertical (up/down)
             // Z-axis: across the width of the train car (left/right across track)
@@ -415,11 +427,30 @@ export class TrainSystem {
             
             // Update voxel position
             voxelPos.setPosition(worldPosition);
+            
+            // Set voxel rotation to match car rotation around Y-axis
+            // This will make the voxel's +Z axis (blue face) align with the car's forward direction
             voxelPos.setRotation({
                 x: 0,
                 y: carRotationY,
                 z: 0
             });
+            
+            // Add extra logging for center voxel
+            // Get the car's voxel grid dimensions
+            const carDimensions = car.getVoxelGridDimensions();
+            const isCenterVoxel = (
+                voxel.gridPosition.x === Math.floor(carDimensions.length / 2) && 
+                voxel.gridPosition.y === Math.floor(carDimensions.height / 2) && 
+                voxel.gridPosition.z === Math.floor(carDimensions.width / 2)
+            );
+            
+            if (isCenterVoxel) {
+                Logger.log(LogCategory.RENDERING, 
+                    `Center voxel ${voxel.id} - Position: (${worldPosition.x.toFixed(2)}, ${worldPosition.y.toFixed(2)}, ${worldPosition.z.toFixed(2)})` +
+                    ` - Rotation: ${(carRotationY * 180 / Math.PI).toFixed(1)}°`
+                );
+            }
         }
     }
 
@@ -656,6 +687,93 @@ export class TrainSystem {
                 }
             }
         });
+    }
+
+    /**
+     * Toggle debug faces for all voxels in all train cars
+     * This is a debug utility for visualizing voxel orientation issues
+     * @returns true if debug faces are now enabled, false if disabled
+     */
+    toggleVoxelDebugFaces(): boolean {
+        // Keep track of current debug state
+        let debugFacesEnabled = false;
+        
+        // Track stats for logging
+        let carCount = 0;
+        let voxelCount = 0;
+        let voxelsWithRenderComponent = 0;
+        let voxelsUpdated = 0;
+        
+        Logger.log(LogCategory.SYSTEM, `Starting voxel debug face toggle...`);
+        
+        // Process all trains
+        this.trains.forEach(train => {
+            Logger.log(LogCategory.SYSTEM, `Processing train: ${train.id}`);
+            
+            // Process all cars in this train
+            const cars = train.getCars();
+            Logger.log(LogCategory.SYSTEM, `Train ${train.id} has ${cars.length} cars`);
+            
+            cars.forEach(car => {
+                carCount++;
+                Logger.log(LogCategory.SYSTEM, `Processing car: ${car.id}`);
+                
+                // Get all voxel entities from this car
+                const voxels = car.getVoxels();
+                Logger.log(LogCategory.SYSTEM, `Car ${car.id} has ${voxels.length} voxels`);
+                
+                voxels.forEach(voxel => {
+                    voxelCount++;
+                    
+                    // Get the render component of each voxel
+                    const renderComponent = voxel.getComponent<VoxelRenderComponent>('render');
+                    
+                    if (renderComponent) {
+                        voxelsWithRenderComponent++;
+                        
+                        // Toggle the debug faces setting
+                        const currentConfig = renderComponent.serialize();
+                        const newDebugSetting = !currentConfig.debugFaces;
+                        
+                        Logger.log(LogCategory.SYSTEM, 
+                            `Voxel ${voxel.id}: toggling debugFaces from ${currentConfig.debugFaces} to ${newDebugSetting}`);
+                        
+                        // Update the debug setting for this voxel
+                        renderComponent.updateConfig({
+                            debugFaces: newDebugSetting
+                        });
+                        
+                        voxelsUpdated++;
+                        
+                        // Use the last toggled state for the return value
+                        debugFacesEnabled = newDebugSetting;
+                    } else {
+                        Logger.warn(LogCategory.SYSTEM, `Voxel ${voxel.id} has no render component!`);
+                    }
+                });
+            });
+        });
+        
+        // Log the change for debugging with detailed counts
+        Logger.log(LogCategory.SYSTEM, 
+            `Toggled voxel debug faces to ${debugFacesEnabled ? 'ENABLED' : 'DISABLED'} for ${voxelsUpdated}/${voxelsWithRenderComponent} render components (${voxelCount} total voxels in ${carCount} cars)`
+        );
+        
+        // If we have an event stack, log the event there too
+        if (this.eventStack) {
+            this.eventStack.info(EventCategory.SYSTEM, 
+                'voxel_debug_faces', 
+                `Voxel debug faces ${debugFacesEnabled ? 'enabled' : 'disabled'}`, 
+                { 
+                    cars: carCount, 
+                    totalVoxels: voxelCount,
+                    voxelsWithRender: voxelsWithRenderComponent,
+                    voxelsUpdated: voxelsUpdated
+                }
+            );
+        }
+        
+        return debugFacesEnabled;
     }
 
     /**

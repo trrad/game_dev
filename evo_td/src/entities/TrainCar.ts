@@ -143,7 +143,7 @@ export class TrainCar extends GameObject {
         const carPosition = positionComponent?.getPosition() || { x: 0, y: 0, z: 0 };
 
         // Create voxels based on car type
-        // Grid coordinates: X = length (forward), Y = height (up), Z = width (across)
+        // Grid coordinates: X = length (forward), Y = height (up), Z = width (across track)
         for (let x = 0; x < length; x++) {
             for (let y = 0; y < height; y++) {
                 for (let z = 0; z < width; z++) {
@@ -161,7 +161,7 @@ export class TrainCar extends GameObject {
 
     /**
      * Determine if a voxel should be created at the given grid position
-     * COORDINATE SYSTEM: X = length (along track), Y = height (up), Z = width (across track)
+     * COORDINATE SYSTEM: X = length (along track), Y = height (up), Z = width (across)
      * Creates train-like shapes with the long axis aligned with movement direction
      */
     private shouldCreateVoxelAt(x: number, y: number, z: number): boolean {
@@ -523,6 +523,14 @@ export class TrainCar extends GameObject {
     }
 
     /**
+     * Get the voxel grid dimensions
+     * @returns Object with length, width, and height of the voxel grid
+     */
+    getVoxelGridDimensions(): { length: number; width: number; height: number } {
+        return { ...this._voxelDimensions };
+    }
+
+    /**
      * Update all voxel positions to match the current car position
      */
     private updateVoxelPositions(): void {
@@ -566,11 +574,38 @@ export class TrainCar extends GameObject {
             const voxelPositionComponent = voxel.getComponent<PositionComponent>('position');
             if (voxelPositionComponent) {
                 voxelPositionComponent.setPosition(worldPosition);
+                
+                // Calculate the car's orientation vector (the "forward" direction)
+                // This is the direction that the car is pointing along the track, which is the "long" dimension
+                
+                // Calculate the forward unit vector in world space based on car rotation
+                const forwardX = Math.sin(carRotationY); // Unit vector components for the car's forward direction
+                const forwardZ = Math.cos(carRotationY);
+                
+                // For debugging only - this is the forward vector of the car
+                if (gridX === Math.floor(this._voxelDimensions.length / 2) && 
+                    gridY === Math.floor(this._voxelDimensions.height / 2) && 
+                    gridZ === Math.floor(this._voxelDimensions.width / 2)) {
+                    Logger.log(LogCategory.TRAIN, 
+                        `Car ${this.id} forward vector: (${forwardX.toFixed(2)}, 0, ${forwardZ.toFixed(2)}) at rotation: ${carRotationY.toFixed(2)}`
+                    );
+                }
+                
+                // Set the rotation so voxels are correctly oriented with the car's forward direction
+                // We want the blue faces (+Z in Babylon) to point along the car's long axis
                 voxelPositionComponent.setRotation({
                     x: 0,
-                    y: carRotationY,
+                    y: carRotationY, // Voxels inherit the car's rotation around Y-axis
                     z: 0
                 });
+                
+                // Log for debugging
+                if (gridX === Math.floor(this._voxelDimensions.length / 2) && 
+                    gridY === Math.floor(this._voxelDimensions.height / 2) && 
+                    gridZ === Math.floor(this._voxelDimensions.width / 2)) {
+                    // Only log the center voxel to avoid log spam
+                    Logger.log(LogCategory.TRAIN, `Car ${this.id} rotation: ${carRotationY}, voxel rotation applied: ${carRotationY}`);
+                }
             }
         });
     }
@@ -583,8 +618,9 @@ export class TrainCar extends GameObject {
         // Update base components first
         super.update(deltaTime);
 
-        // Synchronize voxel positions with car position
-        this.updateVoxelPositions();
+        // NOTE: No longer calling updateVoxelPositions() here
+        // Voxel positions are now updated by TrainSystem.updateCarVoxelPositions()
+        // This avoids conflicting updates to voxel positions and rotations
 
         // Update all voxels (they are GameObjects with their own update cycle)
         this._voxels.forEach(voxel => {
@@ -912,9 +948,9 @@ export class TrainCar extends GameObject {
             }
         });
 
-        // Add debug meshes to visualize car orientation and direction
-        this.addDebugOrientationMeshes(scene);
-
+        // Debug visualization is now handled by the voxel debug faces toggle (Alt+D)
+        // and the colored faces in VoxelRenderComponent
+        
         Logger.log(LogCategory.RENDERING, `Rendering setup complete for car ${this.carId}`, {
             voxelCount: this._voxels.size
         });

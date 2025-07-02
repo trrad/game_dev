@@ -326,6 +326,22 @@ class ECSApp {
                 }
             }
             
+            // Toggle voxel debug faces with Alt+D
+            if (ev.altKey && (ev.key === 'd' || ev.key === 'D')) {
+                ev.preventDefault();
+                console.log("Alt+D pressed - toggling voxel debug faces");
+                eventStack.info(EventCategory.UI, 'keyboard_shortcut_pressed', `Alt+D pressed - toggling voxel debug faces`);
+                
+                try {
+                    const debugEnabled = this.trainSystem.toggleVoxelDebugFaces();
+                    console.log(`Voxel debug faces ${debugEnabled ? 'enabled' : 'disabled'} via Alt+D`);
+                    eventStack.info(EventCategory.UI, 'keyboard_shortcut', `Voxel debug faces ${debugEnabled ? 'enabled' : 'disabled'} via Alt+D`);
+                } catch (error) {
+                    console.error("Error toggling voxel debug faces:", error);
+                    eventStack.error(EventCategory.UI, 'keyboard_shortcut_error', `Error toggling voxel debug faces: ${error}`);
+                }
+            }
+            
             // Pause with spacebar (but not when typing in inputs)
             if (ev.code === 'Space' && (!ev.target || (ev.target as HTMLElement).tagName !== 'INPUT')) {
                 ev.preventDefault();

@@ -3,11 +3,11 @@
  * Creates cube meshes with appropriate materials based on voxel properties
  */
 
-import { Scene, MeshBuilder, StandardMaterial, Color3, Mesh } from "@babylonjs/core";
+import { Scene, MeshBuilder, StandardMaterial, Color3, Color4, Mesh } from "@babylonjs/core";
 import { RenderComponent, RenderConfig } from "./RenderComponent";
 import { TrainCarVoxel } from "../entities/TrainCarVoxel";
 import { HealthComponent } from "../components/HealthComponent";
-import { PositionComponent } from "../components/PositionComponent";
+import { PositionComponent } from "../components/TrainCarVoxelComponent";
 import { CargoCapacityType, VoxelMaterial } from "../components/TrainCarVoxelComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 
@@ -18,6 +18,7 @@ export interface VoxelRenderConfig extends RenderConfig {
     size?: number; // Cube size (default 0.4)
     materialOverride?: VoxelMaterial; // Override the voxel's material
     colorOverride?: Color3; // Override the computed color
+    debugFaces?: boolean; // Enable colored faces for orientation debugging
 }
 
 /**
@@ -26,7 +27,8 @@ export interface VoxelRenderConfig extends RenderConfig {
 const DEFAULT_VOXEL_CONFIG: VoxelRenderConfig = {
     size: 0.4, // Production voxel size
     yOffset: 0.4, // Position above ground
-    visible: true
+    visible: true,
+    debugFaces: false // Disabled by default, can be toggled for debugging
 };
 
 /**
@@ -78,13 +80,29 @@ export class VoxelRenderComponent extends RenderComponent {
         Logger.log(LogCategory.RENDERING, `Creating voxel visual: ${voxelId}`);
         
         // Create the voxel mesh as a proper cube
+        const meshOptions = {
+            width: size,
+            height: size,
+            depth: size
+        };
+        
+        // Add colored faces if debug mode is enabled
+        if (this.voxelConfig.debugFaces) {
+            Object.assign(meshOptions, {
+                faceColors: [
+                    new Color4(1, 0, 0, 1),  // +X face = right side (red)
+                    new Color4(0, 1, 0, 1),  // -X face = left side (green)
+                    new Color4(1, 0, 1, 1),  // +Y face = top (magenta)
+                    new Color4(0, 1, 1, 1),  // -Y face = bottom (cyan)
+                    new Color4(0, 0, 1, 1),  // +Z face = front/forward (blue)
+                    new Color4(1, 1, 0, 1),  // -Z face = back/backward (yellow)
+                ]
+            });
+        }
+        
         this.mesh = MeshBuilder.CreateBox(
             `voxel_${voxelId}`,
-            {
-                width: size,
-                height: size,
-                depth: size
-            },
+            meshOptions,
             this.scene
         ) as Mesh;
         
@@ -93,13 +111,21 @@ export class VoxelRenderComponent extends RenderComponent {
         this.mesh.checkCollisions = false;
         this.mesh.alwaysSelectAsActiveMesh = true;
         
-        // Create and apply material
-        this.createVoxelMaterial();
+        // Create material only if debug faces are disabled
+        // (when debug faces are enabled, we want to show the color-coded faces)
+        if (!this.voxelConfig.debugFaces) {
+            this.createVoxelMaterial();
+        }
         
         // Store a reference to the mesh in the voxel entity for legacy compatibility
         // TODO: Remove this when all systems use RenderComponent pattern
         if (this.mesh instanceof Mesh) {
             this.voxelEntity.mesh = this.mesh;
+            
+            // Add debug info to logs if we're in debug mode
+            if (this.voxelConfig.debugFaces) {
+                Logger.log(LogCategory.RENDERING, `Voxel orientation debug colors: RED=+X(front), GREEN=-X(back), BLUE=+Z(right), YELLOW=-Z(left), MAGENTA=+Y(top), CYAN=-Y(bottom)`);
+            }
         }
         
         Logger.log(LogCategory.RENDERING, `Voxel visual created: ${voxelId}`, {
@@ -164,8 +190,10 @@ export class VoxelRenderComponent extends RenderComponent {
     protected updateVisual(): void {
         if (!this.mesh || !this.voxelEntity) return;
         
-        // Update material if health or properties changed
-        this.createVoxelMaterial();
+        // Update material if health or properties changed (only if not in debug mode)
+        if (!this.voxelConfig.debugFaces) {
+            this.createVoxelMaterial();
+        }
         
         // Update visibility based on configuration
         this.updateVisibility();
@@ -197,7 +225,8 @@ export class VoxelRenderComponent extends RenderComponent {
             cargoType: this.voxelEntity?.cargoType,
             material: this.voxelEntity?.material,
             meshExists: !!this.mesh,
-            visible: this.mesh?.isVisible
+            visible: this.mesh?.isVisible,
+            debugFacesEnabled: this.voxelConfig.debugFaces
         };
     }
 
@@ -206,10 +235,20 @@ export class VoxelRenderComponent extends RenderComponent {
      */
     updateConfig(newConfig: Partial<VoxelRenderConfig>): void {
         const oldSize = this.voxelConfig.size;
+        const oldDebugFaces = this.voxelConfig.debugFaces;
+        
+        // Log the current config before update
+        Logger.log(LogCategory.RENDERING, `Updating voxel config for ${this.voxelEntity?.id || 'unknown'}: current={ size: ${oldSize}, debugFaces: ${oldDebugFaces} }, new={ ${Object.entries(newConfig).map(([k,v]) => `${k}: ${v}`).join(', ')} }`);
+        
         this.voxelConfig = { ...this.voxelConfig, ...newConfig };
         
-        // If size changed, recreate the mesh
-        if (oldSize !== this.voxelConfig.size && this.mesh) {
+        // Check if we need to recreate the mesh
+        const sizeChanged = oldSize !== this.voxelConfig.size;
+        const debugFacesChanged = oldDebugFaces !== this.voxelConfig.debugFaces;
+        
+        // If size or debug faces setting changed, recreate the mesh
+        if ((sizeChanged || debugFacesChanged) && this.mesh) {
+            Logger.log(LogCategory.RENDERING, `Recreating voxel mesh for ${this.voxelEntity?.id || 'unknown'}: sizeChanged=${sizeChanged}, debugFacesChanged=${debugFacesChanged}`);
             this.dispose();
             this.createVisual();
             this.updatePosition();
@@ -249,9 +288,35 @@ export class VoxelRenderComponent extends RenderComponent {
         this.mesh.position.y = pos.y + (this.config.yOffset || 0);
         this.mesh.position.z = pos.z;
         
-        // Apply rotation - this aligns voxels with train direction
+        // Apply rotation directly from the voxel's PositionComponent
+        // In Babylon.js default cube mesh orientation:
+        // +X face = right side
+        // -X face = left side
+        // +Y face = top
+        // -Y face = bottom
+        // +Z face = front/forward
+        // -Z face = back/backward
+        //
+        // When debug faces are enabled, we use these colors:
+        // Red = +X face (right face)
+        // Green = -X face (left face)
+        // Magenta = +Y face (top face)
+        // Cyan = -Y face (bottom face)
+        // Blue = +Z face (front face)
+        // Yellow = -Z face (back face)
+        
+        // Apply the rotation directly without any correction
+        // Let the TrainSystem.updateCarVoxelPositions handle the correct orientation
+        
+        // Log rotation info for debugging
+        if (this.voxelConfig.debugFaces && this.voxelEntity?.id.endsWith('_center')) {
+            Logger.log(LogCategory.RENDERING, 
+                `Voxel ${this.voxelEntity.id} - Applying rotation: (${rot.x.toFixed(2)}, ${rot.y.toFixed(2)}, ${rot.z.toFixed(2)}) radians`);
+        }
+        
+        // Apply rotation directly from the PositionComponent
         this.mesh.rotation.x = rot.x;
-        this.mesh.rotation.y = rot.y; // This is the key for train rail alignment
+        this.mesh.rotation.y = rot.y;
         this.mesh.rotation.z = rot.z;
     }
 }
