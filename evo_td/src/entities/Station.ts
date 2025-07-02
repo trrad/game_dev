@@ -4,8 +4,8 @@ import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { HealthComponent } from "../components/HealthComponent";
 import { StationPerimeterComponent } from "../components/StationPerimeterComponent";
-import { BuildingComponent, BuildingType } from "../components/BuildingComponent";
-import { CargoWarehouseComponent, CargoType } from "../components/CargoWarehouseComponent";
+import { Building, BuildingType } from "../entities/Building";
+import { CargoWarehouse, CargoType } from "../entities/CargoWarehouse";
 import type { EventStack } from "../core/EventStack";
 
 export interface StationConfig {
@@ -248,8 +248,7 @@ export class Station extends GameObject {
 
         // Add station perimeter component
         const perimeterRadius = this._config.perimeterRadius || 50;
-        const perimeter = new StationPerimeterComponent();
-        perimeter.initialize(this.position, perimeterRadius);
+        const perimeter = new StationPerimeterComponent(this.position, perimeterRadius);
         this.addComponent(perimeter);
 
         // Add health component for station vulnerability
@@ -283,22 +282,15 @@ export class Station extends GameObject {
             this.position.z - 1.5  // 1.5 units south of center
         );
         
-        // Create warehouse building entity as a child GameObject
-        const warehouse = new GameObject('cargo_warehouse');
-        
-        // Add building component
-        const building = new BuildingComponent();
-        building.initialize(BuildingType.CARGO_WAREHOUSE, warehousePosition, new Vector3(12, 6, 8));
-        warehouse.addComponent(building);
-
-        // Add cargo warehouse functionality
-        const cargoWarehouse = new CargoWarehouseComponent();
-        cargoWarehouse.initialize();
-        warehouse.addComponent(cargoWarehouse);
-
-        // Add health for vulnerability
-        const health = new HealthComponent(500, 0); // 500 HP, no regen
-        warehouse.addComponent(health);
+        // Create cargo warehouse entity (extends Building)
+        const warehouse = new CargoWarehouse({
+            buildingType: BuildingType.CARGO_WAREHOUSE,
+            position: warehousePosition,
+            size: new Vector3(12, 6, 8),
+            health: 500,
+            name: 'cargo_warehouse',
+            maxStock: 1000
+        });
 
         this._state.buildingIds.push(warehouse.id);
         Logger.log(LogCategory.SYSTEM, `Created cargo warehouse for station ${this.stationId} at controlled position`);
@@ -328,23 +320,20 @@ export class Station extends GameObject {
                 this.position.z + Math.sin(angle) * distance
             );
 
-            const building = new GameObject('decorative_building');
-            
-            const buildingComponent = new BuildingComponent();
-            const size = this.getRandomBuildingSize(buildingType);
-            buildingComponent.initialize(buildingType, position, size);
-            building.addComponent(buildingComponent);
-
-            // Add health for vulnerability
-            const health = new HealthComponent(300, 0); // 300 HP, no regen
-            building.addComponent(health);
+            const building = new Building({
+                buildingType: buildingType,
+                position: position,
+                size: this.getRandomBuildingSize(buildingType),
+                health: 300,
+                name: 'decorative_building'
+            });
 
             // Store building data for renderer
             const buildingData: StationBuildingData = {
                 id: building.id,
                 type: buildingType,
                 position: position.clone(),
-                size: size.clone(),
+                size: building.size.clone(),
                 colorIndex: Math.floor(Math.random() * 5) // Random grey tone index
             };
             
@@ -401,12 +390,13 @@ export class Station extends GameObject {
     }
 
     /**
-     * Get the cargo warehouse component if it exists
+     * Get the cargo warehouse entity if it exists
      */
-    getCargoWarehouse(): CargoWarehouseComponent | null {
-        // In a full implementation, this would search through building entities
-        // For now, we'll assume the station itself can have the component
-        return this.getComponent<CargoWarehouseComponent>('cargo_warehouse');
+    getCargoWarehouse(): CargoWarehouse | null {
+        // For now, return null since we're not tracking individual building entities
+        // In a full implementation, this would search through building entities by ID
+        // This method can be enhanced later when we need to interact with the warehouse
+        return null;
     }
 
     /**

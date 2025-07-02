@@ -16,20 +16,21 @@ export interface StationPerimeterData {
 export class StationPerimeterComponent extends Component<StationPerimeterData> {
     readonly type = 'station_perimeter';
 
-    public center: Vector3 = Vector3.Zero();
-    public radius: number = 50;
+    public center: Vector3;
+    public radius: number;
     public shape: 'circular' | 'rectangular' = 'circular';
     public entrancePoints: Vector3[] = [];
 
     /**
-     * Initialize the perimeter with center and radius
+     * Create a station perimeter component
      */
-    initialize(center: Vector3, radius: number = 50): void {
+    constructor(center: Vector3, radius: number = 50) {
+        super();
         this.center = center.clone();
         this.radius = radius;
         this.generateEntrancePoints();
         
-        Logger.log(LogCategory.SYSTEM, `StationPerimeterComponent initialized: radius ${radius}`);
+        Logger.log(LogCategory.SYSTEM, `StationPerimeterComponent created: radius ${radius}`);
     }
 
     /**

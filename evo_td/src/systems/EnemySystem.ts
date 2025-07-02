@@ -18,6 +18,7 @@ import { Train } from '../entities/Train';
 import { TrainSystem } from './TrainSystem';
 import { Logger, LogCategory } from '../utils/Logger';
 import { Vector3 } from '@babylonjs/core';
+import { MathUtils } from '../utils/MathUtils';
 
 /**
  * Enemy spawn configuration
@@ -401,7 +402,7 @@ export class EnemySystem {
         if (nearestTrain) {
             const trainPos = nearestTrain.getComponent<PositionComponent>('position')?.getPosition();
             if (trainPos) {
-                const distance = this.calculateDistance(enemyPos, trainPos);
+                const distance = MathUtils.calculateDistance(enemyPos, trainPos);
 
                 // State transitions based on distance and AI characteristics
                 if (distance <= aiComponent.getSightRange() && currentState === AIState.WANDERING) {
@@ -461,7 +462,7 @@ export class EnemySystem {
         let wanderTarget = aiComponent.getWanderTarget();
 
         // Set new wander target if needed
-        if (!wanderTarget || this.calculateDistance(enemyPos, wanderTarget) < 2.0 || aiComponent.getTimeSinceWanderChange() > 10) { 
+        if (!wanderTarget || MathUtils.calculateDistance(enemyPos, wanderTarget) < 2.0 || aiComponent.getTimeSinceWanderChange() > 10) { 
             wanderTarget = this.getRandomNearbyPosition(enemyPos, aiComponent.getWanderRadius());
             aiComponent.setWanderTarget(wanderTarget);
         }
@@ -483,7 +484,7 @@ export class EnemySystem {
         if (!targetPosition) return;
 
         const enemyPos = positionComponent.getPosition();
-        const distanceToTarget = this.calculateDistance(enemyPos, targetPosition);
+        const distanceToTarget = MathUtils.calculateDistance(enemyPos, targetPosition);
 
         // Check if enemy has reached the train (close contact)
         if (distanceToTarget < 1.0) { // 1 unit = contact distance
@@ -512,26 +513,18 @@ export class EnemySystem {
             const trainPos = nearestTrain.getComponent<PositionComponent>('position')?.getPosition();
             if (trainPos) {
                 // Calculate direction away from train
-                const awayDirection = {
-                    x: enemyPos.x - trainPos.x,
-                    y: 0,
-                    z: enemyPos.z - trainPos.z
+                const awayDirection = MathUtils.calculateNormalizedDirection(
+                    { x: trainPos.x, y: trainPos.y, z: trainPos.z },
+                    { x: enemyPos.x, y: enemyPos.y, z: enemyPos.z }
+                );
+
+                const retreatTarget = {
+                    x: enemyPos.x + awayDirection.x * 10,
+                    y: enemyPos.y,
+                    z: enemyPos.z + awayDirection.z * 10
                 };
 
-                // Normalize and move
-                const length = Math.sqrt(awayDirection.x * awayDirection.x + awayDirection.z * awayDirection.z);
-                if (length > 0) {
-                    awayDirection.x /= length;
-                    awayDirection.z /= length;
-
-                    const retreatTarget = {
-                        x: enemyPos.x + awayDirection.x * 10,
-                        y: enemyPos.y,
-                        z: enemyPos.z + awayDirection.z * 10
-                    };
-
-                    this.moveTowardsTarget(positionComponent, movementComponent, retreatTarget, 1.2, deltaTime); // Fast retreat    
-                }
+                this.moveTowardsTarget(positionComponent, movementComponent, retreatTarget, 1.2, deltaTime); // Fast retreat
             }
         }
     }
@@ -547,18 +540,11 @@ export class EnemySystem {
         deltaTime: number
     ): void {
         const currentPos = positionComponent.getPosition();
-        const direction = {
-            x: target.x - currentPos.x,
-            y: 0, // Keep enemies on ground
-            z: target.z - currentPos.z
-        };
+        const direction = MathUtils.calculateNormalizedDirection(currentPos, target);
 
-        // Normalize direction
-        const length = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
-        if (length > 0.1) { // Avoid jittering when very close
-            direction.x /= length;
-            direction.z /= length;
-
+        // Check if we need to move (avoid jittering when very close)
+        const distance = MathUtils.calculateDistance2D(currentPos, target);
+        if (distance > 0.1) {
             // Apply movement
             const speed = movementComponent.getSpeed() * speedMultiplier;
             const newPos = {
@@ -665,7 +651,7 @@ export class EnemySystem {
         for (const train of trains) {
             const trainPos = train.getComponent<PositionComponent>('position')?.getPosition();
             if (trainPos) {
-                const distance = this.calculateDistance(position, trainPos);
+                const distance = MathUtils.calculateDistance(position, trainPos);
                 if (distance < nearestDistance) {
                     nearestDistance = distance;
                     nearestTrain = train;
@@ -677,27 +663,11 @@ export class EnemySystem {
     }
 
     /**
-     * Calculate distance between two positions
-     */
-    private calculateDistance(pos1: { x: number; y: number; z: number }, pos2: { x: number; y: number; z: number }): number {       
-        const dx = pos1.x - pos2.x;
-        const dy = pos1.y - pos2.y;
-        const dz = pos1.z - pos2.z;
-        return Math.sqrt(dx * dx + dy * dy + dz * dz);
-    }
-
-    /**
      * Get a random position near a given position
      */
     private getRandomNearbyPosition(center: { x: number; y: number; z: number }, radius: number): Vector3 {
-        const angle = Math.random() * 2 * Math.PI;
-        const distance = Math.random() * radius;
-
-        return new Vector3(
-            center.x + Math.cos(angle) * distance,
-            center.y,
-            center.z + Math.sin(angle) * distance
-        );
+        const randomPos = MathUtils.getRandomPositionInRadius(center, radius);
+        return new Vector3(randomPos.x, randomPos.y, randomPos.z);
     }
 
     /**
@@ -759,7 +729,7 @@ export class EnemySystem {
         // Find the enemy that made contact
         const contactingEnemy = Array.from(this.enemies.values()).find(enemy => {
             const pos = enemy.getComponent<PositionComponent>('position')?.getPosition();
-            return pos && this.calculateDistance(enemyPos, pos) < 0.1; // Very close match
+            return pos && MathUtils.calculateDistance(enemyPos, pos) < 0.1; // Very close match
         });
 
         if (!contactingEnemy) return;
@@ -842,11 +812,7 @@ export class EnemySystem {
             if (enemy.isDead()) continue;
 
             const enemyPos = enemy.getPosition();
-            const distance = Math.sqrt(
-                Math.pow(enemyPos.x - position.x, 2) +
-                Math.pow(enemyPos.y - position.y, 2) +
-                Math.pow(enemyPos.z - position.z, 2)
-            );
+            const distance = MathUtils.calculateDistance(enemyPos, position);
 
             if (distance <= range) {
                 enemiesInRange.push({ enemy, distance });
@@ -969,11 +935,7 @@ export class EnemySystem {
         projectileSpeed: number
     ): void {
         // Calculate distance and expected travel time
-        const distance = Math.sqrt(
-            Math.pow(projectileTarget.x - projectileStart.x, 2) +
-            Math.pow(projectileTarget.y - projectileStart.y, 2) +
-            Math.pow(projectileTarget.z - projectileStart.z, 2)
-        );
+        const distance = MathUtils.calculateDistance(projectileTarget, projectileStart);
         
         const travelTimeMs = (distance / projectileSpeed) * 1000; // Convert to milliseconds
         const cleanupTime = performance.now() + travelTimeMs;

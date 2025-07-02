@@ -24,7 +24,10 @@ src/
 │   ├── Rail.ts            # Rail connections
 │   ├── Enemy.ts           # Enemy entities
 │   ├── Game.ts            # Main game state entity
-│   └── Weapon.ts          # Weapon entities
+│   ├── Weapon.ts          # Weapon entities
+│   ├── Attachment.ts      # Train attachments
+│   ├── AttachmentFactory.ts        # Attachment creation
+│   └── AttachmentSlotFactory.ts    # Slot creation
 │
 ├── components/             # Reusable component logic
 │   ├── PositionComponent.ts        # 3D position and rotation
@@ -160,7 +163,7 @@ export class PositionComponent extends Component {
     // Position and rotation data
 }
 
-// components/AttachmentFactory.ts
+// entities/AttachmentFactory.ts
 export class AttachmentFactory {
     // Creates attachment objects
 }

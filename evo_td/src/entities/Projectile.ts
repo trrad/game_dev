@@ -5,6 +5,7 @@
 import { GameObject } from '../core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
+import { MathUtils } from '../utils/MathUtils';
 
 export interface ProjectileConfig {
     id: string;
@@ -67,21 +68,7 @@ export class Projectile extends GameObject {
      * Calculate normalized direction vector from start to target
      */
     private calculateDirection(start: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }) {
-        const direction = {
-            x: target.x - start.x,
-            y: target.y - start.y,
-            z: target.z - start.z
-        };
-
-        const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
-        
-        if (length > 0) {
-            direction.x /= length;
-            direction.y /= length;
-            direction.z /= length;
-        }
-
-        return direction;
+        return MathUtils.calculateNormalizedDirection(start, target);
     }
 
     /**
@@ -92,11 +79,7 @@ export class Projectile extends GameObject {
         if (!positionComponent) return true;
 
         const currentPos = positionComponent.getPosition();
-        const distance = Math.sqrt(
-            Math.pow(currentPos.x - this.targetPosition.x, 2) +
-            Math.pow(currentPos.y - this.targetPosition.y, 2) +
-            Math.pow(currentPos.z - this.targetPosition.z, 2)
-        );
+        const distance = MathUtils.calculateDistance(currentPos, this.targetPosition);
 
         return distance <= 0.5; // Within 0.5 units of target
     }

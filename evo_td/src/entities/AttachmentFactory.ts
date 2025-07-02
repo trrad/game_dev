@@ -2,7 +2,7 @@
  * AttachmentFactory - Creates pre-configured attachment entities for the modular train system
  */
 
-import { Attachment, AttachmentConfig, AttachmentType, AttachmentSlotType } from '../entities/Attachment';
+import { Attachment, AttachmentConfig, AttachmentType, AttachmentSlotType } from './Attachment';
 import { Logger, LogCategory } from '../utils/Logger';
 import { EventStack } from '../core/EventStack';
 

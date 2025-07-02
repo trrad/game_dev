@@ -39,7 +39,7 @@ import { TrainCar, TrainCarConfig } from "./entities/TrainCar";
 import { TrainConfig } from "./entities/Train";
 
 // Import UI and utility systems
-import { eventStack, EventCategory } from "./core/EventStack";
+import { eventStack, EventCategory, EventStack } from "./core/EventStack";
 import { Logger, LogCategory } from "./utils/Logger";
 import { UISystem } from "./systems/UISystem";
 
@@ -47,7 +47,6 @@ import { UIFactory } from "./ui/UIFactory";
 import { EventLogUI } from "./ui/EventLogUI";
 import { TrainJourneyControlsUI } from "./ui/TrainJourneyControlsUI";
 import { TimeManager } from "./core/TimeManager";
-import { EventStack } from "./core/EventStack";
 
 // Import train-related classes for later use
 import { Train } from "./entities/Train";
@@ -56,7 +55,7 @@ import { EnemySystem } from "./systems/EnemySystem";
 import { ProjectileSystem } from "./systems/ProjectileSystem";
 
 // Import attachment system components
-import { AttachmentFactory } from "./components/AttachmentFactory";
+import { AttachmentFactory } from "./entities/AttachmentFactory";
 import { TrainCarModificationUI } from "./ui/TrainCarModificationUI";
 import { CSSLoader } from "./utils/CSSLoader";
 

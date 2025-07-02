@@ -1,67 +1,97 @@
-# Train Trading Game Docume### 4.### 3. Developer Guides
-- [Development Guide](dev_guide.md) - Main development guidelines and project structure
-- [Coding Style](coding_style.md) - Code formatting and style standards
-- [Quick Reference](quick_reference.md) - Code snippets for common tasks
-- [AI Agent Prompt Guide](agent_prompt_guide.md) - Interactive development guide for working with AI assistants
+# ECS Train Trading Game
 
-#### Implementation Guides
-- [Component Registration Patterns](docs/guides/component_registration.md) - Best practices for adding new components
-- [System Communication Patterns](docs/guides/system_communication.md) - How systems should interact
-- [File Organization Standards](docs/guides/file_organization.md) - Project structure and file placement rulesure Documentation
-- [Dynamic Enemy Evolution System](docs/dynamic_evolution_spawn_system.md)
-- [Enemy System Integration Guide](docs/systems/enemy_system.md)
+An Entity-Component-System (ECS) based train trading game built with TypeScript. Features trains that move along rails, carry cargo, and engage in trading mechanics while defending against enemies.
 
-## Recent System Restorations
-- **Enemy System**: Fully restored enemy spawning, AI behaviors, and health management
-  - [Enemy System Documentation](docs/systems/enemy_system.md)
-  - [HealthComponent API](docs/api/components/HealthComponent.md)
-  - [AIBehaviorComponent API](docs/api/components/AIBehaviorComponent.md)ation
+## Quick Start
 
-## Overview
-This documentation covers both API reference and architectural concepts for the Train Trading Game.
-
-### 1. Architecture
-Core game design and implementation:
-- [System Overview](docs/architecture/overview.md)
-- [Component System](docs/architecture/components.md)
-- Network Architecture - *In development*
-- Game Systems - *In development*
-
-### 2. API Documentation
-Generated from source code documentation:
-- [Core Systems](docs/api/core/)
-  - [GameObject](docs/api/core/GameObject.md)
-  - [SceneManager](docs/api/core/SceneManager.md)
-- [Components](docs/api/components/)
-  - [PositionComponent](docs/api/components/PositionComponent.md) - 3D position and rotation
-  - [MovementComponent](docs/api/components/MovementComponent.md) - Velocity and physics
-  - [HealthComponent](docs/api/components/HealthComponent.md) - Health and damage
-  - [AIBehaviorComponent](docs/api/components/AIBehaviorComponent.md) - AI decision making
-- [Game Entities](docs/api/) - *Documentation for entities in development*
-- [Game Systems](docs/api/) - *System API documentation in development*
-
-### 3. Developer Guides
-- [Development Guide](../dev_guide.md) - Main development guidelines and project structure
-- [Coding Style](../coding_style.md) - Code formatting and style standards
-- [Quick Reference](../quick_reference.md) - Code snippets for common tasks
-- [AI Agent Prompt Guide](../agent_prompt_guide.md) - Interactive development guide for working with AI assistants
-
-### 4. Feature Documentation
-- [Dynamic Enemy Evolution System](dynamic_evolution_spawn_system.md)
-
-## Documentation Structure
-- TypeScript docstrings generate API reference
-- Markdown files contain architectural concepts
-- README files provide component/system guidance
-
-## Building Documentation
 ```bash
-npm run docs  # Generates complete documentation
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# Build for production
+npm run build
 ```
 
+## Documentation
+
+### 📖 Main Documentation
+- **[Development Guide](docs/DEVELOPMENT_GUIDE.md)** - Complete development setup and workflow
+- **[Game Mechanics & Art](docs/GAME_MECHANICS_AND_ART.md)** - Game vision, mechanics, and art direction
+- **[System Architecture](docs/SYSTEM_ARCHITECTURE.md)** - Technical architecture and ECS design
+- **[Coding Standards](docs/CODING_STANDARDS.md)** - Code style, patterns, and best practices
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Common code patterns and snippets
+- **[Roadmap](docs/ROADMAP.md)** - Current status, TODOs, and future plans
+
+### 🤖 For AI Assistants
+- **[Agent Prompt](docs/AGENT_PROMPT.md)** - Comprehensive project context for AI development assistance
+
+## Current Features
+
+- **ECS Architecture**: Clean Entity-Component-System design
+- **Train System**: Multi-car trains with rail-based movement
+- **Enemy AI**: Hostile entities with pathfinding and combat
+- **Voxel Rendering**: Colorful pixel-art style graphics
+- **Time Controls**: Pause, normal speed, and fast-forward
+- **Attachment System**: Weapons and cargo attachments for train cars
+- **Trading Mechanics**: Station-based resource trading (in development)
+
+## Project Structure
+```
+src/
+├── ecs-app.ts              # Main ECS application entry point
+├── components/             # ECS components (data containers)
+├── entities/              # Entity factories and complex entities
+├── systems/              # ECS systems (logic processors)
+├── renderers/            # Rendering components
+├── ui/                   # User interface components
+├── utils/                # Utility functions and helpers
+├── core/                 # Core ECS framework and managers
+└── net/                  # Networking code
+```
+
+## Technology Stack
+
+- **TypeScript** - Main development language
+- **Vite** - Build tool and development server
+- **HTML5 Canvas** - Rendering engine
+- **Jest** - Testing framework
+- **Colyseus** - Multiplayer networking (in development)
+
+## Development Status
+
+The project has undergone significant refactoring to align with ECS principles. See [Roadmap](docs/ROADMAP.md) for current status and planned improvements.
+
+### Recently Completed
+✅ Legacy code removal and cleanup  
+✅ ECS architecture implementation  
+✅ Component and system refactoring  
+✅ Math and geometry utility consolidation  
+✅ Documentation overhaul  
+
+### In Progress
+🔄 Performance optimization  
+🔄 Advanced AI behaviors  
+🔄 Enhanced trading mechanics  
+
+### Planned
+📋 Multiplayer networking  
+📋 Procedural content generation  
+📋 Mobile platform support  
+
 ## Contributing
-When adding new code:
-1. Include JSDoc comments for all public APIs
-2. Update relevant README files
-3. Add unit tests with descriptive names
-4. Update architecture docs for significant changes
+
+1. Read the [Development Guide](docs/DEVELOPMENT_GUIDE.md)
+2. Follow [Coding Standards](docs/CODING_STANDARDS.md)
+3. Use [Quick Reference](docs/QUICK_REFERENCE.md) for common patterns
+4. Write tests for new features
+5. Update documentation as needed
+
+## License
+
+This project is for educational and development purposes.

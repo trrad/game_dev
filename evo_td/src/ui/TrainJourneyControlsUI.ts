@@ -7,8 +7,9 @@ import { Train } from "../entities/Train";
 import { Station } from "../entities/Station";
 import { TrainSystem } from "../systems/TrainSystem";
 import { EventStack, EventCategory } from "../core/EventStack";
+import { PositionComponent } from '../components/PositionComponent';
+import { MathUtils } from '../utils/MathUtils';
 import { Logger, LogCategory } from "../utils/Logger";
-import { PositionComponent } from "../components/PositionComponent";
 
 export interface JourneyOption {
     stationId: string;
@@ -105,10 +106,7 @@ export class TrainJourneyControlsUI {
             
             const stationPos = stationPosComponent.getPosition();
 
-            const distance = Math.sqrt(
-                Math.pow(trainPos.x - stationPos.x, 2) + 
-                Math.pow(trainPos.z - stationPos.z, 2)
-            );
+            const distance = MathUtils.calculateDistance2D(trainPos, stationPos);
 
             // If within 2 units, consider at station
             if (distance < 2.0) {
