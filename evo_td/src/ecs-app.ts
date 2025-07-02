@@ -883,7 +883,7 @@ class ECSApp {
                     if (success) {
                         // With the new Entity-Level Registration pattern, attachment visuals
                         // will be handled by the car's render component automatically
-                        // TODO: Implement attachment visual updates in CarRenderComponent
+                        // TODO: Implement attachment visual updates in TrainCarRenderComponent
                         
                         Logger.log(LogCategory.SYSTEM, `Added working turret to engine car`, {
                             carId: engineCar.carId,

@@ -4,7 +4,7 @@
  */
 import { TransformNode, Scene, Vector3 } from "@babylonjs/core";
 import { RenderComponent, RenderConfig } from "./RenderComponent";
-import { CarRenderComponent } from "./CarRenderComponent";
+import { TrainCarRenderComponent } from "./TrainCarRenderComponent";
 import { TrainCar } from "../entities/TrainCar";
 import { Logger, LogCategory } from "../utils/Logger";
 
@@ -13,7 +13,7 @@ import { Logger, LogCategory } from "../utils/Logger";
  */
 export class TrainRenderComponent extends RenderComponent {
     private trainId: string;
-    private carRenderComponents: Map<string, CarRenderComponent> = new Map();
+    private carRenderComponents: Map<string, TrainCarRenderComponent> = new Map();
     private trainGroupNode: TransformNode;
 
     constructor(trainId: string, scene: Scene, config: RenderConfig = {}) {
@@ -53,9 +53,13 @@ export class TrainRenderComponent extends RenderComponent {
     /**
      * Add a car render component to this train
      */
-    addCarRenderComponent(trainCar: TrainCar): CarRenderComponent {
+    addCarRenderComponent(trainCar: TrainCar): TrainCarRenderComponent {
         if (!this.carRenderComponents.has(trainCar.carId)) {
-            const carRenderComponent = new CarRenderComponent(trainCar, this.scene);
+            const carRenderComponent = new TrainCarRenderComponent(trainCar, this.scene);
+            
+            // Attach the component to the TrainCar entity for SceneManager discovery
+            trainCar.addComponent(carRenderComponent);
+            
             this.carRenderComponents.set(trainCar.carId, carRenderComponent);
             
             Logger.log(LogCategory.RENDERING, `Added car render component: ${trainCar.carId} to train ${this.trainId}`);
@@ -81,14 +85,14 @@ export class TrainRenderComponent extends RenderComponent {
     /**
      * Get a specific car render component
      */
-    getCarRenderComponent(carId: string): CarRenderComponent | undefined {
+    getCarRenderComponent(carId: string): TrainCarRenderComponent | undefined {
         return this.carRenderComponents.get(carId);
     }
 
     /**
      * Get all car render components for this train
      */
-    getAllCarRenderComponents(): CarRenderComponent[] {
+    getAllCarRenderComponents(): TrainCarRenderComponent[] {
         return Array.from(this.carRenderComponents.values());
     }
 

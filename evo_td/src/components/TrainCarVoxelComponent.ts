@@ -349,9 +349,12 @@ export class TrainCarVoxelComponent extends Component<TrainCarVoxel[]> {
 
     /**
      * Calculate local position for a voxel based on grid coordinates
-     * X-axis: along the length of the train car (forward/backward)
-     * Y-axis: vertical (up/down)
-     * Z-axis: across the width of the train car (left/right)
+     * COORDINATE SYSTEM (critical for train movement alignment):
+     * X-axis (gridX): along the length of the train car (forward/backward along track)
+     * Y-axis (gridY): vertical (up/down)
+     * Z-axis (gridZ): across the width of the train car (left/right across track)
+     * 
+     * This ensures the voxel grid's long axis aligns with the direction of movement
      */
     getVoxelLocalPosition(gridX: number, gridY: number, gridZ: number): { x: number; y: number; z: number } {
         return {

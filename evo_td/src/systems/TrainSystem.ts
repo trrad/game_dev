@@ -332,8 +332,10 @@ export class TrainSystem {
                 });
                 
                 // Update car's rotation to align with rail direction
+                // CRITICAL: Ensure car and voxel grid rotation aligns with track direction
+                // The voxel grid's X-axis should align with the track direction vector
                 // For reverse direction, flip the rotation 180 degrees
-                let carRotationY = Math.atan2(carDirection.x, carDirection.z);
+                let carRotationY = Math.atan2(carDirection.z, carDirection.x);
                 if (railPosition.getDirection() === 'reverse') {
                     carRotationY += Math.PI;
                 }
@@ -344,7 +346,15 @@ export class TrainSystem {
                     z: 0
                 });
                 
-                // Update all voxels in this car to match the car's new position
+                // Debug logging for voxel alignment
+                Logger.log(LogCategory.TRAIN, `Car ${car.carId} aligned with track`, {
+                    carProgress,
+                    direction: railPosition.getDirection(),
+                    carRotationY: carRotationY * (180 / Math.PI), // Convert to degrees for readability
+                    trackDirection: `(${carDirection.x.toFixed(3)}, ${carDirection.z.toFixed(3)})`
+                });
+                
+                // Update all voxels in this car to match the car's new position and rotation
                 this.updateCarVoxelPositions(car, carWorldPosition, carRotationY);
             }
             
@@ -393,9 +403,10 @@ export class TrainSystem {
             const rotatedZ = gridPos.x * sin + gridPos.z * cos;
             
             // Calculate final world position
-            // X-axis: along the length of the train car (forward/backward)
+            // CRITICAL: Ensure voxel grid alignment with track direction
+            // X-axis: along the length of the train car (forward/backward along track)
             // Y-axis: vertical (up/down)
-            // Z-axis: across the width of the train car (left/right)
+            // Z-axis: across the width of the train car (left/right across track)
             const worldPosition = {
                 x: carPosition.x + rotatedX,
                 y: carPosition.y + gridPos.y,
@@ -636,7 +647,7 @@ export class TrainSystem {
                         z: carWorldPos.z
                     });
                     
-                    const carRotationY = Math.atan2(carWorldDir.x, carWorldDir.z);
+                    const carRotationY = Math.atan2(carWorldDir.z, carWorldDir.x);
                     carWorldPosition.setRotation({
                         x: 0,
                         y: carRotationY,

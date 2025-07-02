@@ -1,4 +1,4 @@
-import { Vector3, Mesh, TransformNode, Scene } from "@babylonjs/core";
+import { Vector3, Mesh, TransformNode, Scene, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
 import { GameObject } from "../core/GameObject";
 import { Logger, LogCategory } from "../utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
@@ -62,11 +62,11 @@ export class TrainCar extends GameObject {
         };
 
         // Initialize voxel grid dimensions with validation
-        // Create a reasonable voxel grid for train cars
+        // CRITICAL: Ensure the length dimension (X-axis) is the longest to align with track direction
         const logicalLength = config.length;
-        const voxelLength = Math.max(4, Math.floor(logicalLength * 8)); // More voxels for train-like proportions
-        const width = Math.max(2, Math.floor(config.width || 2)); // Keep narrow for train look
-        const height = Math.max(2, Math.floor(config.height || 2)); // Standard height
+        const voxelLength = Math.max(4, Math.floor(logicalLength * 8)); // More voxels along track direction
+        const width = Math.max(2, Math.min(4, Math.floor(config.width || 2))); // Keep narrow for train look
+        const height = Math.max(2, Math.min(3, Math.floor(config.height || 2))); // Standard height
         
         // Validate reasonable bounds to prevent memory issues
         if (voxelLength > 50 || width > 50 || height > 50) {
@@ -78,6 +78,7 @@ export class TrainCar extends GameObject {
         const safeHeight = Math.min(50, height);
         
         // Store safe dimensions for use in other methods
+        // IMPORTANT: length is the X dimension and should be the longest
         this._voxelDimensions = { width: safeWidth, height: safeHeight, length: safeLength };
         
         // Initialize 3D voxel grid [length][height][width] = [X][Y][Z]
@@ -160,25 +161,37 @@ export class TrainCar extends GameObject {
 
     /**
      * Determine if a voxel should be created at the given grid position
-     * Grid coordinates: X = length (forward), Y = height (up), Z = width (across)
+     * COORDINATE SYSTEM: X = length (along track), Y = height (up), Z = width (across track)
+     * Creates train-like shapes with the long axis aligned with movement direction
      */
     private shouldCreateVoxelAt(x: number, y: number, z: number): boolean {
         const carType = this._config.type;
         const { width, height, length } = this._voxelDimensions;
         
         // Basic layout: create solid blocks for most car types
+        // The goal is to create recognizable train car shapes with length > width
         switch (carType) {
             case 'engine':
-                // Engine has more structural voxels
+                // Engine has more structural voxels and a solid form
+                // Create a mostly solid rectangular form that's longer than it is wide
                 return true;
             case 'cargo':
-                // Cargo cars may have hollow centers for storage
-                return y === 0 || x === 0 || x === length - 1 || z === 0 || z === width - 1;
+                // Cargo cars have hollow centers for storage but solid frames
+                // Create walls along the length (X) and ends, hollow in middle
+                const isLengthWall = (x === 0 || x === length - 1); // Front/back walls
+                const isWidthWall = (z === 0 || z === width - 1);   // Side walls
+                const isFloor = (y === 0);                          // Floor
+                const isRoof = (y === height - 1);                  // Roof
+                
+                return isFloor || isRoof || isLengthWall || isWidthWall;
             case 'passenger':
-                // Passenger cars have floors and walls
-                return y === 0 || x === 0 || x === length - 1 || z === 0 || z === width - 1;
+                // Passenger cars have floors, walls, and roofs
+                const passengerIsWall = (x === 0 || x === length - 1 || z === 0 || z === width - 1);
+                const passengerIsFloorRoof = (y === 0 || y === height - 1);
+                
+                return passengerIsFloorRoof || passengerIsWall;
             case 'weapons':
-                // Weapons platforms need structural support
+                // Weapons platforms need structural support - mostly solid
                 return true;
             default:
                 return true;
@@ -199,14 +212,16 @@ export class TrainCar extends GameObject {
         const sin = Math.sin(carRotationY);
         
         // Calculate local position relative to car center
-        // X-axis: along the length of the train car (forward/backward)
-        // Y-axis: vertical (up/down)
-        // Z-axis: across the width of the train car (left/right)
+        // COORDINATE SYSTEM (matching TrainCarVoxelComponent):
+        // X-axis (gridX): along the length of the train car (forward/backward along track)
+        // Y-axis (gridY): vertical (up/down)
+        // Z-axis (gridZ): across the width of the train car (left/right across track)
         const localX = (gridX - (this._voxelDimensions.length - 1) / 2) * this._voxelSpacing;
         const localY = (gridY - (this._voxelDimensions.height - 1) / 2) * this._voxelSpacing;
         const localZ = (gridZ - (this._voxelDimensions.width - 1) / 2) * this._voxelSpacing;
 
         // Apply car rotation to align voxel grid with track direction
+        // The rotation is applied so that the voxel grid's length (gridX) follows the track direction
         const rotatedX = localX * cos - localZ * sin;
         const rotatedZ = localX * sin + localZ * cos;
 
@@ -896,6 +911,9 @@ export class TrainCar extends GameObject {
                 Logger.log(LogCategory.RENDERING, `Added VoxelRenderComponent to voxel ${voxel.id}`);
             }
         });
+
+        // Add debug meshes to visualize car orientation and direction
+        this.addDebugOrientationMeshes(scene);
 
         Logger.log(LogCategory.RENDERING, `Rendering setup complete for car ${this.carId}`, {
             voxelCount: this._voxels.size

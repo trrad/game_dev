@@ -1,8 +1,8 @@
 /**
- * CarRenderComponent - Handles rendering of entire train cars
+ * TrainCarRenderComponent - Handles rendering of entire train cars
  * Part of the ECS-based rendering system refactor
  */
-import { Mesh, TransformNode, Scene, Vector3, AbstractMesh } from "@babylonjs/core";
+import { Mesh, TransformNode, Scene, Vector3, AbstractMesh, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
 import { RenderComponent, RenderConfig } from "./RenderComponent";
 import { TrainCar } from "../entities/TrainCar";
 import { VoxelRenderComponent, VoxelRenderConfig } from "./VoxelRenderComponent";
@@ -12,22 +12,37 @@ import { PositionComponent } from "../components/PositionComponent";
 import { Logger, LogCategory } from "../utils/Logger";
 
 /**
- * Car-level render component that manages voxel and attachment rendering
+ * Configuration specific to train car rendering
  */
-export class CarRenderComponent extends RenderComponent {
+export interface TrainCarRenderConfig extends RenderConfig {
+    showDebugMesh?: boolean; // Show debug orientation mesh for the whole car
+    debugMeshColor?: Color3; // Color for the debug mesh
+}
+
+/**
+ * Train car-level render component that manages voxel and attachment rendering
+ */
+export class TrainCarRenderComponent extends RenderComponent {
     private trainCar: TrainCar;
     private voxelRenderComponents: Map<string, VoxelRenderComponent> = new Map();
     private attachmentRenderComponents: Map<string, AttachmentRenderComponent> = new Map();
     private carGroupNode: TransformNode;
+    private debugMesh?: Mesh; // Debug mesh to visualize car orientation
+    private trainCarConfig: TrainCarRenderConfig;
 
-    constructor(trainCar: TrainCar, scene: Scene, config: RenderConfig = {}) {
+    constructor(trainCar: TrainCar, scene: Scene, config: TrainCarRenderConfig = {}) {
         super(scene, config);
         this.trainCar = trainCar;
+        this.trainCarConfig = {
+            showDebugMesh: true, // Enable debug mesh by default for debugging
+            debugMeshColor: new Color3(1, 0, 0), // Red debug mesh
+            ...config
+        };
         
         // Create a group node for organizational purposes
         this.carGroupNode = new TransformNode(`car_group_${trainCar.carId}`, scene);
         
-        Logger.log(LogCategory.RENDERING, `CarRenderComponent created for car ${trainCar.carId}`);
+        Logger.log(LogCategory.RENDERING, `TrainCarRenderComponent created for car ${trainCar.carId}`);
     }
 
     /**
@@ -35,12 +50,16 @@ export class CarRenderComponent extends RenderComponent {
      */
     protected createVisual(): void {
         this.initializeCarRendering();
+        this.createDebugMesh();
     }
 
     /**
      * Update the visual representation - required by base class
      */
     protected updateVisual(): void {
+        // Update debug mesh position and rotation
+        this.updateDebugMesh();
+        
         // The individual render components will be updated by their own event subscriptions
         // This method is for car-level visual updates only
         
@@ -51,6 +70,8 @@ export class CarRenderComponent extends RenderComponent {
 
         // TODO: Future asset streaming integration point
         // this.updateAssetLoading();
+        
+        this.updateDebugMesh();
     }
 
     /**
@@ -101,6 +122,107 @@ export class CarRenderComponent extends RenderComponent {
             voxelCount: voxels.length,
             attachmentCount: attachments.length
         });
+    }
+
+    /**
+     * Create debug mesh to visualize car orientation and direction
+     */
+    private createDebugMesh(): void {
+        if (!this.trainCarConfig.showDebugMesh) {
+            Logger.log(LogCategory.RENDERING, `Debug mesh disabled for car ${this.trainCar.carId}`);
+            return;
+        }
+
+        Logger.log(LogCategory.RENDERING, `Creating debug mesh for car ${this.trainCar.carId}`, {
+            actualLength: this.trainCar.actualLength,
+            showDebugMesh: this.trainCarConfig.showDebugMesh
+        });
+
+        // Create a simple box mesh to represent the car - make it MUCH more visible
+        this.debugMesh = MeshBuilder.CreateBox(
+            `debug_car_${this.trainCar.carId}`, 
+            { 
+                width: Math.max(20.0, this.trainCar.actualLength * 5), // Make it MUCH larger
+                height: 10.0, // Make it much taller
+                depth: 8.0 // Make it much wider for visibility
+            }, 
+            this.scene
+        );
+
+        // Set the mesh property so SceneManager can find it
+        this.mesh = this.debugMesh;
+
+        // Set up material with high visibility
+        const material = new StandardMaterial(`debug_car_mat_${this.trainCar.carId}`, this.scene);
+        material.diffuseColor = this.trainCarConfig.debugMeshColor || new Color3(1, 0, 0);
+        material.alpha = 1.0; // Make it completely opaque
+        material.emissiveColor = new Color3(1.0, 0.2, 0.2); // Make it glow bright red
+        material.wireframe = false; // Use solid for better visibility
+        material.backFaceCulling = false; // Ensure both sides are rendered
+        this.debugMesh.material = material;
+
+        // Set initial position and rotation - elevate it significantly above voxels
+        const positionComponent = this.trainCar.getComponent<PositionComponent>('position');
+        if (positionComponent) {
+            const carPosition = positionComponent.getPosition();
+            const carRotation = positionComponent.getRotation();
+            
+            // Place it well above the voxels for visibility
+            this.debugMesh.position.set(carPosition.x, carPosition.y + 15.0, carPosition.z);
+            this.debugMesh.rotation.set(carRotation.x, carRotation.y, carRotation.z);
+        } else {
+            // Fallback position if no position component
+            this.debugMesh.position.set(0, 15.0, 0);
+            Logger.warn(LogCategory.RENDERING, `No position component found for car ${this.trainCar.carId}, using fallback position`);
+        }
+
+        // Don't parent to car group initially - set absolute position for testing
+        // this.debugMesh.parent = this.carGroupNode;
+
+        // Ensure the mesh is visible and enabled
+        this.debugMesh.setEnabled(true);
+        this.debugMesh.isVisible = true;
+        
+        // Check scene registration
+        const sceneContainsMesh = this.scene.meshes.includes(this.debugMesh);
+
+        Logger.log(LogCategory.RENDERING, `Created debug mesh for car ${this.trainCar.carId}`, {
+            dimensions: `${Math.max(20.0, this.trainCar.actualLength * 5)}x10.0x8.0`,
+            position: `(${this.debugMesh.position.x}, ${this.debugMesh.position.y}, ${this.debugMesh.position.z})`,
+            rotation: `(${this.debugMesh.rotation.x}, ${this.debugMesh.rotation.y}, ${this.debugMesh.rotation.z})`,
+            visible: this.debugMesh.isVisible,
+            enabled: this.debugMesh.isEnabled(),
+            material: !!this.debugMesh.material,
+            wireframe: this.debugMesh.material?.wireframe || false,
+            sceneRegistered: sceneContainsMesh,
+            sceneId: this.scene.uid,
+            meshId: this.debugMesh.id
+        });
+    }
+
+    /**
+     * Update debug mesh position and rotation
+     */
+    private updateDebugMesh(): void {
+        if (!this.debugMesh) return;
+
+        const positionComponent = this.trainCar.getComponent<PositionComponent>('position');
+        if (!positionComponent) return;
+
+        const carPosition = positionComponent.getPosition();
+        const carRotation = positionComponent.getRotation();
+
+        // Update position and rotation
+        this.debugMesh.position.set(carPosition.x, carPosition.y + 15.0, carPosition.z); // High above ground for visibility
+        this.debugMesh.rotation.set(carRotation.x, carRotation.y, carRotation.z);
+    }
+
+    /**
+     * Override position updates to also update debug mesh
+     */
+    protected onPositionChanged(positionData: any): void {
+        super.onPositionChanged(positionData);
+        this.updateDebugMesh();
     }
 
     /**
@@ -270,11 +392,17 @@ export class CarRenderComponent extends RenderComponent {
         });
         this.attachmentRenderComponents.clear();
 
+        // Dispose debug mesh
+        if (this.debugMesh) {
+            this.debugMesh.dispose();
+            this.debugMesh = undefined;
+        }
+
         // Dispose the group node
         this.carGroupNode.dispose();
 
         super.dispose();
         
-        Logger.log(LogCategory.RENDERING, `CarRenderComponent disposed for car ${this.trainCar.carId}`);
+        Logger.log(LogCategory.RENDERING, `TrainCarRenderComponent disposed for car ${this.trainCar.carId}`);
     }
 }
