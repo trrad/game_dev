@@ -1,7 +1,10 @@
 /**
- * Unified Logging System
- * Combines EventStack-based event logging with traditional debug logging
- * Single source of truth for all application logging and events
+ * Unified Logger System
+ * A comprehensive logging system that combines traditional logging with event tracking
+ * 
+ * NOTE: This UnifiedLogger is fully implemented but not currently used in the main ECS app.
+ * The main app uses the separate Logger (utils/Logger.ts) and EventStack (core/EventStack.ts) systems.
+ * This unified system could replace both in the future for simplified logging architecture.
  */
 
 export enum LogLevel {
@@ -363,9 +366,6 @@ export class UnifiedLogger {
             URL.revokeObjectURL(url);
             
             console.log(`[UnifiedLogger] Logs exported as ${filename}`);
-        } else {
-            // Node.js environment - write to file
-            try {
                 const fs = require('fs');
                 const path = require('path');
                 

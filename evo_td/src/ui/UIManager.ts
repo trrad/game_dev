@@ -1,6 +1,10 @@
 /**
  * UI Manager
  * Coordinates all UI components and manages CSS loading
+ * 
+ * NOTE: This UIManager is fully implemented but not currently used in the main ECS app.
+ * The main app (ecs-app.ts) creates UI components directly instead of using this manager.
+ * This could be integrated in the future to centralize UI management.
  */
 
 import { CSSLoader } from "../utils/CSSLoader";

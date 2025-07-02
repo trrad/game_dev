@@ -1,6 +1,10 @@
 /**
  * Time Controls UI Component
  * Handles the time management interface (speed controls, pause, game time display)
+ * 
+ * NOTE: This TimeControlsUI component is fully implemented but not currently used in the main ECS app.
+ * The main app (ecs-app.ts) creates time controls inline instead of using this dedicated component.
+ * This component provides more features and could replace the inline implementation.
  */
 
 import { TimeManager, TimeSpeed } from "../core/TimeManager";
