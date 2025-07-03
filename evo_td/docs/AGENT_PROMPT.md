@@ -23,69 +23,46 @@ The project has undergone systematic refactoring (Phases 1-3) to establish clean
 ## Project Structure
 
 ```
-src/
-├── ecs-app.ts              # Main ECS application entry point
-├── core/                   # Core framework classes
-│   ├── GameObject.ts       # Base entity class
-│   ├── Component.ts        # Base component interface
-│   ├── SceneManager.ts     # 3D scene and rendering coordination
-│   └── TimeManager.ts      # Game time and delta calculations
-├── components/             # ECS components (with methods, not just data)
-│   ├── PositionComponent.ts    # 3D position and spatial operations
-│   ├── HealthComponent.ts      # Health, damage, and regeneration
-│   ├── MovementComponent.ts    # Velocity and physics properties
-│   ├── AIBehaviorComponent.ts  # Enemy AI state and decision making
-│   ├── RailPositionComponent.ts      # Train position along rails
-│   ├── TrainCarPositionComponent.ts  # Car position within trains
-│   └── AttachmentSlotComponent.ts    # 3D grid attachment mounting
-├── entities/               # Game entities (extend GameObject)
-│   ├── Train.ts           # Multi-car train entities
-│   ├── TrainCar.ts        # Individual train cars with voxel grids
-│   ├── TrainCarVoxel.ts   # Individual voxel entities
-│   ├── Enemy.ts           # AI-controlled hostile entities
-│   ├── Station.ts         # Trading and service hubs
-│   ├── Rail.ts            # Path connections between stations
-│   ├── Building.ts        # Station buildings and structures
-│   ├── Attachment.ts      # Equipment mounted on train cars
-│   └── Projectile.ts      # Weapon projectiles
-├── systems/               # ECS systems (coordinate gameplay)
-│   ├── TrainSystem.ts     # Train movement and car coordination
-│   ├── EnemySystem.ts     # Enemy spawning, AI, and combat
-│   ├── ProjectileSystem.ts # Projectile physics and collision
-│   └── UISystem.ts        # User interface management
-├── renderers/             # Rendering components (extend RenderComponent)
-│   ├── VoxelRenderComponent.ts      # Individual voxel rendering
-│   ├── CarRenderComponent.ts        # Car-level render coordination
-│   ├── TrainRenderComponent.ts      # Train-level render coordination
-│   ├── AttachmentRenderComponent.ts # Equipment and weapon rendering
-│   ├── EnemyRenderer.ts             # Enemy visual representation
-│   └── StationRenderer.ts           # Station and building rendering
-├── utils/                 # Utility functions and helpers
-│   ├── MathUtils.ts       # Mathematical operations and vectors
-│   ├── GeometryUtils.ts   # Spatial calculations and collision
-│   ├── ObjectTracker.ts   # Global entity registry and lookup
-│   └── Logger.ts          # Structured logging and observability
-└── ui/                    # User interface components
-    ├── UIManager.ts       # UI system coordination
-    ├── TimeControlsUI.ts  # Game time manipulation
-    └── TrainJourneyControlsUI.ts  # Train control interface
-```
-│   ├── TimeControlsUI.ts
-│   ├── EventLogUI.ts
-│   └── TrainCarModificationUI.ts
-├── utils/                 # Utility functions
-│   ├── MathUtils.ts
-│   ├── GeometryUtils.ts
-│   ├── Logger.ts
-│   └── ObjectTracker.ts
-├── core/                  # Core ECS framework
-│   ├── GameObject.ts
-│   ├── Component.ts
-│   ├── SceneManager.ts
-│   ├── TimeManager.ts
-│   └── EventStack.ts
-└── net/                   # Networking code
-    └── ColyseusClient.ts
+evo_td/
+├── package.json
+├── vite.config.js
+├── tsconfig.json
+├── ecs-app.ts                # Main ECS application entry point
+├── engine/                   # Engine framework (generic, reusable)
+│   ├── core/                 # Core ECS framework
+│   │   ├── GameObject.ts
+│   │   ├── Component.ts
+│   │   ├── SceneManager.ts
+│   │   ├── TimeManager.ts
+│   │   └── EventStack.ts
+│   ├── components/           # ECS components (engine-level)
+│   │   ├── NodeComponent.ts
+│   │   ├── PositionComponent.ts
+│   │   ├── HealthComponent.ts
+│   │   ├── MovementComponent.ts
+│   │   ├── RadiusComponent.ts
+│   │   └── RenderComponent.ts
+│   ├── scene/
+│   │   └── SceneManager.ts
+│   ├── utils/                # Engine utilities
+│   │   ├── Logger.ts
+│   │   ├── MathUtils.ts
+│   │   ├── GeometryUtils.ts
+│   │   └── ObjectTracker.ts
+│   └── net/
+│       └── ColyseusClient.ts
+├── game/                     # Game-specific logic and content
+│   ├── components/           # Game-specific ECS components
+│   ├── entities/             # Game entities (extend GameObject)
+│   ├── systems/              # ECS systems (coordinate gameplay)
+│   ├── renderers/            # Rendering components (game-specific)
+│   ├── ui/                   # User interface components
+│   └── utils/                # Game-specific utilities (if any)
+├── public/                   # Static assets
+├── assets/                   # Game assets (images, models, etc.)
+└── tests/                    # Unit and integration tests
+    ├── unit/
+    └── mocks/
 ```
 
 ## Architectural Principles

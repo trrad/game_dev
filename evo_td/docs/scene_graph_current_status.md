@@ -1,14 +1,24 @@
 # Scene Graph Refactor: Current Status and Next Steps
 
+## Additional Implementation Notes (2025-07-03)
+
+- **TrainCar Rail Attachment**: Train cars are positioned using two “wheel” points (front and back) that slide along the rail spline. This enables realistic coupling and orientation, as each car’s transform is determined by the positions of its two wheel points on the rail.
+- **Scene Graph Root**: There is a single global root node (managed by SceneManager) for all NodeObjects. All events propagate through this root using the hierarchical event system. The legacy EventStack is deprecated in favor of this unified system.
+- **Per-Voxel Objects**: Voxels are individual NodeObjects (not thin instances), supporting per-voxel logic, events, and attachments. Mesh merging is used for rendering optimization, but the logical node structure is preserved for gameplay and event handling.
+- **Instancing for Projectiles/Background**: Instancing/thin instances are reserved for projectiles or background visuals, not for core game objects like voxels.
+- **Mesh Merging**: For static or rarely-changing voxel structures (e.g., a train car), mesh merging is used to reduce draw calls, but logical node structure is maintained for game logic and events.
+
 ## Current Status Assessment
 
 ### ✅ **Completed Successfully:**
 1. **Directory Structure**: Clean engine/game separation established
 2. **Import Migration**: 95% reduction in compilation errors (350→18)
-3. **Core Components**: SceneNodeComponent implemented with hierarchical relationships
+3. **Core Components**: NodeComponent
+ implemented with hierarchical relationships
 4. **Scene Graph Event System**: Full hierarchical event propagation with spatial awareness implemented
 5. **RadiusComponent**: Generic spatial component for collision/proximity/LOD systems
-6. **Event System Integration**: SceneNodeComponent has full event capabilities
+6. **Event System Integration**: NodeComponent
+ has full event capabilities
 7. **Build System**: Clean separation with dist/ output directory
 8. **Example Implementation**: Working demo of scene graph events and spatial systems
 
@@ -30,7 +40,7 @@
 - ✅ **Hierarchy Targeting**: Events to entire sub-trees of the scene graph
 - ✅ **Filter Support**: Custom filtering functions for targeted events
 
-#### SceneNodeComponent Integration
+#### NodeComponent Integration
 - ✅ **Event Methods**: addEventListener, removeEventListener, emit, dispatchEvent
 - ✅ **Convenience Methods**: emitToParent, emitToChildren, emitToSiblings
 - ✅ **Spatial Methods**: emitToRadius, getNodesInRadius
@@ -41,7 +51,8 @@
 #### Core Functionality  
 - ✅ **Generic Design**: Supports collision, detection, interaction, render, and custom radius types
 - ✅ **Spatial Calculations**: Distance, overlap, collision detection
-- ✅ **Scene Graph Integration**: Works with SceneNodeComponent for world positioning
+- ✅ **Scene Graph Integration**: Works with NodeComponent
+ for world positioning
 - ✅ **Event Integration**: emitToRadius with filtering support
 
 #### Helper Functions
@@ -56,7 +67,8 @@
 The current `SceneManager` class has not been fully adapted to work with our new scene graph architecture:
 
 1. **Visual Registration**: Still uses a direct mapping between GameObjects and Meshes/TransformNodes
-2. **No SceneNodeComponent Awareness**: Not taking advantage of the hierarchical capabilities
+2. **No NodeComponent
+ Awareness**: Not taking advantage of the hierarchical capabilities
 3. **Manual Position Syncing**: Still manually syncing positions from PositionComponent to visuals
 4. **Missing Event System**: Not integrated with the new SceneGraphEventSystem
 5. **No Hierarchy Management**: Doesn't properly establish parent-child relationships
@@ -64,12 +76,15 @@ The current `SceneManager` class has not been fully adapted to work with our new
 ### Required Changes
 
 1. **Visual Registration Refactoring**: 
-   - Update registration to use SceneNodeComponent
-   - Leverage the natural hierarchy in SceneNodeComponent
+   - Update registration to use NodeComponent
+   
+   - Leverage the natural hierarchy in NodeComponent
+   
    - Support automatic parent-child relationships
 
 2. **Position Syncing**:
-   - Use SceneNodeComponent's position/rotation/scale
+   - Use NodeComponent
+   's position/rotation/scale
    - Eliminate the need for manual sync from PositionComponent
 
 3. **Visual Hierarchy**:
@@ -84,8 +99,9 @@ The current `SceneManager` class has not been fully adapted to work with our new
 
 1. **Train System**:
    - Convert Train to a parent node with TrainCars as children
-   - TrainCars should have TrainCarVoxels as children
+   - TrainCars should have TrainCarVoxels as children (each voxel remains an individual mesh/object for easy modification and per-voxel logic)
    - Voxels should have Attachments as children
+   - Note: Mesh merging or shader-based batching is not used by default, but may be considered later if performance becomes a concern.
 
 2. **Enemy System**:
    - Convert Enemy entities to use scene graph
@@ -98,14 +114,18 @@ The current `SceneManager` class has not been fully adapted to work with our new
 ## Updated Status and Next Steps (Priority Order)
 
 ### 🎯 Phase 1: SceneManager Integration (1-2 days) **HIGHEST PRIORITY**
-1. **SceneManager Refactoring**: Update to use SceneNodeComponent instead of direct mesh registration
+1. **SceneManager Refactoring**: Update to use NodeComponent
+ instead of direct mesh registration
 2. **Hierarchical Object Registration**: Implement proper child-parent registration in SceneManager
-3. **Rendering Integration**: Ensure SceneNodeComponent properly synchronizes with rendering system
+3. **Rendering Integration**: Ensure NodeComponent
+ properly synchronizes with rendering system
 4. **Event System Integration**: Connect SceneManager with SceneGraphEventSystem
 
 ### 🎯 Phase 2: Entity Integration (2-3 days) **HIGH PRIORITY**
-1. **TrainCar → SceneNodeComponent**: Convert train cars to use scene hierarchy
-2. **TrainCarVoxel → SceneNodeComponent**: Voxels as children of cars  
+1. **TrainCar → NodeComponent
+**: Convert train cars to use scene hierarchy
+2. **TrainCarVoxel → NodeComponent
+**: Voxels as children of cars  
 3. **Train Coordination**: Train entity manages car positioning via scene graph
 4. **Attachment System**: Attachments as children with proper mounting
 
@@ -133,23 +153,27 @@ The current `SceneManager` class has not been fully adapted to work with our new
 
 1. **Modify SceneManager**:
    - Add new registration methods for scene nodes and hierarchies
-   - Update visual mappings to include SceneNodeComponent references
+   - Update visual mappings to include NodeComponent
+    references
    - Modify update methods to work with scene graph
    - Connect to SceneGraphEventSystem
 
 2. **Core Class Modifications**:
    - `SceneManager.ts` - Update to be scene graph aware
    - `ecs-app.ts` - Update entity registration to use new methods
-   - `RenderComponent.ts` - Ensure proper integration with SceneNodeComponent
+   - `RenderComponent.ts` - Ensure proper integration with NodeComponent
+   
 
 ### 2. Entity Integration
 
 1. **Train Integration**:
-   - Update `Train.ts` to fully use SceneNodeComponent for positioning
+   - Update `Train.ts` to fully use NodeComponent
+    for positioning
    - Establish parent-child relationship between Train and TrainCars
 
 2. **TrainCar Integration**:
-   - Complete `TrainCar.ts` integration with SceneNodeComponent
+   - Complete `TrainCar.ts` integration with NodeComponent
+   
    - Fix TrainCar positioning on rails
    - Establish proper parent-child relationships with TrainCarVoxels
 

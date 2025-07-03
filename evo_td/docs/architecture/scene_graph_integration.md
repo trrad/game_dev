@@ -14,15 +14,15 @@ By integrating a proper scene graph, we can address these issues while maintaini
 
 ## Core Components
 
-### SceneNodeComponent
+### NodeComponent
 
 This new component serves as the bridge between our ECS architecture and Babylon.js's scene graph:
 
 ```typescript
-export class SceneNodeComponent extends Component<SceneNodeComponentData> {
+export class NodeComponent extends Component<NodeComponentData> {
     private _node: TransformNode;
-    private _parent: SceneNodeComponent | null = null;
-    private _children: SceneNodeComponent[] = [];
+    private _parent: NodeComponent | null = null;
+    private _children: NodeComponent[] = [];
 
     constructor(scene: Scene) {
         super();
@@ -30,9 +30,9 @@ export class SceneNodeComponent extends Component<SceneNodeComponentData> {
     }
 
     // Parent-child relationship
-    setParent(parent: SceneNodeComponent | null): void;
-    addChild(child: SceneNodeComponent): void;
-    removeChild(child: SceneNodeComponent): void;
+    setParent(parent: NodeComponent | null): void;
+    addChild(child: NodeComponent): void;
+    removeChild(child: NodeComponent): void;
 
     // Local transformations (relative to parent)
     setLocalPosition(x: number, y: number, z: number): void;
@@ -72,17 +72,17 @@ export class RenderResourceManager {
 
 ## Implementation Phases
 
-### Phase 1: SceneNodeComponent Integration
-1. Create SceneNodeComponent class
+### Phase 1: NodeComponent Integration
+1. Create NodeComponent class
 2. Update GameObject to support scene node hierarchy
-3. Modify PositionComponent to sync with SceneNodeComponent
-4. Update SceneManager to recognize SceneNodeComponent
+3. Modify PositionComponent to sync with NodeComponent
+4. Update SceneManager to recognize NodeComponent
 
 ### Phase 2: Train Car Refactoring
-1. Refactor TrainCar to use SceneNodeComponent
-2. Update TrainCarVoxel to be a child of TrainCar's scene node
+1. Refactor TrainCar to use NodeComponent
+2. Update TrainCarVoxel to be a child of TrainCar's node
 3. Modify TrainSystem to leverage the scene graph
-4. Add debug visualization for scene node hierarchy
+4. Add debug visualization for node hierarchy
 
 ### Phase 3: RenderResource Optimization
 1. Implement RenderResourceManager
@@ -120,3 +120,7 @@ To minimize disruption, we'll implement a hybrid approach:
 3. **Culling**: Implement hierarchical frustum culling
 4. **Static Objects**: Optimize static objects with frozen transforms
 5. **Instancing**: Use instanced rendering for similar objects
+
+### TrainCarVoxel
+
+- Each voxel is an individual mesh/object to allow for easy modification, reskinning, and per-voxel logic. Mesh merging or shader-based batching is not used by default, but may be considered as a future optimization if performance requires it.

@@ -26,7 +26,8 @@ The Train Trading Game has a solid ECS foundation with basic train movement, ene
 **Goal**: Refine existing systems for smooth, engaging gameplay
 
 #### Train System Enhancements
-- **TODO**: Implement proper train car coupling physics
+- **TODO**: Implement proper train car coupling physics (dual-point/wheel attachment to rail)
+- **TODO**: Each voxel is an individual mesh/object for easy modification and per-voxel logic. Mesh merging or shader-based batching is not used by default, but may be considered as a future optimization if performance requires it.
 - **TODO**: Add train acceleration/deceleration curves for smooth movement
 - **TODO**: Create car-specific damage propagation (engine damage affects speed)
 - **TODO**: Implement train inventory management across multiple cars

@@ -4,20 +4,25 @@ This directory contains game-specific components that implement the train tradin
 
 ## Directory Structure
 
-- **components/**: Game-specific components
-  - `TrainComponent.ts` (planned): Train behavior
-  - `EnemyComponent.ts` (planned): Enemy behavior
-  - `RailComponent.ts` (planned): Rail network behavior
-
+- **components/**: Game-specific ECS components
+  - `RailPositionComponent.ts`, `RailMovementComponent.ts`, `AttachmentSlotComponent.ts`, `TrainCarVoxelComponent.ts`, etc.
 - **entities/**: Game-specific entities
-  - `Train.ts` (planned): Train entity
-  - `TrainCar.ts` (planned): Train car entity
-  - `Enemy.ts` (planned): Enemy entity
-
+  - `Trains/Train.ts`: Train entity
+  - `Trains/TrainCar/TrainCar.ts`: Train car entity
+  - `Trains/TrainCar/TrainCarVoxels/TrainCarVoxel.ts`: Voxel entity for train cars
+  - `Station/Station.ts`: Station entity
+  - `Enemy.ts`: Enemy entity
+  - `Attachment/Attachment.ts`: Weapon/cargo attachments
 - **systems/**: Game-specific systems
-  - `TrainSystem.ts` (planned): Train management
-  - `EnemySystem.ts` (planned): Enemy management
-  - `EconomySystem.ts` (planned): Trading and resources
+  - `TrainSystem.ts`: Train management
+  - `EnemySystem.ts`: Enemy management
+  - `UISystem.ts`: UI management
+  - `ProjectileSystem.ts`: Projectile and combat logic
+- **renderers/**: Game-specific rendering components
+  - `TrainRenderer.ts`, `EnemyRenderer.ts`, `StationRenderer.ts`, etc.
+- **ui/**: User interface components
+  - `UIManager.ts`, `UIFactory.ts`, `TrainJourneyControlsUI.ts`, etc.
+- **utils/**: Game-specific utilities (if any)
 
 ## Game Mechanics
 

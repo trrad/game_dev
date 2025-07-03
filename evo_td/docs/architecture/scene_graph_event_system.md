@@ -32,8 +32,8 @@ interface SceneGraphEvent extends ComponentEvent {
     sourceId: string;
     
     // New scene graph properties
-    target: SceneNodeComponent;           // The target node
-    currentTarget: SceneNodeComponent;    // Current node in event path
+    target: NodeComponent;           // The target node
+    currentTarget: NodeComponent;    // Current node in event path
     phase: EventPhase;                    // Current event phase
     bubbles: boolean;                     // Should event bubble up?
     cancelable: boolean;                  // Can event be cancelled?
@@ -58,7 +58,7 @@ interface EventTarget {
     type: 'node' | 'radius' | 'hierarchy' | 'broadcast';
     
     // Specific node targeting
-    node?: SceneNodeComponent;
+    node?: NodeComponent;
     
     // Radius-based targeting
     center?: Vector3;
@@ -66,11 +66,11 @@ interface EventTarget {
     radiusType?: 'collision' | 'interaction' | 'detection' | 'render';
     
     // Hierarchy targeting
-    root?: SceneNodeComponent;
+    root?: NodeComponent;
     maxDepth?: number;
     
     // Filtering
-    filter?: (node: SceneNodeComponent) => boolean;
+    filter?: (node: NodeComponent) => boolean;
 }
 ```
 
@@ -79,28 +79,28 @@ interface EventTarget {
 #### 1. **SceneGraphEventSystem**
 ```typescript
 class SceneGraphEventSystem {
-    private sceneRoot: SceneNodeComponent;
-    private eventListeners: Map<string, Map<SceneNodeComponent, EventListener[]>>;
+    private sceneRoot: NodeComponent;
+    private eventListeners: Map<string, Map<NodeComponent, EventListener[]>>;
     
     // Event targeting
     emitEvent(event: SceneGraphEvent, target: EventTarget): void;
-    emitToNode(eventType: string, payload: any, node: SceneNodeComponent, options?: EventOptions): void;
+    emitToNode(eventType: string, payload: any, node: NodeComponent, options?: EventOptions): void;
     emitToRadius(eventType: string, payload: any, center: Vector3, radius: number, filter?: RadiusFilter): void;
-    emitToHierarchy(eventType: string, payload: any, root: SceneNodeComponent, maxDepth?: number): void;
+    emitToHierarchy(eventType: string, payload: any, root: NodeComponent, maxDepth?: number): void;
     
     // Event listening
-    addEventListener(node: SceneNodeComponent, eventType: string, listener: EventListener, options?: EventListenerOptions): void;
-    removeEventListener(node: SceneNodeComponent, eventType: string, listener: EventListener): void;
+    addEventListener(node: NodeComponent, eventType: string, listener: EventListener, options?: EventListenerOptions): void;
+    removeEventListener(node: NodeComponent, eventType: string, listener: EventListener): void;
     
     // Spatial queries (for radius targeting)
-    getNodesInRadius(center: Vector3, radius: number, filter?: (node: SceneNodeComponent) => boolean): SceneNodeComponent[];
-    getNodesInHierarchy(root: SceneNodeComponent, filter?: (node: SceneNodeComponent) => boolean): SceneNodeComponent[];
+    getNodesInRadius(center: Vector3, radius: number, filter?: (node: NodeComponent) => boolean): SceneNodeComponent[];
+    getNodesInHierarchy(root: NodeComponent, filter?: (node: NodeComponent) => boolean): SceneNodeComponent[];
 }
 ```
 
-#### 2. **Enhanced SceneNodeComponent**
+#### 2. **Enhanced NodeComponent**
 ```typescript
-class SceneNodeComponent extends Component<SceneNodeComponentData> {
+class NodeComponent extends Component<NodeComponentData> {
     // ...existing code...
     
     // Event methods
@@ -204,6 +204,10 @@ enemyDetectionRadius.emitToRadius('proximity:check', {
     timestamp: Date.now()
 }, 25); // 25 unit detection radius
 ```
+
+### Usage Notes
+
+- Each voxel is an individual mesh/object to allow for easy modification, reskinning, and per-voxel logic. Mesh merging or shader-based batching is not used by default, but may be considered as a future optimization if performance becomes a concern.
 
 ### Migration Strategy
 

@@ -45,7 +45,7 @@ The base class for all game entities, providing:
 - **Event Integration**: Built-in event emission and subscription
 
 ```typescript
-// Simplified structure - see src/core/GameObject.ts for implementation
+// Simplified structure - see engine/core/GameObject.ts for implementation
 abstract class GameObject {
     readonly id: string;
     readonly type: string;
@@ -75,19 +75,19 @@ Reusable behaviors that can be attached to any GameObject:
 ### System Managers
 Coordinate gameplay mechanics and component interactions:
 
-#### TrainSystem (`src/systems/TrainSystem.ts`)
+#### TrainSystem (`game/systems/TrainSystem.ts`)
 - **Journey Management**: Route planning and train movement
 - **Car Coordination**: Multi-car physics and positioning
 - **Attachment Integration**: Weapon firing and utility activation
 - **State Synchronization**: Network updates for train positions
 
-#### EnemySystem (`src/systems/EnemySystem.ts`)
+#### EnemySystem (`game/systems/EnemySystem.ts`)
 - **Dynamic Spawning**: Procedural enemy generation based on activity
 - **AI Behavior Trees**: State-driven enemy decision making
 - **Combat Resolution**: Damage calculation and health management
 - **Evolution Mechanics**: Adaptive difficulty and enemy progression
 
-#### UISystem (`src/systems/UISystem.ts`)
+#### UISystem (`game/systems/UISystem.ts`)
 - **Interface Management**: Dynamic UI element creation and updates
 - **Input Processing**: Touch and mouse interaction handling
 - **State Presentation**: Game data visualization and feedback
@@ -97,21 +97,21 @@ Coordinate gameplay mechanics and component interactions:
 
 ### Train Entities
 
-#### Train (`src/entities/Train.ts`)
+#### Train (`game/entities/Trains/Train.ts`)
 The top-level train entity that:
 - **Manages TrainCar Collection**: Maintains ordered list of cars
 - **Coordinates Movement**: Synchronizes car positions along rails
 - **Aggregates Statistics**: Health, cargo, and performance metrics
 - **Handles Player Commands**: Route selection and train control
 
-#### TrainCar (`src/entities/TrainCar.ts`)
+#### TrainCar (`game/entities/Trains/TrainCar/TrainCar.ts`)
 Individual train cars with:
 - **Voxel Grid Management**: 3D array of TrainCarVoxel entities
 - **Attachment System**: Mounting points for weapons and equipment
 - **Type Specialization**: Engine, cargo, passenger, or utility roles
 - **Damage Modeling**: Individual car health and destruction
 
-#### TrainCarVoxel (`src/entities/TrainCarVoxel.ts`)
+#### TrainCarVoxel (`game/entities/Trains/TrainCar/TrainCarVoxels/TrainCarVoxel.ts`)
 Granular train components:
 - **Individual Health**: Each voxel can be damaged independently
 - **Material Properties**: Different voxel types (armor, glass, etc.)
@@ -120,14 +120,14 @@ Granular train components:
 
 ### Station & World Entities
 
-#### Station (`src/entities/Station.ts`)
+#### Station (`game/entities/Station/Station.ts`)
 Trade hubs that provide:
 - **Economic Functions**: Buy/sell cargo with dynamic pricing
 - **Services**: Repair, refuel, and upgrade facilities
 - **Procedural Properties**: Randomly generated specializations
 - **Building System**: Modular station expansion with Building entities
 
-#### Rail (`src/entities/Rail.ts`)
+#### Rail (`game/entities/Rail.ts`)
 Connections between stations:
 - **Path Definition**: Spline-based routes with variable difficulty
 - **Travel Mechanics**: Speed limits and environmental effects
@@ -136,14 +136,14 @@ Connections between stations:
 
 ### Combat Entities
 
-#### Enemy (`src/entities/Enemy.ts`)
+#### Enemy (`game/entities/Enemy.ts`)
 Hostile entities with:
 - **AI-Driven Behavior**: State machines for different enemy types
 - **Dynamic Spawning**: Appear based on player activity and progression
 - **Adaptive Tactics**: Learn from player strategies and adapt
 - **Evolution System**: Increase in difficulty over time
 
-#### Projectile (`src/entities/Projectile.ts`)
+#### Projectile (`game/entities/Projectile.ts`)
 Weapon projectiles featuring:
 - **Physics Simulation**: Realistic ballistics and collision
 - **Damage Application**: Health reduction and visual effects
@@ -155,26 +155,26 @@ Weapon projectiles featuring:
 ### Component-Based Rendering
 Each visual element has a corresponding render component:
 
-#### VoxelRenderComponent (`src/renderers/VoxelRenderComponent.ts`)
+#### VoxelRenderComponent (`game/entities/Trains/TrainCar/TrainCarVoxels/VoxelRenderComponent.ts`)
 - **Individual Voxel Rendering**: Each voxel is a separate mesh
 - **Health Visualization**: Damage states and color coding
 - **Performance Optimization**: Level-of-detail and culling
 - **Material System**: Different materials for different voxel types
 
-#### CarRenderComponent (`src/renderers/CarRenderComponent.ts`)
+#### CarRenderComponent (`game/entities/Trains/TrainCar/TrainCarRenderComponent.ts`)
 - **Car-Level Coordination**: Manages multiple voxel renderers
 - **Attachment Mounting**: Visual placement of weapons and equipment
 - **Animation System**: Movement and state-based animations
 - **Group Management**: Hierarchical scene organization
 
-#### AttachmentRenderComponent (`src/renderers/AttachmentRenderComponent.ts`)
+#### AttachmentRenderComponent (`game/entities/Attachment/AttachmentRenderComponent.ts`)
 - **Equipment Visualization**: Weapons, cargo, and utility items
 - **Dynamic Mounting**: Attachment to appropriate voxel positions
 - **State Feedback**: Active/inactive states and operation indicators
 - **Effect Integration**: Muzzle flashes, repair beams, etc.
 
 ### Scene Management
-The SceneManager (`src/core/SceneManager.ts`) provides:
+The SceneManager (`engine/scene/SceneManager.ts`) provides:
 - **Entity Discovery**: Automatically finds and renders entities with render components
 - **Camera Control**: Player-controlled camera with smooth following
 - **Performance Management**: Frame rate monitoring and quality adjustment
@@ -185,27 +185,27 @@ The SceneManager (`src/core/SceneManager.ts`) provides:
 ### Mathematics & Geometry
 Consolidated utility functions for common operations:
 
-#### MathUtils (`src/utils/MathUtils.ts`)
+#### MathUtils (`engine/utils/MathUtils.ts`)
 - **Distance Calculations**: 2D and 3D distance functions
 - **Vector Operations**: Normalization, direction, and interpolation
 - **Spatial Queries**: Point-in-bounds and proximity testing
 - **Random Generation**: Seeded random for deterministic behavior
 
-#### GeometryUtils (`src/utils/GeometryUtils.ts`)
+#### GeometryUtils (`engine/utils/GeometryUtils.ts`)
 - **Bounding Box Operations**: Creation, expansion, and overlap testing
 - **Collision Detection**: Point-box and box-box intersection
 - **Spatial Optimization**: Efficient geometric calculations
 - **3D Transformations**: Position and rotation utilities
 
 ### Object Management
-#### ObjectTracker (`src/utils/ObjectTracker.ts`)
+#### ObjectTracker (`engine/utils/ObjectTracker.ts`)
 - **Entity Registry**: Global lookup for any GameObject by ID
 - **Lifecycle Tracking**: Automatic registration and cleanup
 - **Query Interface**: Find entities by type or properties
 - **Debugging Support**: Entity inspection and validation
 
 ### Logging & Observability
-#### Logger (`src/utils/Logger.ts`)
+#### Logger (`engine/utils/Logger.ts`)
 - **Structured Logging**: Categorized log entries with rich metadata
 - **Performance Metrics**: Built-in timing and counting capabilities
 - **Debug Support**: Development-time information and warnings
@@ -226,7 +226,7 @@ Systems communicate through a central event system:
 The game follows a standard game loop pattern:
 
 ```typescript
-// Simplified game loop - see src/ecs-app.ts for implementation
+// Simplified game loop - see ecs-app.ts for implementation
 function gameLoop(deltaTime: number) {
     // 1. Process input events
     inputManager.update(deltaTime);
@@ -302,8 +302,8 @@ function gameLoop(deltaTime: number) {
 - **Persistence**: No save/load system currently implemented
 
 ### Key Implementation Notes
-- **Entry Point**: Game runs through `src/ecs-app.ts` (not the old `src/app.ts`)
-- **Scene Management**: Uses SceneManager in `src/core/SceneManager.ts` for Babylon.js integration
+- **Entry Point**: Game runs through `ecs-app.ts` (not the old `app.ts`)
+- **Scene Management**: Uses SceneManager in `engine/scene/SceneManager.ts` for Babylon.js integration
 - **Game Loop**: Standard update cycle in ecs-app.ts coordinates all systems
 - **Component Registration**: Components are added to entities via `addComponent()` method
 - **Event System**: Basic event emission exists on GameObject, but full event-driven communication needs expansion

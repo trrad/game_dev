@@ -43,16 +43,29 @@ npm run build
 
 ## Project Structure
 ```
-src/
-├── ecs-app.ts              # Main ECS application entry point
-├── components/             # ECS components (data containers)
-├── entities/              # Entity factories and complex entities
-├── systems/              # ECS systems (logic processors)
-├── renderers/            # Rendering components
-├── ui/                   # User interface components
-├── utils/                # Utility functions and helpers
-├── core/                 # Core ECS framework and managers
-└── net/                  # Networking code
+evo_td/
+├── package.json
+├── vite.config.js
+├── tsconfig.json
+├── ecs-app.ts                # Main ECS application entry point
+├── engine/                   # Engine framework (generic, reusable)
+│   ├── core/                 # Core ECS framework
+│   ├── components/           # ECS components (engine-level)
+│   ├── scene/                # Scene management
+│   ├── utils/                # Engine utilities
+│   └── net/                  # Networking (engine-level)
+├── game/                     # Game-specific logic and content
+│   ├── components/           # Game-specific ECS components
+│   ├── entities/             # Game entities (extend GameObject)
+│   ├── systems/              # ECS systems (coordinate gameplay)
+│   ├── renderers/            # Rendering components (game-specific)
+│   ├── ui/                   # User interface components
+│   └── utils/                # Game-specific utilities (if any)
+├── public/                   # Static assets
+├── assets/                   # Game assets (images, models, etc.)
+└── tests/                    # Unit and integration tests
+    ├── unit/
+    └── mocks/
 ```
 
 ## Technology Stack

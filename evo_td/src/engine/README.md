@@ -8,23 +8,26 @@ This directory contains the core engine components that are game-agnostic and co
   - `Component.ts`: Base component class
   - `GameObject.ts`: Base entity class
   - `EventStack.ts`: Event management system
-
+  - `ConfigManager.ts`: Engine configuration
+  - `TimeManager.ts`: Time and update management
+- **components/**: ECS components (engine-level)
+  - `NodeComponent.ts`: Scene node/transform component
+  - `PositionComponent.ts`: Position and rotation
+  - `HealthComponent.ts`: Health and damage
+  - `MovementComponent.ts`: Movement and velocity
+  - `RadiusComponent.ts`: Collision/area radius
 - **scene/**: Scene graph management
-  - `SceneNodeComponent.ts`: Hierarchical scene node management
-  - `CameraManager.ts` (planned): Camera control
-
-- **rendering/**: Rendering framework
-  - `RenderResourceManager.ts`: Resource pooling and management
-  - `RenderComponent.ts` (planned): Base render component
-
+  - `SceneManager.ts`: Scene and entity hierarchy
 - **utils/**: Engine utilities
-  - Common utility functions and helpers
+  - `Logger.ts`, `MathUtils.ts`, `GeometryUtils.ts`, `ObjectTracker.ts`
+- **net/**: Networking (engine-level)
+  - `ColyseusClient.ts`: Multiplayer networking (planned)
 
 ## Key Features
 
 ### Scene Graph Hierarchy
 
-The `SceneNodeComponent` provides hierarchical node management using Babylon.js's scene graph:
+The `NodeComponent` provides hierarchical node management using Babylon.js's scene graph:
 
 - Parent-child relationships between objects
 - Local and world space transformations
