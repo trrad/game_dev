@@ -150,7 +150,7 @@ export class EventLogUI {
         }
         
         // Show events that match visible categories
-        return this.visibleCategories.has(entry.category as LogCategory);
+        return this.visibleCategories.has(entry.category as unknown as LogCategory);
     }
 
     /**
@@ -173,7 +173,7 @@ export class EventLogUI {
         this.content.innerHTML = '';
         
         // Re-populate with filtered events
-        const allEvents = this.eventStack.getEventLog();
+        const allEvents = this.eventStack.getAllEvents();
         allEvents.forEach(entry => this.addEventEntry(entry, false));
         
         // Scroll to bottom if needed
@@ -220,7 +220,7 @@ export class EventLogUI {
      */
     public clear(): void {
         this.content.innerHTML = '';
-        this.eventStack.clearEventLog();
+        this.eventStack.clearLogs();
         this.updateFooter();
     }
 

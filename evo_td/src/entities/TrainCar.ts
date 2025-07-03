@@ -4,6 +4,8 @@ import { Logger, LogCategory } from "../engine/utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { HealthComponent } from "../components/HealthComponent";
 import { InventoryComponent } from "../components/InventoryComponent";
+import { SceneNodeComponent } from "../engine/scene/SceneNodeComponent";
+import { RadiusComponent, createCollisionRadius, createInteractionRadius } from "../components/RadiusComponent";
 import { Attachment } from "./Attachment";
 import { AttachmentSlotComponent } from "../components/AttachmentSlotComponent";
 import { RailPositionComponent } from "../components/RailPositionComponent";
@@ -48,7 +50,7 @@ export class TrainCar extends GameObject {
     private _voxelSpacing: number;
     private _voxelDimensions: { width: number; height: number; length: number };
 
-    constructor(config: TrainCarConfig, eventStack?: any, scene?: Scene) {
+    constructor(config: TrainCarConfig, eventStack?: any, scene?: Scene, parentSceneNode?: SceneNodeComponent) {
         super('trainCar', eventStack, scene);
         this._config = config;
         // Use consistent voxel spacing that matches the renderer's voxel size
@@ -91,6 +93,49 @@ export class TrainCar extends GameObject {
         // Add required components
         const position = new PositionComponent();
         this.addComponent(position);
+
+        // Add scene graph component for hierarchical positioning
+        if (scene) {
+            const sceneNode = new SceneNodeComponent(scene, parentSceneNode);
+            this.addComponent(sceneNode);
+            
+            // Add collision radius for train car interactions
+            const collisionRadius = createCollisionRadius(Math.max(safeLength, safeWidth) * 0.6); // Car-sized collision
+            this.addComponent(collisionRadius);
+            
+            // Add interaction radius for attachment and UI systems
+            const interactionRadius = createInteractionRadius(Math.max(safeLength, safeWidth) * 1.2);
+            this.addComponent(interactionRadius);
+            
+            // Set up car-level event listeners
+            sceneNode.addEventListener('voxel:damaged', (event) => {
+                Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} received voxel damage report: ${event.payload.voxelId}`);
+                
+                // Update car health based on voxel damage
+                this.updateHealthFromVoxels();
+                
+                // Report significant damage to parent train
+                if (this._state.health < 50) {
+                    sceneNode.emitToParent('car:critical_damage', {
+                        carId: this.id,
+                        carType: this._config.type,
+                        remainingHealth: this._state.health,
+                        damagedVoxel: event.payload.voxelId
+                    });
+                }
+            });
+            
+            // Listen for train-level commands
+            sceneNode.addEventListener('train:power_change', (event) => {
+                Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} received power change: ${event.payload.newPower}`);
+                this.onPowerChanged(event.payload.newPower, event.payload.efficiency || 1.0);
+            });
+            
+            sceneNode.addEventListener('repair:request', (event) => {
+                Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} received repair request`);
+                this.performRepairOperations(event.payload.priority || 'normal');
+            });
+        }
 
         // Add rail-specific components for train cars
         const railPosition = new RailPositionComponent(this);
@@ -238,7 +283,7 @@ export class TrainCar extends GameObject {
         const capacity = this.getCapacityForPosition(gridX, gridY, gridZ);
         const maxHealth = 100; // Base health per voxel
 
-        // Create the voxel GameObject
+        // Create the voxel GameObject with scene graph hierarchy
         const voxel = new TrainCarVoxel(
             voxelId,
             { x: gridX, y: gridY, z: gridZ },
@@ -248,7 +293,8 @@ export class TrainCar extends GameObject {
             capacity,
             maxHealth,
             this.eventStack,  // Pass eventStack to voxel
-            this.scene        // Pass scene to voxel
+            this.scene,       // Pass scene to voxel
+            this.getSceneNode()  // Pass this car's scene node as parent
         );
 
         // Set voxel rotation to match car rotation
@@ -628,7 +674,7 @@ export class TrainCar extends GameObject {
         });
 
         // Aggregate health from all voxels
-        this.updateAggregateHealth();
+        this.updateHealthFromVoxels();
 
         // Update health state
         if (this._state.health <= 50 && !this._state.isDamaged) {
@@ -665,294 +711,253 @@ export class TrainCar extends GameObject {
         }
     }
 
+    // ============================================================
+    // Scene Graph Integration & Event Handlers
+    // ============================================================
+    
     /**
-     * Update aggregate health from all voxels
+     * Get the scene node component
      */
-    private updateAggregateHealth(): void {
-        if (this._voxels.size === 0) {
-            this._state.health = 0;
+    getSceneNode(): SceneNodeComponent | undefined {
+        return this.getComponent<SceneNodeComponent>('sceneNode');
+    }
+    
+    /**
+     * Update car health based on voxel health states
+     */
+    private updateHealthFromVoxels(): void {
+        const voxels = Array.from(this._voxels.values());
+        if (voxels.length === 0) return;
+        
+        const totalVoxelHealth = voxels.reduce((sum, voxel) => sum + voxel.getCurrentHealth(), 0);
+        const maxVoxelHealth = voxels.reduce((sum, voxel) => sum + voxel.getMaxHealth(), 0);
+        
+        if (maxVoxelHealth > 0) {
+            const healthPercentage = totalVoxelHealth / maxVoxelHealth;
+            this._state.health = Math.round(healthPercentage * (this._config.maxHealth || 100));
+            this._state.isDamaged = this._state.health < (this._config.maxHealth || 100) * 0.8;
+            this._state.isOperational = this._state.health > (this._config.maxHealth || 100) * 0.2;
+            
+            Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} health updated: ${this._state.health}% (${totalVoxelHealth}/${maxVoxelHealth} voxel health)`);
+        }
+    }
+    
+    /**
+     * Handle power changes from the train
+     */
+    private onPowerChanged(newPower: number, efficiency: number): void {
+        // Different car types respond differently to power changes
+        switch (this._config.type) {
+            case 'engine':
+                // Engine cars manage power distribution
+                Logger.log(LogCategory.TRAIN, `Engine car ${this.id} adjusting power output to ${newPower * efficiency}`);
+                break;
+            case 'cargo':
+                // Cargo cars may have powered loading systems
+                if (newPower < 80) {
+                    Logger.log(LogCategory.TRAIN, `Cargo car ${this.id} reducing loading speed due to low power`);
+                }
+                break;
+            case 'passenger':
+                // Passenger cars have climate control and lighting
+                if (newPower < 60) {
+                    Logger.log(LogCategory.TRAIN, `Passenger car ${this.id} reducing amenities due to low power`);
+                }
+                break;
+            case 'weapons':
+                // Weapons require power for targeting and firing
+                if (newPower < 100) {
+                    Logger.log(LogCategory.TRAIN, `Weapons car ${this.id} entering power conservation mode`);
+                }
+                break;
+        }
+    }
+    
+    /**
+     * Perform repair operations on damaged voxels
+     */
+    private performRepairOperations(priority: string): void {
+        const damagedVoxels = Array.from(this._voxels.values())
+            .filter(voxel => voxel.getCurrentHealth() < voxel.getMaxHealth())
+            .sort((a, b) => a.getCurrentHealth() - b.getCurrentHealth()); // Most damaged first
+        
+        if (damagedVoxels.length === 0) {
+            Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} has no damaged voxels to repair`);
             return;
         }
-
-        let totalHealth = 0;
-        let maxPossibleHealth = 0;
-
-        this._voxels.forEach(voxel => {
-            const healthComponent = voxel.getComponent<HealthComponent>('health');
-            if (healthComponent) {
-                totalHealth += healthComponent.getHealth();
-                maxPossibleHealth += healthComponent.getMaxHealth();
-            }
+        
+        const repairAmount = priority === 'high' ? 50 : 25;
+        const voxelsToRepair = priority === 'high' ? damagedVoxels.slice(0, 3) : [damagedVoxels[0]];
+        
+        voxelsToRepair.forEach(voxel => {
+            voxel.heal(repairAmount);
+            Logger.log(LogCategory.TRAIN, `Repaired voxel ${voxel.id} by ${repairAmount} points`);
         });
-
-        // Calculate percentage health
-        this._state.health = maxPossibleHealth > 0 ? (totalHealth / maxPossibleHealth) * 100 : 0;
-        this.metrics.set('health', this._state.health);
+        
+        // Update car health after repairs
+        this.updateHealthFromVoxels();
+        
+        // Notify train of repair completion
+        const sceneNode = this.getSceneNode();
+        if (sceneNode) {
+            sceneNode.emitToParent('car:repair_complete', {
+                carId: this.id,
+                repairedVoxels: voxelsToRepair.length,
+                newHealth: this._state.health
+            });
+        }
+    }
+    
+    /**
+     * Emit power change to all voxels in this car
+     */
+    emitPowerChangeToVoxels(newPower: number, efficiency: number): void {
+        const sceneNode = this.getSceneNode();
+        if (!sceneNode) return;
+        
+        sceneNode.emitToChildren('train:power_change', {
+            newPower,
+            efficiency,
+            carType: this._config.type
+        }, true); // recursive to all descendants
+    }
+    
+    /**
+     * Get all voxels within radius for area effects
+     */
+    getVoxelsInRadius(center: { x: number; y: number; z: number }, radius: number): TrainCarVoxel[] {
+        const sceneNode = this.getSceneNode();
+        if (!sceneNode) return [];
+        
+        const centerVector = new Vector3(center.x, center.y, center.z);
+        const nodesInRadius = sceneNode.getNodesInRadius(radius, (node) => {
+            return node.gameObject?.type === 'trainCarVoxel';
+        });
+        
+        return nodesInRadius
+            .map(node => node.gameObject as TrainCarVoxel)
+            .filter(voxel => voxel instanceof TrainCarVoxel);
     }
 
     /**
-     * Take damage and distribute it across voxels
+     * Get all attachments (public for renderer access)
+     */
+    getAttachments(): any[] {
+        // TODO: Implement attachment system integration with scene graph
+        return [];
+    }
+    
+    /**
+     * Get attachment statistics for UI display
+     */
+    getAttachmentStats(): {
+        occupied: number;
+        total: number;
+        available: number;
+        byType: Map<string, { count: number; slots: any[] }>;
+    } {
+        // TODO: Integrate with scene graph attachment system
+        // For now, return placeholder data
+        const byType = new Map<string, { count: number; slots: any[] }>();
+        return {
+            occupied: 0,
+            total: 10, // Default total slots
+            available: 10,
+            byType
+        };
+    }
+    
+    /**
+     * Get car state for train-level management
+     */
+    getState(): TrainCarState {
+        return { ...this._state };
+    }
+    
+    /**
+     * Get total weight of car including voxels and cargo
+     */
+    getTotalWeight(): number {
+        const voxelWeight = Array.from(this._voxels.values())
+            .reduce((sum, voxel) => sum + voxel.weight, 0);
+        
+        const inventoryComp = this.getComponent('inventory');
+        const cargoWeight = inventoryComp ? (inventoryComp as any).getCurrentWeight() : 0;
+        
+        return voxelWeight + cargoWeight;
+    }
+    
+    /**
+     * Get cargo capacity of this car
+     */
+    getCargoCapacity(): number {
+        return this._config.cargoCapacity || 0;
+    }
+    
+    /**
+     * Take damage (placeholder - uses scene graph events instead)
      */
     takeDamage(amount: number): void {
-        const prevHealth = this._state.health;
+        this._state.health = Math.max(0, this._state.health - amount);
+        this._state.isDamaged = this._state.health < (this._config.maxHealth || 100) * 0.8;
+        this._state.isOperational = this._state.health > (this._config.maxHealth || 100) * 0.2;
         
-        // Distribute damage across all voxels
-        // For now, apply equal damage to all voxels (can be made more sophisticated later)
-        const voxels = this.getVoxels();
-        if (voxels.length === 0) return;
-
-        const damagePerVoxel = amount / voxels.length;
-        
-        voxels.forEach(voxel => {
-            const healthComponent = voxel.getComponent<HealthComponent>('health');
-            if (healthComponent) {
-                healthComponent.takeDamage(damagePerVoxel);
-            }
-        });
-
-        // Update aggregate health
-        this.updateAggregateHealth();
-        
-        // Update metrics
-        this.metrics.set('damage_taken', this.metrics.get('damage_taken')! + amount);
-
-        this.emitEvent({
-            type: 'car_damage_taken',
-            carId: this.carId,
-            damage: amount,
-            previousHealth: prevHealth,
-            currentHealth: this._state.health,
-            timestamp: performance.now()
-        });
+        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} took ${amount} damage, health: ${this._state.health}`);
     }
-
+    
     /**
-     * Repair the car by healing voxels
+     * Repair car (placeholder - uses scene graph events instead)
      */
     repair(amount: number): void {
-        const prevHealth = this._state.health;
+        const maxHealth = this._config.maxHealth || 100;
+        this._state.health = Math.min(maxHealth, this._state.health + amount);
+        this._state.isDamaged = this._state.health < maxHealth * 0.8;
         
-        // Distribute healing across all damaged voxels
-        const voxels = this.getVoxels();
-        if (voxels.length === 0) return;
-
-        const healingPerVoxel = amount / voxels.length;
-        
-        voxels.forEach(voxel => {
-            const healthComponent = voxel.getComponent<HealthComponent>('health');
-            if (healthComponent) {
-                healthComponent.heal(healingPerVoxel);
-            }
-        });
-
-        // Update aggregate health
-        this.updateAggregateHealth();
-
-        // Update state flags
-        if (this._state.health > 50) {
-            this._state.isDamaged = false;
-        }
-        if (this._state.health > 0) {
-            this._state.isOperational = true;
-        }
-
-        this.emitEvent({
-            type: 'car_repaired',
-            carId: this.carId,
-            amount: amount,
-            previousHealth: prevHealth,
-            currentHealth: this._state.health,
-            timestamp: performance.now()
-        });
+        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} repaired ${amount} points, health: ${this._state.health}`);
     }
-
+    
     /**
-     * Get the attachment slot component for this car
+     * Serialize car state (simplified)
      */
-    getSlotComponent(): AttachmentSlotComponent | null {
-        return this.getComponent('attachmentSlot') as AttachmentSlotComponent | null;
-    }
-
-    // Direct attachment management (bypassing old slot system for now)
-    private attachments: Map<string, Attachment> = new Map();
-
-    /**
-     * Add an attachment to this car at a specific grid position
-     */
-    addAttachment(
-        attachment: Attachment,
-        slotType: string,
-        gridX: number,
-        gridY: number,
-        gridZ: number
-    ): boolean {
-        const attachmentId = attachment.id;
-        
-        // Check if attachment is already on this car
-        if (this.attachments.has(attachmentId)) {
-            Logger.warn(LogCategory.TRAIN, `Attachment ${attachmentId} already on car ${this.carId}`);
-            return false;
-        }
-
-        // Mount the attachment
-        const mountSuccess = attachment.mount({
-            x: gridX,
-            y: gridY, 
-            z: gridZ,
-            slotType: slotType as any,
-            parentCarId: this.carId
-        });
-
-        if (!mountSuccess) {
-            Logger.warn(LogCategory.TRAIN, `Failed to mount attachment ${attachmentId} on car ${this.carId}`);
-            return false;
-        }
-
-        // Update the attachment's world position based on this car's current position
-        const positionComponent = this.getComponent<PositionComponent>('position');
-        if (positionComponent) {
-            const carPosition = positionComponent.getPosition();
-            attachment.updateWorldPosition(carPosition);
-        }
-
-        // Add to our attachment map
-        this.attachments.set(attachmentId, attachment);
-        this.metrics.set('attachments_count', this.attachments.size);
-        
-        this.emitEvent({
-            type: 'attachment_added',
-            carId: this.carId,
-            attachmentName: attachment.getConfig().name,
-            attachmentType: attachment.getAttachmentType(),
-            gridPosition: { x: gridX, y: gridY, z: gridZ },
-            slotType: slotType,
-            timestamp: performance.now()
-        });
-
-        Logger.log(LogCategory.TRAIN, `Added attachment to car ${this.carId}`, {
-            attachment: attachment.getConfig().name,
-            position: `(${gridX}, ${gridY}, ${gridZ})`,
-            slotType: slotType
-        });
-        
-        return true;
-    }
-
-    /**
-     * Remove an attachment from this car
-     */
-    removeAttachment(attachmentId: string): boolean {
-        const attachment = this.attachments.get(attachmentId);
-        if (!attachment) {
-            Logger.warn(LogCategory.TRAIN, `Attachment ${attachmentId} not found on car ${this.carId}`);
-            return false;
-        }
-
-        // Unmount the attachment
-        attachment.unmount();
-        
-        // Remove from our attachment map
-        this.attachments.delete(attachmentId);
-        this.metrics.set('attachments_count', this.attachments.size);
-        
-        this.emitEvent({
-            type: 'attachment_removed',
-            carId: this.carId,
-            attachmentId: attachmentId,
-            timestamp: performance.now()
-        });
-
-        Logger.log(LogCategory.TRAIN, `Removed attachment from car ${this.carId}`, {
-            attachmentId: attachmentId
-        });
-
-        return true;
-    }
-
-    /**
-     * Get all attachments on this car
-     */
-    getAttachments(): Attachment[] {
-        return Array.from(this.attachments.values());
-    }
-
-    /**
-     * Get attachment capacity statistics
-     */
-    getAttachmentStats(): any {
-        const slotComponent = this.getSlotComponent();
-        if (!slotComponent) {
-            return { totalSlots: 0, occupied: 0, available: 0 };
-        }
-
-        return slotComponent.getOccupancyStats();
-    }
-
-    serialize(): TrainCarConfig & TrainCarState {
+    serialize(): any {
         return {
-            ...this._config,
-            ...this._state
+            id: this.id,
+            type: this._config.type,
+            health: this._state.health,
+            maxHealth: this._config.maxHealth || 100,
+            cargoCapacity: this._config.cargoCapacity || 0,
+            voxelCount: this._voxels.size,
+            isOperational: this._state.isOperational
         };
     }
-
-    deserialize(data: TrainCarConfig & Partial<TrainCarState>): void {
-        this._config = { ...data };
-        this._state = {
-            health: data.health ?? this._state.health,
-            isDamaged: data.isDamaged ?? this._state.isDamaged,
-            isOperational: data.isOperational ?? this._state.isOperational
-        };
-
-        // Update metrics
-        this.metrics.set('health', this._state.health);
-    }
-
-    dispose(): void {
-        // Dispose all voxels first
-        this._voxels.forEach(voxel => {
-            voxel.dispose();
-        });
-        this._voxels.clear();
-        
-        // Clear voxel grid
-        this._voxelGrid = [];
-
-        // Dispose Babylon.js objects
-        if (this._mesh) {
-            this._mesh.dispose();
-            this._mesh = undefined;
-        }
-        if (this._group) {
-            this._group.dispose();
-            this._group = undefined;
-        }
-        
-        super.dispose();
-    }
-
+    
     /**
-     * Set up rendering for this car and all its voxels
-     * Should be called after the car is created and registered with SceneManager
+     * Add attachment to car (placeholder for attachment system)
      */
-    setupRendering(scene: Scene): void {
-        // Add VoxelRenderComponent to all existing voxels
-        this._voxels.forEach(voxel => {
-            // Check if voxel already has a render component
-            if (!voxel.getComponent('render')) {
-                const voxelRenderComponent = new VoxelRenderComponent(scene, { 
-                    size: this._voxelSpacing * 0.8 // Slightly smaller than spacing for visual gaps
-                });
-                voxel.addComponent(voxelRenderComponent);
-                
-                Logger.log(LogCategory.RENDERING, `Added VoxelRenderComponent to voxel ${voxel.id}`);
-            }
-        });
-
-        // Debug visualization is now handled by the voxel debug faces toggle (Alt+D)
-        // and the colored faces in VoxelRenderComponent
-        
-        Logger.log(LogCategory.RENDERING, `Rendering setup complete for car ${this.carId}`, {
-            voxelCount: this._voxels.size
-        });
+    addAttachment(attachment: any, position: string, x: number, y: number, z: number): boolean {
+        // TODO: Implement attachment system integration with scene graph
+        // Suppress unused parameter warnings for now
+        void attachment;
+        void position;
+        void x;
+        void y;
+        void z;
+        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} attachment system not yet implemented`);
+        return false;
+    }
+    
+    /**
+     * Get slot component (placeholder for attachment system)
+     */
+    getSlotComponent(): any {
+        return this.getComponent('attachmentSlot');
+    }
+    
+    /**
+     * Deserialize car state (placeholder)
+     */
+    deserialize(data: any): void {
+        // TODO: Implement deserialization
+        void data; // Suppress unused parameter warning
     }
 }

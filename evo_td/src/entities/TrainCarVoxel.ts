@@ -7,6 +7,8 @@ import { Mesh, Scene } from "@babylonjs/core";
 import { GameObject } from '../engine/core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { HealthComponent } from '../components/HealthComponent';
+import { SceneNodeComponent } from '../engine/scene/SceneNodeComponent';
+import { RadiusComponent, createCollisionRadius } from '../components/RadiusComponent';
 import { CargoCapacityType, VoxelMaterial, VoxelFace } from '../components/TrainCarVoxelComponent';
 import { VoxelRenderComponent } from '../renderers/VoxelRenderComponent';
 import { Logger, LogCategory } from '../engine/utils/Logger';
@@ -40,7 +42,8 @@ export class TrainCarVoxel extends GameObject {
         capacity: number = 100,
         maxHealth: number = 100,
         eventStack?: any,  // EventStack for GameObject
-        scene?: Scene      // Scene for rendering (passed to GameObject)
+        scene?: Scene,     // Scene for rendering (passed to GameObject)
+        parentSceneNode?: SceneNodeComponent  // Parent scene node for hierarchy
     ) {
         super('trainCarVoxel', eventStack, scene);
         
@@ -61,6 +64,38 @@ export class TrainCarVoxel extends GameObject {
         positionComponent.setPosition({ x: worldPosition.x, y: worldPosition.y, z: worldPosition.z });
         this.addComponent(positionComponent);
         this.addComponent(new HealthComponent(maxHealth));
+
+        // Add scene graph component for hierarchical positioning
+        if (this.scene) {
+            const sceneNode = new SceneNodeComponent(this.scene, parentSceneNode);
+            sceneNode.setLocalPosition(worldPosition.x, worldPosition.y, worldPosition.z);
+            this.addComponent(sceneNode);
+            
+            // Add collision radius for voxel interactions
+            const collisionRadius = createCollisionRadius(0.5); // Half-unit radius for voxel
+            this.addComponent(collisionRadius);
+            
+            // Set up voxel event listeners for damage and interaction
+            sceneNode.addEventListener('damage:voxel', (event) => {
+                this.takeDamage(event.payload.amount || 0);
+                
+                // Report damage to parent car
+                sceneNode.emitToParent('voxel:damaged', {
+                    voxelId: this.id,
+                    gridPosition: this.gridPosition,
+                    damage: event.payload.amount,
+                    remainingHealth: this.getCurrentHealth()
+                });
+            });
+            
+            // Listen for repair events from parent
+            sceneNode.addEventListener('repair:request', (event) => {
+                if (event.payload.priority === 'high' && this.getCurrentHealth() < this.getMaxHealth() * 0.5) {
+                    this.heal(25); // Emergency repair
+                    Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} received emergency repair`);
+                }
+            });
+        }
 
         // Add render component if scene is available (Entity-Level Registration pattern)
         if (this.scene) {
@@ -145,19 +180,21 @@ export class TrainCarVoxel extends GameObject {
      * Get world position from PositionComponent
      */
     getWorldPosition(): { x: number; y: number; z: number } {
-        const pos = this.getComponent(PositionComponent);
-        return pos ? { x: pos.x, y: pos.y, z: pos.z } : { x: 0, y: 0, z: 0 };
+        const pos = this.getComponent<PositionComponent>('position');
+        if (pos) {
+            const position = pos.getPosition();
+            return { x: position.x, y: position.y, z: position.z };
+        }
+        return { x: 0, y: 0, z: 0 };
     }
 
     /**
      * Update world position via PositionComponent
      */
     setWorldPosition(x: number, y: number, z: number): void {
-        const pos = this.getComponent(PositionComponent);
+        const pos = this.getComponent<PositionComponent>('position');
         if (pos) {
-            pos.x = x;
-            pos.y = y;
-            pos.z = z;
+            pos.setPosition({ x, y, z });
             Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} world position updated to (${x},${y},${z})`);
         }
     }
@@ -166,27 +203,27 @@ export class TrainCarVoxel extends GameObject {
      * Get current health from HealthComponent
      */
     getCurrentHealth(): number {
-        const health = this.getComponent(HealthComponent);
-        return health ? health.currentHealth : 0;
+        const health = this.getComponent<HealthComponent>('health');
+        return health ? health.getHealth() : 0;
     }
 
     /**
      * Get max health from HealthComponent
      */
     getMaxHealth(): number {
-        const health = this.getComponent(HealthComponent);
-        return health ? health.maxHealth : 0;
+        const health = this.getComponent<HealthComponent>('health');
+        return health ? health.getMaxHealth() : 0;
     }
 
     /**
      * Take damage via HealthComponent
      */
     takeDamage(damage: number): boolean {
-        const health = this.getComponent(HealthComponent);
+        const health = this.getComponent<HealthComponent>('health');
         if (health) {
             health.takeDamage(damage);
-            Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} took ${damage} damage, health: ${health.currentHealth}/${health.maxHealth}`);
-            return health.currentHealth <= 0;
+            Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} took ${damage} damage, health: ${health.getHealth()}/${health.getMaxHealth()}`);
+            return health.isDead();
         }
         return false;
     }
@@ -195,10 +232,10 @@ export class TrainCarVoxel extends GameObject {
      * Heal voxel via HealthComponent
      */
     heal(amount: number): void {
-        const health = this.getComponent(HealthComponent);
+        const health = this.getComponent<HealthComponent>('health');
         if (health) {
             health.heal(amount);
-            Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} healed ${amount}, health: ${health.currentHealth}/${health.maxHealth}`);
+            Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} healed ${amount}, health: ${health.getHealth()}/${health.getMaxHealth()}`);
         }
     }
 
@@ -235,6 +272,80 @@ export class TrainCarVoxel extends GameObject {
             this.availableFaces.push(face);
             Logger.log(LogCategory.SYSTEM, `Voxel ${this.id} face ${face} unblocked`);
         }
+    }
+
+    // ============================================================
+    // Scene Graph Integration
+    // ============================================================
+    
+    /**
+     * Get the scene node component
+     */
+    getSceneNode(): SceneNodeComponent | undefined {
+        return this.getComponent<SceneNodeComponent>('sceneNode');
+    }
+    
+    /**
+     * Get world position from scene node (preferred over PositionComponent)
+     */
+    getSceneWorldPosition(): { x: number; y: number; z: number } {
+        const sceneNode = this.getSceneNode();
+        if (sceneNode) {
+            const pos = sceneNode.getWorldPosition();
+            return { x: pos.x, y: pos.y, z: pos.z };
+        }
+        // Fallback to PositionComponent
+        return this.getWorldPosition();
+    }
+    
+    /**
+     * Set local position relative to parent car
+     */
+    setSceneLocalPosition(x: number, y: number, z: number): void {
+        const sceneNode = this.getSceneNode();
+        if (sceneNode) {
+            sceneNode.setLocalPosition(x, y, z);
+        } else {
+            // Fallback to PositionComponent
+            this.setWorldPosition(x, y, z);
+        }
+    }
+    
+    /**
+     * Get collision radius component
+     */
+    getCollisionRadius(): RadiusComponent | undefined {
+        return this.getComponent<RadiusComponent>('radius');
+    }
+    
+    /**
+     * Check collision with another voxel
+     */
+    checkVoxelCollision(other: TrainCarVoxel): boolean {
+        const thisRadius = this.getCollisionRadius();
+        const otherRadius = other.getCollisionRadius();
+        
+        if (!thisRadius || !otherRadius) return false;
+        return thisRadius.checkCollision(otherRadius);
+    }
+    
+    /**
+     * Emit damage event to nearby voxels (for explosion propagation)
+     */
+    emitDamageToNearbyVoxels(damage: number, radius: number = 2.0): void {
+        const sceneNode = this.getSceneNode();
+        if (!sceneNode) return;
+        
+        sceneNode.emitToRadius('damage:voxel', { 
+            amount: damage,
+            source: this.id,
+            sourceType: 'voxel_explosion'
+        }, radius, (node) => {
+            // Only target other voxels
+            return node.gameObject?.type === 'trainCarVoxel' && node.gameObject.id !== this.id;
+        });
+        
+        Logger.log(LogCategory.COMBAT, `Voxel ${this.id} emitted ${damage} damage to ${radius} unit radius`);
     }
 
     /**
@@ -277,9 +388,15 @@ export class TrainCarVoxel extends GameObject {
         voxel.connectedVoxels = [...data.connectedVoxels];
 
         // Set health
-        const health = voxel.getComponent(HealthComponent);
+        const health = voxel.getComponent<HealthComponent>('health');
         if (health && data.currentHealth !== undefined) {
-            health.currentHealth = data.currentHealth;
+            // Use heal/damage to set health properly
+            const currentHealth = health.getHealth();
+            if (data.currentHealth > currentHealth) {
+                health.heal(data.currentHealth - currentHealth);
+            } else if (data.currentHealth < currentHealth) {
+                health.takeDamage(currentHealth - data.currentHealth);
+            }
         }
 
         return voxel;

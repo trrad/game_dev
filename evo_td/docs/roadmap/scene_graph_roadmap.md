@@ -2,52 +2,64 @@
 
 This document outlines the step-by-step implementation plan for integrating a hierarchical scene graph into our ECS architecture.
 
-## Phase 1: Core Infrastructure (1-2 weeks)
+## Phase 1: Core Infrastructure (COMPLETED)
 
-### Step 1: SceneNodeComponent Implementation
-- Create base SceneNodeComponent class (renamed from TransformComponent)
-- Implement parent-child relationships
-- Add local/world transformation methods
-- Build synchronization with PositionComponent
+### ✅ Step 1: SceneNodeComponent Implementation
+- ✅ Created base SceneNodeComponent class (renamed from TransformComponent)
+- ✅ Implemented parent-child relationships
+- ✅ Added local/world transformation methods
+- ✅ Built synchronization with PositionComponent
 
-### Step 2: RenderResourceManager
-- Implement mesh template registry
-- Create material management system
-- Add texture loading and caching
-- Build resource lifecycle management
+### ✅ Step 2: Event System Integration
+- ✅ Implemented scene graph-aware event system
+- ✅ Added event bubbling and capturing
+- ✅ Created spatial event targeting
+- ✅ Integrated events with SceneNodeComponent
 
-### Step 3: GameObject Integration
-- Update GameObject to support transform hierarchy
-- Modify SceneManager to work with transform-based entities
-- Create utility methods for scene graph navigation
+### ✅ Step 3: Spatial Components
+- ✅ Created RadiusComponent for spatial operations
+- ✅ Implemented proximity detection and collision
+- ✅ Added helper functions for common spatial operations
+- ✅ Integrated with event system
 
-## Phase 2: Train System Refactor (2 weeks)
+## Phase 2: SceneManager Integration (CURRENT PHASE)
 
-### Step 1: TrainCar Hierarchy
-- Refactor TrainCar to use TransformComponent
-- Create transform hierarchy for car components
-- Update car positioning logic to use scene graph
+### Step 1: SceneManager Updates (HIGH PRIORITY)
+- Update SceneManager to use SceneNodeComponent
+- Replace direct mesh registration with scene graph registration
+- Support hierarchical object registration
+- Implement proper transform propagation
 
-### Step 2: Voxel Integration
-- Convert TrainCarVoxel to use TransformComponent
+### Step 2: Train System Hierarchy
+- Complete TrainCar integration with SceneNodeComponent
+- Establish proper parent-child relationships for Train -> Cars -> Voxels
+- Update Train movement to control entire hierarchy
+- Fix rail positioning to work with scene graph
+
+### Step 3: Voxel Integration
+- Complete TrainCarVoxel integration with SceneNodeComponent
 - Update voxel positioning to use local coordinates
-- Implement instanced rendering for voxels
+- Ensure proper inheritance of transforms
+- Fix attachment positioning using hierarchy
 
-### Step 3: Debug & Testing
-- Add transform hierarchy visualization
-- Create debugging tools for scene graph inspection
-- Implement performance profiling
+## Phase 3: Spatial Systems Integration
 
-## Phase 3: Broader Integration (2-3 weeks)
-
-### Step 1: Enemy System
-- Refactor Enemy entities to use TransformComponent
-- Update combat and targeting systems
-- Implement LOD for distant enemies
+### Step 1: Collision & Proximity
+- Integrate RadiusComponent with game entities
+- Update collision detection to use scene graph queries
+- Implement spatial event system for proximity triggers
+- Convert enemy detection to use spatial events
 
 ### Step 2: Station & Building Systems
-- Convert static structures to transform hierarchy
-- Implement building component system
+- Convert static structures to use SceneNodeComponent
+- Implement proper transform hierarchy for buildings
+- Update rendering to leverage scene graph
+
+### Step 3: Debug & Testing
+- Complete SceneNodeDebugger integration
+- Create visualization tools for scene graph
+- Implement hierarchy inspection tools
+- Add performance profiling for scene graph operations
 - Add attachment points for station features
 
 ### Step 3: Optimization
@@ -205,11 +217,104 @@ The refactoring will be considered successful when:
   - Test file expectations that need updating
   - Minor Babylon.js API compatibility issues
 
-### Next Steps:
-1. Complete import path updates across all files
-2. Update all entities to use new engine imports
-3. Update all components to use new engine imports
-4. Update all UI files to use new imports
-5. Implement TrainCar and TrainCarVoxel refactoring to use SceneNodeComponent
-6. Integrate SceneNodeDebugger with SceneManager
-7. Update TrainSystem to leverage scene graph architecture
+### Next Critical Steps (Updated Priority):
+
+#### 🚨 **Phase A: Scene Graph Event System (High Priority)**
+Our current ComponentEvents system lacks scene graph awareness. We need:
+1. **Hierarchical Event Propagation**: Events that bubble up/down the scene graph
+2. **Spatial Event Filtering**: Events can target by proximity or hierarchy level
+3. **Event Phases**: Capture and bubble phases like DOM events
+4. **Scene Context**: Events include spatial and hierarchical context
+
+#### 🔄 **Phase B: Entity Integration with SceneGraph (Critical)**
+Major entities need to be converted to use SceneNodeComponent:
+1. **TrainCar Integration**: Cars become children of Train scene node
+2. **TrainCarVoxel Integration**: Voxels become children of Car scene nodes  
+3. **Attachment System**: Attachments use scene hierarchy for proper mounting
+4. **Enemy Integration**: Enemies use scene graph for spatial relationships
+
+#### 💡 **Phase C: Spatial Systems Enhancement**
+Implement generic spatial components for collision and interaction:
+1. **RadiusComponent**: Generic spatial component for collision/proximity/LOD
+2. **Collision Detection**: Leverage scene graph for efficient spatial queries
+3. **Proximity Systems**: AI awareness, interaction zones, trigger areas
+4. **LOD Implementation**: Distance-based optimization using scene hierarchy
+
+#### 🎯 **Phase D: Rendering Optimization**
+1. **Automatic Transform Sync**: Render components follow scene node transforms
+2. **Frustum Culling**: Scene graph-aware visibility determination
+3. **Batching**: Group similar objects in scene hierarchy for performance
+
+## SceneManager Integration Plan
+
+### Current Status
+
+The `SceneManager` class is currently the bridge between our game objects and the rendering system, but it doesn't fully leverage our new scene graph architecture. Here's what needs to be updated:
+
+### 1. Visual Registration Refactoring
+
+```typescript
+// CURRENT APPROACH - Direct mesh registration
+this.sceneManager.registerGameObject(rail, railMesh);
+
+// NEW APPROACH - Scene graph aware registration
+this.sceneManager.registerSceneNode(rail.getComponent('sceneNode'), railVisualMesh);
+```
+
+### 2. Hierarchical Registration
+
+```typescript
+// Current approach - Flat registration
+this.sceneManager.registerGameObject(train, trainMesh);
+this.sceneManager.registerGameObject(trainCar1, car1Mesh);
+this.sceneManager.registerGameObject(trainCar2, car2Mesh);
+
+// New approach - Hierarchical registration
+this.sceneManager.registerHierarchy(train);
+// Child objects auto-registered through scene graph
+```
+
+### 3. Transform Propagation
+
+Currently, the `SceneManager` manually updates positions:
+
+```typescript
+// Current approach
+const posComponent = mapping.gameObject.getComponent<PositionComponent>("position");
+if (posComponent) {
+    const pos = posComponent.getPosition();
+    visual.position.x = pos.x;
+    visual.position.y = pos.y;
+    visual.position.z = pos.z;
+}
+```
+
+New approach will leverage SceneNodeComponent's built-in transform hierarchy:
+
+```typescript
+// New approach - transforms propagate automatically through the scene graph
+// SceneManager just ensures the root nodes have correct transforms
+const sceneNode = mapping.gameObject.getComponent<SceneNodeComponent>("sceneNode");
+if (sceneNode && sceneNode.hasChanged()) {
+    sceneNode.syncTransformToNode();
+}
+```
+
+### Implementation Steps
+
+1. Add new methods to SceneManager:
+   - `registerSceneNode(sceneNode: SceneNodeComponent, visual?: AbstractMesh): void`
+   - `registerHierarchy(rootGameObject: GameObject): void`
+   - `unregisterHierarchy(rootGameObjectId: string): void`
+
+2. Update existing visual mappings to track SceneNodeComponent references
+
+3. Modify the update logic to work with the scene graph:
+   - Only update root nodes, let transforms propagate naturally
+   - Leverage SceneNodeComponent for visibility culling
+
+4. Connect SceneManager to SceneGraphEventSystem for automatic updates
+
+5. Fix specific entity registration in the main app:
+   - Update Train, TrainCar, Rail, Station registrations
+   - Ensure proper parent-child relationships

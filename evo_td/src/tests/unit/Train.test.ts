@@ -171,7 +171,12 @@ describe('Train Entity', () => {
          * - Consider fixed timestep for testing
          * - Verify event handler registration/execution
          */
-        const train = new Train('player1', { baseSpeed: 0.1, cargoCapacity: 100 });
+        const train = new Train('player1', { 
+            baseSpeed: 0.1, 
+            cargoCapacity: 100,
+            carSpacing: 5,
+            powerEfficiency: 1.0
+        });
         train.startJourney('rail1', 'station2', 10);
         
         for (let i = 0; i < 120; i++) {

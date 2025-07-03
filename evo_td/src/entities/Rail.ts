@@ -197,7 +197,31 @@ export class Rail extends GameObject {
         };
     }
 
-    serialize(): RailConfig & RailState {
+    // Override GameObject serialization to include Rail-specific data
+    protected getEntityState(): any {
+        return {
+            config: {
+                ...this._config,
+                trackPoints: this._config.trackPoints.map(p => ({ x: p.x, y: p.y, z: p.z }))
+            },
+            state: this._state
+        };
+    }
+
+    protected setEntityState(state: any): void {
+        if (state?.config) {
+            this._config = {
+                ...state.config,
+                trackPoints: state.config.trackPoints.map((p: any) => new Vector3(p.x, p.y, p.z))
+            };
+        }
+        if (state?.state) {
+            this._state = { ...this._state, ...state.state };
+        }
+    }
+
+    // Legacy serialization methods for compatibility
+    getRailData(): RailConfig & RailState {
         return {
             ...this._config,
             trackPoints: this._config.trackPoints.map(p => p.clone()),
@@ -205,7 +229,7 @@ export class Rail extends GameObject {
         };
     }
 
-    deserialize(data: RailConfig & Partial<RailState>): void {
+    setRailData(data: RailConfig & Partial<RailState>): void {
         this._config = {
             ...data,
             trackPoints: data.trackPoints.map(p => new Vector3(p.x, p.y, p.z))

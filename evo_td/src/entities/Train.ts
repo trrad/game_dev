@@ -8,6 +8,8 @@ import { PositionComponent } from "../components/PositionComponent";
 import { MovementComponent } from "../components/MovementComponent";
 import { RailPositionComponent } from "../components/RailPositionComponent";
 import { RailMovementComponent } from "../components/RailMovementComponent";
+import { SceneNodeComponent } from "../engine/scene/SceneNodeComponent";
+import { RadiusComponent, createCollisionRadius, createDetectionRadius } from "../components/RadiusComponent";
 import { TrainCar } from "./TrainCar";
 import type { EventStack } from "../engine/core/EventStack";
 
@@ -45,8 +47,8 @@ export class Train extends GameObject {
     private _cars: TrainCar[] = [];
     private _state: TrainState;
 
-    constructor(playerId: string, config: TrainConfig, eventStack?: EventStack) {
-        super('train', eventStack);
+    constructor(playerId: string, config: TrainConfig, eventStack?: EventStack, scene?: any) {
+        super('train', eventStack, scene);
         this._playerId = playerId;
         this._config = { ...config };
 
@@ -66,6 +68,36 @@ export class Train extends GameObject {
 
         const movement = new MovementComponent(this, 1.0);
         this.addComponent(movement);
+
+        // Add scene graph component for managing car hierarchy
+        if (scene) {
+            const sceneNode = new SceneNodeComponent(scene);
+            this.addComponent(sceneNode);
+            
+            // Add detection radius for train interactions
+            const detectionRadius = createDetectionRadius(20); // 20 unit detection for stations, enemies
+            this.addComponent(detectionRadius);
+            
+            // Add collision radius for train-level collisions
+            const collisionRadius = createCollisionRadius(Math.max(10, config.cargoCapacity * 0.1));
+            this.addComponent(collisionRadius);
+            
+            // Set up train-level event listeners
+            sceneNode.addEventListener('car:critical_damage', (event) => {
+                Logger.log(LogCategory.TRAIN, `Train ${this.id} received critical damage report from car ${event.payload.carId}`);
+                this.handleCriticalCarDamage(event.payload);
+            });
+            
+            sceneNode.addEventListener('car:repair_complete', (event) => {
+                Logger.log(LogCategory.TRAIN, `Train ${this.id} received repair completion from car ${event.payload.carId}`);
+                this.updateTrainStatsFromCars();
+            });
+            
+            sceneNode.addEventListener('station:proximity', (event) => {
+                Logger.log(LogCategory.TRAIN, `Train ${this.id} approaching station ${event.payload.stationId}`);
+                this.handleStationProximity(event.payload);
+            });
+        }
 
         // Add rail-specific components
         const railPosition = new RailPositionComponent(this);
@@ -114,6 +146,14 @@ export class Train extends GameObject {
      */
     get isMoving(): boolean {
         return this._state.isMoving;
+    }
+
+    /**
+     * Get current progress along the rail (0.0 = start, 1.0 = end)
+     */
+    get progress(): number {
+        const railPosition = this.getComponent<RailPositionComponent>('railPosition');
+        return railPosition?.getProgress() ?? 0;
     }
 
     /**
@@ -332,6 +372,132 @@ export class Train extends GameObject {
         }
     }
 
+    // ============================================================
+    // Scene Graph Integration & Event Handlers
+    // ============================================================
+    
+    /**
+     * Get the scene node component
+     */
+    getSceneNode(): SceneNodeComponent | undefined {
+        return this.getComponent<SceneNodeComponent>('sceneNode');
+    }
+    
+    /**
+     * Handle critical damage to a car
+     */
+    private handleCriticalCarDamage(payload: any): void {
+        Logger.log(LogCategory.TRAIN, `Train ${this.id} handling critical damage to car ${payload.carId}`);
+        
+        // If critical car (engine), reduce train speed
+        const damagedCar = this._cars.find(car => car.id === payload.carId);
+        if (damagedCar && payload.carType === 'engine') {
+            this._state.currentSpeed *= 0.5; // Reduce speed by half
+            Logger.log(LogCategory.TRAIN, `Engine damage: reducing train speed to ${this._state.currentSpeed}`);
+        }
+        
+        // Check if train is still operational
+        this.updateTrainStatsFromCars();
+        
+        // Emit repair requests to other cars if needed
+        if (this._state.totalHealth < this._state.maxHealth * 0.3) {
+            this.requestEmergencyRepairs();
+        }
+    }
+    
+    /**
+     * Update train statistics from car states
+     */
+    private updateTrainStatsFromCars(): void {
+        let totalHealth = 0;
+        let maxHealth = 0;
+        let totalWeight = 0;
+        let totalCargoCapacity = 0;
+        
+        this._cars.forEach(car => {
+            const carState = car.getState();
+            totalHealth += carState.health;
+            maxHealth += 100; // Assuming max 100 health per car
+            totalWeight += car.getTotalWeight();
+            totalCargoCapacity += car.getCargoCapacity();
+        });
+        
+        this._state.totalHealth = totalHealth;
+        this._state.maxHealth = maxHealth;
+        this._state.totalWeight = totalWeight;
+        this._state.totalCargoCapacity = totalCargoCapacity;
+        this._state.isMoving = this._state.totalHealth > this._state.maxHealth * 0.2;
+        
+        Logger.log(LogCategory.TRAIN, `Train stats updated: ${totalHealth}/${maxHealth} health, ${totalWeight} weight`);
+    }
+    
+    /**
+     * Handle proximity to stations
+     */
+    private handleStationProximity(payload: any): void {
+        Logger.log(LogCategory.TRAIN, `Train ${this.id} near station ${payload.stationId} at distance ${payload.distance}`);
+        
+        // Slow down when approaching station
+        if (payload.distance < 5) {
+            this._state.currentSpeed = Math.min(this._state.currentSpeed, 0.1);
+        }
+    }
+    
+    /**
+     * Request emergency repairs from all cars
+     */
+    private requestEmergencyRepairs(): void {
+        const sceneNode = this.getSceneNode();
+        if (!sceneNode) return;
+        
+        Logger.log(LogCategory.TRAIN, `Train ${this.id} requesting emergency repairs from all cars`);
+        
+        sceneNode.emitToChildren('repair:request', {
+            priority: 'high',
+            trainHealth: this._state.totalHealth / this._state.maxHealth,
+            requestedBy: 'train'
+        }, true); // Recursive to all descendants (cars and voxels)
+    }
+    
+    /**
+     * Emit power changes to all cars
+     */
+    emitPowerChange(newPower: number, efficiency: number = 1.0): void {
+        const sceneNode = this.getSceneNode();
+        if (!sceneNode) return;
+        
+        Logger.log(LogCategory.TRAIN, `Train ${this.id} broadcasting power change: ${newPower} at ${efficiency} efficiency`);
+        
+        sceneNode.emitToChildren('train:power_change', {
+            newPower,
+            efficiency,
+            trainId: this.id
+        }, false); // Only to direct children (cars)
+    }
+    
+    /**
+     * Add car to train with scene graph hierarchy
+     */
+    addCarWithSceneGraph(car: TrainCar): void {
+        const sceneNode = this.getSceneNode();
+        const carSceneNode = car.getSceneNode();
+        
+        if (sceneNode && carSceneNode) {
+            // Set car as child of train in scene graph
+            carSceneNode.setParent(sceneNode);
+            
+            // Position car relative to train
+            const carIndex = this._cars.length;
+            const carOffset = carIndex * (this._config.carSpacing || 2);
+            carSceneNode.setLocalPosition(-carOffset, 0, 0); // Cars trail behind engine
+            
+            Logger.log(LogCategory.TRAIN, `Car ${car.id} added to train scene graph at offset ${carOffset}`);
+        }
+        
+        this._cars.push(car);
+        this.updateTrainStatsFromCars();
+    }
+
     /**
      * Update train and all its cars
      */
@@ -478,5 +644,28 @@ export class Train extends GameObject {
                 attachmentStats: car.getAttachmentStats()
             }))
         };
+    }
+
+    /**
+     * Legacy compatibility method for startJourney (used by tests)
+     * @param railId The rail to travel on
+     * @param targetStationId The destination station
+     * @param _distance The distance (used for rail position setup)
+     * @returns true if journey started successfully
+     */
+    startJourney(railId: string, targetStationId: string, _distance: number): boolean {
+        try {
+            // Set up rail position if not already set
+            const railPosition = this.getComponent<RailPositionComponent>('railPosition');
+            if (railPosition && !railPosition.isOnRail()) {
+                railPosition.setRailPosition(railId, 0); // Start at beginning
+            }
+
+            this.startMovement(railId, targetStationId);
+            return true;
+        } catch (error) {
+            Logger.warn(LogCategory.TRAIN, `Failed to start journey: ${error}`);
+            return false;
+        }
     }
 }

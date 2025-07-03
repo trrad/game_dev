@@ -97,7 +97,47 @@ export class Building extends GameObject {
         Logger.log(LogCategory.SYSTEM, `Building ${this._buildingType} operational status: ${operational}`);
     }
 
-    serialize(): BuildingConfig & BuildingState {
+    // Override GameObject serialization to include Building-specific data
+    protected getEntityState(): any {
+        const position = this.getPosition();
+        const health = this.getComponent<HealthComponent>('health');
+        
+        return {
+            buildingType: this._buildingType,
+            position: position,
+            size: { x: this._size.x, y: this._size.y, z: this._size.z },
+            health: health?.getMaxHealth() || 300,
+            name: this.id,
+            isOperational: this._isOperational
+        };
+    }
+
+    protected setEntityState(state: any): void {
+        if (state) {
+            this._buildingType = state.buildingType || this._buildingType;
+            this._size = state.size ? new Vector3(state.size.x, state.size.y, state.size.z) : this._size;
+            this._isOperational = state.isOperational ?? this._isOperational;
+            
+            // Update position component
+            const positionComponent = this.getComponent<PositionComponent>('position');
+            if (positionComponent && state.position) {
+                positionComponent.setPosition({
+                    x: state.position.x,
+                    y: state.position.y,
+                    z: state.position.z
+                });
+            }
+            
+            // Update health component if needed
+            const healthComponent = this.getComponent<HealthComponent>('health');
+            if (healthComponent && state.health) {
+                // Health component handles its own serialization
+            }
+        }
+    }
+
+    // Legacy methods for compatibility
+    getBuildingData(): BuildingConfig & BuildingState {
         const position = this.getPosition();
         const health = this.getComponent<HealthComponent>('health');
         
@@ -111,7 +151,7 @@ export class Building extends GameObject {
         };
     }
 
-    deserialize(data: BuildingConfig & BuildingState): void {
+    setBuildingData(data: BuildingConfig & BuildingState): void {
         this._buildingType = data.buildingType;
         this._size = data.size ? data.size.clone() : this._size;
         this._isOperational = data.isOperational;

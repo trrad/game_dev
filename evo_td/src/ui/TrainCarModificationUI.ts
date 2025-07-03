@@ -383,7 +383,7 @@ export class TrainCarModificationUI {
             <div><strong>Available:</strong> ${stats.available}</div>
             <div class="slot-breakdown">
                 ${Array.from(stats.byType.entries()).map(([type, data]) => 
-                    `<div>${type}: ${data.occupied}/${data.total}</div>`
+                    `<div>${type}: ${data.count} slots</div>`
                 ).join('')}
             </div>
         `;

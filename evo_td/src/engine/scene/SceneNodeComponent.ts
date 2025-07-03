@@ -7,6 +7,14 @@ import { Component } from '../core/Component';
 import { TransformNode, Vector3, Matrix, Quaternion, Scene } from '@babylonjs/core';
 import { Logger, LogCategory } from '../utils/Logger';
 import { GameObject } from '../core/GameObject';
+import { 
+    SceneGraphEventSystem, 
+    SceneEvents, 
+    SceneGraphEvent, 
+    SceneGraphEventListener, 
+    EventListenerOptions,
+    EventOptions 
+} from './SceneGraphEventSystem';
 
 /**
  * SceneNodeComponent data interface for serialization
@@ -245,6 +253,13 @@ export class SceneNodeComponent extends Component<SceneNodeComponentData> {
         return this._node;
     }
     
+    /**
+     * Get the attached GameObject
+     */
+    get gameObject(): GameObject | undefined {
+        return this._gameObject;
+    }
+    
     //=== TRANSFORM METHODS ===//
     
     /**
@@ -431,5 +446,103 @@ export class SceneNodeComponent extends Component<SceneNodeComponentData> {
         }
         
         return false;
+    }
+    
+    // ============================================================
+    // Scene Graph Event System Integration
+    // ============================================================
+    
+    /**
+     * Add event listener to this scene node
+     */
+    addEventListener(
+        eventType: string, 
+        listener: SceneGraphEventListener, 
+        options?: EventListenerOptions
+    ): void {
+        SceneEvents.addEventListener(this, eventType, listener, options);
+    }
+    
+    /**
+     * Remove event listener from this scene node
+     */
+    removeEventListener(
+        eventType: string, 
+        listener: SceneGraphEventListener, 
+        options?: EventListenerOptions
+    ): void {
+        SceneEvents.removeEventListener(this, eventType, listener, options);
+    }
+    
+    /**
+     * Dispatch an event on this scene node
+     */
+    dispatchEvent(event: SceneGraphEvent): boolean {
+        return SceneEvents.dispatchEvent(event);
+    }
+    
+    /**
+     * Emit an event on this scene node
+     */
+    emit(eventType: string, payload?: any, options?: EventOptions): boolean {
+        return SceneEvents.emitToNode(eventType, payload, this, options);
+    }
+    
+    /**
+     * Emit event to parent node only
+     */
+    emitToParent(eventType: string, payload?: any): boolean {
+        if (!this._parent) return false;
+        return SceneEvents.emitToNode(eventType, payload, this._parent, { bubbles: false });
+    }
+    
+    /**
+     * Emit event to all children
+     */
+    emitToChildren(eventType: string, payload?: any, recursive: boolean = false): void {
+        for (const child of this._children) {
+            SceneEvents.emitToNode(eventType, payload, child, { bubbles: false });
+            
+            if (recursive) {
+                child.emitToChildren(eventType, payload, true);
+            }
+        }
+    }
+    
+    /**
+     * Emit event to all sibling nodes
+     */
+    emitToSiblings(eventType: string, payload?: any): void {
+        if (!this._parent) return;
+        
+        for (const sibling of this._parent._children) {
+            if (sibling !== this) {
+                SceneEvents.emitToNode(eventType, payload, sibling, { bubbles: false });
+            }
+        }
+    }
+    
+    /**
+     * Emit event to all nodes within radius (spatial event)
+     */
+    emitToRadius(
+        eventType: string, 
+        payload: any, 
+        radius: number, 
+        filter?: (node: SceneNodeComponent) => boolean
+    ): void {
+        const center = this.getWorldPosition();
+        SceneEvents.emitToRadius(eventType, payload, center, radius, filter);
+    }
+    
+    /**
+     * Get all scene nodes within radius of this node
+     */
+    getNodesInRadius(
+        radius: number, 
+        filter?: (node: SceneNodeComponent) => boolean
+    ): SceneNodeComponent[] {
+        const center = this.getWorldPosition();
+        return SceneEvents.getNodesInRadius(center, radius, filter);
     }
 }

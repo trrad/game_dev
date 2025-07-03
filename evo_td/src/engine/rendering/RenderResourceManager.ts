@@ -243,7 +243,7 @@ export class RenderResourceManager {
         for (const [key, usage] of this._materialUsage.entries()) {
             if (usage <= threshold) {
                 const material = this._materials.get(key);
-                if (material && !material.isDisposed) {
+                if (material) {
                     material.dispose();
                     this._materials.delete(key);
                     this._materialUsage.delete(key);
@@ -258,7 +258,7 @@ export class RenderResourceManager {
         for (const [key, usage] of this._textureUsage.entries()) {
             if (usage <= threshold) {
                 const texture = this._textures.get(key);
-                if (texture && !texture.isDisposed) {
+                if (texture) {
                     texture.dispose();
                     this._textures.delete(key);
                     this._textureUsage.delete(key);

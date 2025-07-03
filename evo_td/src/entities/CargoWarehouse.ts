@@ -208,8 +208,36 @@ export class CargoWarehouse extends Building {
         }));
     }
 
-    serialize(): BuildingConfig & BuildingState & CargoWarehouseState {
-        const buildingData = super.serialize();
+    // Override Building's getEntityState to include CargoWarehouse-specific data
+    protected getEntityState(): any {
+        const buildingState = super.getEntityState();
+        return {
+            ...buildingState,
+            maxStock: this._state.maxStock,
+            cargoTypes: this._state.cargoTypes,
+            buyPrices: Array.from(this._state.buyPrices.entries()), // Convert Map to array for serialization
+            sellPrices: Array.from(this._state.sellPrices.entries()),
+            stockLevels: Array.from(this._state.stockLevels.entries()),
+            lastTradeTime: this._state.lastTradeTime
+        };
+    }
+
+    protected setEntityState(state: any): void {
+        super.setEntityState(state);
+        
+        if (state) {
+            if (state.maxStock !== undefined) this._state.maxStock = state.maxStock;
+            if (state.cargoTypes) this._state.cargoTypes = state.cargoTypes;
+            if (state.buyPrices) this._state.buyPrices = new Map(state.buyPrices);
+            if (state.sellPrices) this._state.sellPrices = new Map(state.sellPrices);
+            if (state.stockLevels) this._state.stockLevels = new Map(state.stockLevels);
+            if (state.lastTradeTime !== undefined) this._state.lastTradeTime = state.lastTradeTime;
+        }
+    }
+
+    // Legacy methods for compatibility
+    getCargoWarehouseData(): BuildingConfig & BuildingState & CargoWarehouseState {
+        const buildingData = super.getBuildingData();
         return {
             ...buildingData,
             maxStock: this._state.maxStock,
@@ -221,9 +249,9 @@ export class CargoWarehouse extends Building {
         };
     }
 
-    deserialize(data: BuildingConfig & BuildingState & CargoWarehouseState): void {
-        // Call parent deserialize for building-specific data
-        super.deserialize(data);
+    setCargoWarehouseData(data: BuildingConfig & BuildingState & CargoWarehouseState): void {
+        // Call parent method for building-specific data
+        super.setBuildingData(data);
 
         // Update cargo-specific state
         if (data.cargoTypes) this._state.cargoTypes = data.cargoTypes;

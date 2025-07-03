@@ -14,6 +14,35 @@ import type { EventStack } from './EventStack';
 import { EventCategory } from './EventStack';
 import type { Scene } from '@babylonjs/core';
 
+// ============================================================
+// Serialization Type Definitions
+// ============================================================
+
+/**
+ * Complete GameObject serialization data for save/load and full state transfer
+ */
+export interface GameObjectData {
+    id: string;
+    type: string;
+    components: Record<string, any>;
+    metadata: {
+        createdAt: number;
+        version: string;
+    };
+}
+
+/**
+ * Lightweight network snapshot for efficient delta updates
+ * Contains only frequently changing data
+ */
+export interface NetworkSnapshot {
+    id: string;
+    timestamp: number;
+    position?: any;
+    health?: any;
+    state?: any;
+}
+
 let nextGameObjectId = 1;
 
 /** Event listener function type */
@@ -316,5 +345,159 @@ export class GameObject implements GameObjectEventEmitter {
      */
     isDisposed(): boolean {
         return this._disposed;
+    }
+    
+    // ============================================================
+    // Serialization for Network Communication
+    // ============================================================
+    
+    /**
+     * Serialize this GameObject and all its components to JSON-serializable data
+     * This is essential for network synchronization and save/load functionality
+     */
+    serialize(): GameObjectData {
+        const componentData: Record<string, any> = {};
+        
+        // Serialize all components
+        for (const [componentType, component] of this._components.entries()) {
+            try {
+                componentData[componentType] = component.serialize();
+            } catch (error) {
+                console.warn(`Failed to serialize component ${componentType} on ${this.id}:`, error);
+                // Continue serializing other components
+            }
+        }
+        
+        return {
+            id: this.id,
+            type: this.type,
+            components: componentData,
+            metadata: {
+                createdAt: Date.now(),
+                version: '1.0.0'
+            }
+        };
+    }
+    
+    /**
+     * Deserialize GameObject data and restore component states
+     * @param data The serialized data to restore from
+     */
+    deserialize(data: GameObjectData): void {
+        // Validate data structure
+        if (!data.components) {
+            console.warn(`Invalid serialization data for GameObject ${this.id}: missing components`);
+            return;
+        }
+        
+        // Restore component states
+        for (const [componentType, componentData] of Object.entries(data.components)) {
+            const component = this._components.get(componentType);
+            if (component) {
+                try {
+                    component.deserialize(componentData);
+                } catch (error) {
+                    console.warn(`Failed to deserialize component ${componentType} on ${this.id}:`, error);
+                    // Continue deserializing other components
+                }
+            } else {
+                console.warn(`Component ${componentType} not found on GameObject ${this.id} during deserialization`);
+            }
+        }
+        
+        // Log successful deserialization
+        Logger?.log?.(LogCategory.SYSTEM, `GameObject ${this.id} deserialized successfully`, { 
+            componentCount: Object.keys(data.components).length,
+            version: data.metadata?.version 
+        });
+    }
+    
+    /**
+     * Create a deep copy of this GameObject with all component states
+     * Useful for undo/redo functionality and state snapshots
+     */
+    clone(): GameObject {
+        const clonedData = this.serialize();
+        const cloned = new GameObject(this.type, this.eventStack, this.scene);
+        
+        // Add the same components (they'll be created with default values)
+        for (const [componentType, component] of this._components.entries()) {
+            // This is a simplified approach - in practice, you'd need component factories
+            // For now, we assume components can be created with their constructors
+            const ComponentClass = component.constructor as any;
+            const newComponent = new ComponentClass();
+            cloned.addComponent(newComponent);
+        }
+        
+        // Restore the serialized state
+        cloned.deserialize(clonedData);
+        
+        return cloned;
+    }
+    
+    /**
+     * Get a snapshot of current state for delta compression
+     * Returns only data that commonly changes for efficient network updates
+     */
+    getNetworkSnapshot(): NetworkSnapshot {
+        const snapshot: NetworkSnapshot = {
+            id: this.id,
+            timestamp: Date.now(),
+            position: null,
+            health: null,
+            state: null
+        };
+        
+        // Include commonly updated components for efficient networking
+        const positionComp = this.getComponent('position') || this.getComponent('sceneNode');
+        if (positionComp) {
+            snapshot.position = positionComp.serialize();
+        }
+        
+        const healthComp = this.getComponent('health');
+        if (healthComp) {
+            snapshot.health = healthComp.serialize();
+        }
+        
+        // Entity-specific state (can be overridden by subclasses)
+        snapshot.state = this.getEntityState();
+        
+        return snapshot;
+    }
+    
+    /**
+     * Apply a network snapshot (delta update)
+     * @param snapshot The network snapshot to apply
+     */
+    applyNetworkSnapshot(snapshot: NetworkSnapshot): void {
+        if (snapshot.position) {
+            const positionComp = this.getComponent('position') || this.getComponent('sceneNode');
+            positionComp?.deserialize(snapshot.position);
+        }
+        
+        if (snapshot.health) {
+            const healthComp = this.getComponent('health');
+            healthComp?.deserialize(snapshot.health);
+        }
+        
+        if (snapshot.state) {
+            this.setEntityState(snapshot.state);
+        }
+    }
+    
+    /**
+     * Get entity-specific state data (override in subclasses)
+     * This should return data that changes frequently and needs network sync
+     */
+    protected getEntityState(): any {
+        return null;
+    }
+    
+    /**
+     * Set entity-specific state data (override in subclasses)
+     * @param _state The state data to apply
+     */
+    protected setEntityState(_state: any): void {
+        // Override in subclasses
     }
 }

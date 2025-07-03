@@ -219,7 +219,8 @@ export class StationManager {
         this.stations.forEach(station => {
             const warehouse = station.getCargoWarehouse();
             if (warehouse) {
-                warehouse.updatePrices();
+                // Pass empty price multipliers for default price update
+                warehouse.updatePrices(new Map());
             }
         });
     }

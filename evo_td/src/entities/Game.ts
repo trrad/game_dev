@@ -1,5 +1,5 @@
 import { TimeManager } from "../engine/core/TimeManager";
-import { EventStack, GameEvent } from "../engine/core/EventStack";
+import { EventStack } from "../engine/core/EventStack";
 import { SceneManager } from "../engine/scene/SceneManager";
 import { Engine } from "@babylonjs/core";
 import { Logger, LogCategory } from "../engine/utils/Logger";
@@ -60,8 +60,8 @@ export class Game {
         }
     }
 
-    public queueEvent(event: GameEvent) {
-        this.eventStack.push(event);
+    public queueEvent(event: { type: string; execute: () => void; payload?: any }) {
+        this.eventStack.pushGameEvent(event);
     }
 
     public registerTickHandler(handler: () => void) {
@@ -72,7 +72,7 @@ export class Game {
         // Call all registered tick handlers (e.g., from App)
         this.tickHandlers.forEach(fn => fn());
         // Process all events for this tick
-        this.eventStack.processAll();
+        this.eventStack.processGameEvents();
         // TODO: Add logic for recurring world events, movement, etc.
     }
 

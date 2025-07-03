@@ -30,7 +30,8 @@ import {
     MeshBuilder,
     StandardMaterial
 } from "@babylonjs/core";
-
+import { SceneEvents } from './SceneGraphEventSystem';
+import { SceneNodeComponent } from './SceneNodeComponent';
 import { GameObject } from '../core/GameObject';
 import { PositionComponent } from '../../components/PositionComponent';
 import { RenderComponent } from '../../renderers/RenderComponent';
@@ -138,6 +139,10 @@ export class SceneManager {
         );
         this.camera.attachControl(engine.getRenderingCanvas(), true);
         
+        // Initialize scene graph event system with scene root
+        const sceneRoot = new SceneNodeComponent(this.scene);
+        SceneEvents.setSceneRoot(sceneRoot);
+
         // Set up basic lighting
         const hemiLight = new HemisphericLight(
             "hemiLight", 
