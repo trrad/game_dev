@@ -2,7 +2,7 @@
  * TrainCarModificationUI - User interface for designing and modifying train car layouts
  */
 
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 import { TrainCar } from '../entities/TrainCar';
 import { Attachment, AttachmentSlotType } from '../entities/Attachment';
 import { AttachmentFactory } from '../entities/AttachmentFactory';

@@ -1,12 +1,12 @@
 import { Vector3, Mesh } from "@babylonjs/core";
-import { GameObject } from "../core/GameObject";
-import { Logger, LogCategory } from "../utils/Logger";
+import { GameObject } from "../engine/core/GameObject";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { HealthComponent } from "../components/HealthComponent";
 import { StationPerimeterComponent } from "../components/StationPerimeterComponent";
 import { Building, BuildingType } from "../entities/Building";
 import { CargoWarehouse, CargoType } from "../entities/CargoWarehouse";
-import type { EventStack } from "../core/EventStack";
+import type { EventStack } from "../engine/core/EventStack";
 
 export interface StationConfig {
     id: string;

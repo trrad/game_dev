@@ -2,9 +2,9 @@
  * RailPositionComponent - Manages position along rail segments for rail-constrained entities.
  * This component handles position tracking specifically for entities that move along predefined rail paths.
  */
-import { Component } from '../core/Component';
-import type { GameObject } from '../core/GameObject';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Component } from '../engine/core/Component';
+import type { GameObject } from '../engine/core/GameObject';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 export interface RailPositionState {
     /** ID of the current rail segment */

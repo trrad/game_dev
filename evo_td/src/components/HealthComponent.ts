@@ -1,7 +1,7 @@
 /**
  * Handles health, damage, and death mechanics for game entities
  */
-import { Component } from '../core/Component';
+import { Component } from '../engine/core/Component';
 
 export interface HealthState {
     health: number;

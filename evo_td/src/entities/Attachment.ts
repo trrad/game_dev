@@ -3,11 +3,11 @@
  * This is a proper GameObject with PositionComponent, HealthComponent, etc.
  */
 
-import { GameObject } from '../core/GameObject';
+import { GameObject } from '../engine/core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { HealthComponent } from '../components/HealthComponent';
-import { EventStack } from '../core/EventStack';
-import { Logger, LogCategory } from '../utils/Logger';
+import { EventStack } from '../engine/core/EventStack';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 /**
  * Types of attachments available

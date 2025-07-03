@@ -1,8 +1,8 @@
-import { TimeManager } from "../core/TimeManager";
-import { EventStack, GameEvent } from "../core/EventStack";
-import { SceneManager } from "../core/SceneManager";
+import { TimeManager } from "../engine/core/TimeManager";
+import { EventStack, GameEvent } from "../engine/core/EventStack";
+import { SceneManager } from "../engine/scene/SceneManager";
 import { Engine } from "@babylonjs/core";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 // This class will be the main game logic entry point for tick-based updates
 export class Game {

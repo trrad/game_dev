@@ -7,9 +7,9 @@ import { Scene, MeshBuilder, StandardMaterial, Color3, Color4, Mesh } from "@bab
 import { RenderComponent, RenderConfig } from "./RenderComponent";
 import { TrainCarVoxel } from "../entities/TrainCarVoxel";
 import { HealthComponent } from "../components/HealthComponent";
-import { PositionComponent } from "../components/TrainCarVoxelComponent";
+import { PositionComponent } from "../components/PositionComponent";
 import { CargoCapacityType, VoxelMaterial } from "../components/TrainCarVoxelComponent";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Configuration specific to voxel rendering

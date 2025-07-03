@@ -1,9 +1,9 @@
 /**
  * Manages train entities and their behaviors.
  */
-import { Logger, LogCategory } from '../utils/Logger';
-import { ConfigManager } from '../core/ConfigManager';
-import { GameObject } from '../core/GameObject';
+import { Logger, LogCategory } from '../engine/utils/Logger';
+import { ConfigManager } from '../game/ConfigManager';
+import { GameObject } from '../engine/core/GameObject';
 import { Train } from '../entities/Train';
 import type { TrainConfig } from '../entities/Train';
 import { PositionComponent, type Position3D } from '../components/PositionComponent';
@@ -13,9 +13,9 @@ import { RailMovementComponent } from '../components/RailMovementComponent';
 import { TrainCarPositionComponent } from '../components/TrainCarPositionComponent';
 import { TrainCarVoxelComponent } from '../components/TrainCarVoxelComponent';
 import { Rail } from '../entities/Rail';
-import { TimeManager } from '../core/TimeManager';
+import { TimeManager } from '../engine/core/TimeManager';
 import { Vector3 } from '@babylonjs/core';
-import { EventStack, EventCategory } from '../core/EventStack';
+import { EventStack, EventCategory } from '../engine/core/EventStack';
 import type { TrainCar } from '../entities/TrainCar';
 import { VoxelRenderComponent } from '../renderers/VoxelRenderComponent';
 

@@ -1,7 +1,7 @@
 /**
  * Handles AI behavior for enemy entities
  */
-import { Component } from '../core/Component';
+import { Component } from '../engine/core/Component';
 import { Vector3 } from '@babylonjs/core';
 
 export enum AIState {

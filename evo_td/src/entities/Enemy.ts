@@ -1,7 +1,7 @@
 /**
  * Enemy entity that uses ECS components for behavior, health, movement, and positioning
  */
-import { GameObject } from '../core/GameObject';
+import { GameObject } from '../engine/core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
 import { HealthComponent } from '../components/HealthComponent';

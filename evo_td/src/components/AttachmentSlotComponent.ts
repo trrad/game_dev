@@ -3,9 +3,9 @@
  * Supports grid-based positioning and slot occupancy tracking
  */
 
-import { Component } from '../core/Component';
+import { Component } from '../engine/core/Component';
 import { Attachment, AttachmentSlotType, AttachmentSize } from '../entities/Attachment';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 import { Vector3 } from '@babylonjs/core';
 
 /**

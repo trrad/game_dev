@@ -2,7 +2,7 @@
  * EnemySystem - Manages enemy spawning, AI behavior, and lifecycle
  * Integrates with TimeManager, EventStack, and SceneManager
  */
-import { GameObject } from '../core/GameObject';
+import { GameObject } from '../engine/core/GameObject';
 import { Enemy, EnemyConfig } from '../entities/Enemy';
 import { EnemyRenderer } from '../renderers/EnemyRenderer';
 import { HealthComponent } from '../components/HealthComponent';
@@ -10,15 +10,15 @@ import { PositionComponent } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
 import { RailMovementComponent } from '../components/RailMovementComponent';
 import { AIBehaviorComponent, AIState, HuntingStrategy, SocialBehavior } from '../components/AIBehaviorComponent';
-import { TimeManager } from '../core/TimeManager';
-import { EventStack, EventCategory } from '../core/EventStack';
-import { SceneManager } from '../core/SceneManager';
+import { TimeManager } from '../engine/core/TimeManager';
+import { EventStack, EventCategory } from '../engine/core/EventStack';
+import { SceneManager } from '../engine/scene/SceneManager';
 import { Rail } from '../entities/Rail';
 import { Train } from '../entities/Train';
 import { TrainSystem } from './TrainSystem';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 import { Vector3 } from '@babylonjs/core';
-import { MathUtils } from '../utils/MathUtils';
+import { MathUtils } from '../engine/utils/MathUtils';
 
 /**
  * Enemy spawn configuration

@@ -2,7 +2,7 @@
  * UI Factory for creating common UI elements
  * This provides a convenient API for creating UI elements with consistent styling
  */
-import { GameObject } from '../core/GameObject';
+import { GameObject } from '../engine/core/GameObject';
 import { UISystem, UIElementType, UIElementConfig, UIElementStyle, UIElementComponent } from '../systems/UISystem';
 
 /**

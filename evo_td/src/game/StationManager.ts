@@ -3,9 +3,9 @@
  */
 import { Vector3 } from "@babylonjs/core";
 import { Station, StationConfig } from "../entities/Station";
-import { TimeManager } from "../core/TimeManager";
-import { EventStack } from "../core/EventStack";
-import { Logger, LogCategory } from "../utils/Logger";
+import { TimeManager } from "../engine/core/TimeManager";
+import { EventStack } from "../engine/core/EventStack";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 export interface StationManagerConfig {
     minStationDistance: number;

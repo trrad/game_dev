@@ -2,7 +2,7 @@
  * LightRenderer - Responsible for creating and managing scene lighting
  */
 import { Scene, HemisphericLight, DirectionalLight, Color3, Vector3, Light } from "@babylonjs/core";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Light configuration for scene lighting

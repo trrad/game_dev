@@ -6,7 +6,7 @@ import { TransformNode, Scene, Vector3 } from "@babylonjs/core";
 import { RenderComponent, RenderConfig } from "./RenderComponent";
 import { TrainCarRenderComponent } from "./TrainCarRenderComponent";
 import { TrainCar } from "../entities/TrainCar";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Train-level render component that manages car render components

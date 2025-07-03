@@ -1,9 +1,9 @@
 /**
  * Handles cargo storage and management for game objects.
  */
-import { Component } from '../core/Component';
-import type { GameObject } from '../core/GameObject';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Component } from '../engine/core/Component';
+import type { GameObject } from '../engine/core/GameObject';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 export interface CargoItem {
     id: string;

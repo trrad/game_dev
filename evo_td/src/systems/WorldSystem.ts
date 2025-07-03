@@ -15,12 +15,12 @@
  */
 
 import { Vector3 } from "@babylonjs/core";
-import { StationManager } from "../core/StationManager";
-import { TimeManager } from "../core/TimeManager";
-import { EventStack } from "../core/EventStack";
+import { StationManager } from "../game/StationManager";
+import { TimeManager } from "../engine/core/TimeManager";
+import { EventStack } from "../engine/core/EventStack";
 import { TrainSystem } from "../systems/TrainSystem";
 import { EnemySystem } from "../systems/EnemySystem";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Configuration for world generation

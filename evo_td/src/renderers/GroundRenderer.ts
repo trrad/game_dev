@@ -2,7 +2,7 @@
  * GroundRenderer - Responsible for creating and managing the ground plane
  */
 import { Scene, MeshBuilder, StandardMaterial, Color3, DynamicTexture, Mesh } from "@babylonjs/core";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Ground visual style configuration

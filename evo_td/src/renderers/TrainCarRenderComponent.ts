@@ -9,7 +9,7 @@ import { VoxelRenderComponent, VoxelRenderConfig } from "./VoxelRenderComponent"
 import { AttachmentRenderComponent } from "./AttachmentRenderComponent";
 import { Attachment } from "../entities/Attachment";
 import { PositionComponent } from "../components/PositionComponent";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Configuration specific to train car rendering

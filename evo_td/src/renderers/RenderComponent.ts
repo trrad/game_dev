@@ -4,10 +4,10 @@
  */
 
 import { Scene, AbstractMesh, Material, Vector3 } from "@babylonjs/core";
-import { Component } from "../core/Component";
+import { Component } from "../engine/core/Component";
 import { PositionComponent } from "../components/PositionComponent";
 import { HealthComponent } from "../components/HealthComponent";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Asset reference for future asset loading system

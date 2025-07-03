@@ -1,7 +1,7 @@
 /**
  * Handles position and rotation for game objects.
  */
-import { Component } from '../core/Component';
+import { Component } from '../engine/core/Component';
 
 export interface Position3D {
     x: number;

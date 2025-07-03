@@ -7,8 +7,8 @@
  * This component provides more features and could replace the inline implementation.
  */
 
-import { TimeManager, TimeSpeed } from "../core/TimeManager";
-import { Logger, LogCategory } from "../utils/Logger";
+import { TimeManager, TimeSpeed } from "../engine/core/TimeManager";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 import { CSS_CLASSES, defaultUIConfig } from "./assets/ui-config";
 
 export class TimeControlsUI {

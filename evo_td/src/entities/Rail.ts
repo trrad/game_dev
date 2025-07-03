@@ -1,6 +1,6 @@
 import { Vector3, Mesh } from "@babylonjs/core";
-import { GameObject } from "../core/GameObject";
-import { Logger, LogCategory } from "../utils/Logger";
+import { GameObject } from "../engine/core/GameObject";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 export interface RailConfig {
     id: string;

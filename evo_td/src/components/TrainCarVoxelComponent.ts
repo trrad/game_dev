@@ -3,9 +3,9 @@
  * Each train car is composed of discrete voxel units arranged in a 3D grid
  */
 
-import { Component } from '../core/Component';
+import { Component } from '../engine/core/Component';
 import { AttachmentSlotType } from '../entities/Attachment';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 /**
  * Types of cargo capacity that voxels can provide

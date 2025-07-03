@@ -2,14 +2,14 @@
  * Train entity that manages a collection of train cars as a cohesive unit
  */
 
-import { GameObject } from "../core/GameObject";
-import { Logger, LogCategory } from "../utils/Logger";
+import { GameObject } from "../engine/core/GameObject";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { MovementComponent } from "../components/MovementComponent";
 import { RailPositionComponent } from "../components/RailPositionComponent";
 import { RailMovementComponent } from "../components/RailMovementComponent";
 import { TrainCar } from "./TrainCar";
-import type { EventStack } from "../core/EventStack";
+import type { EventStack } from "../engine/core/EventStack";
 
 /**
  * Configuration interface for Train entities.

@@ -1,10 +1,10 @@
 /**
  * StationPerimeterComponent - Defines the boundary and scale of a station
  */
-import { Component } from "../core/Component";
-import { GameObject } from "../core/GameObject";
+import { Component } from "../engine/core/Component";
+import { GameObject } from "../engine/core/GameObject";
 import { Vector3 } from "@babylonjs/core";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 export interface StationPerimeterData {
     center: Vector3;

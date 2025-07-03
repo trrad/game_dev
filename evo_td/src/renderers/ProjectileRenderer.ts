@@ -4,7 +4,7 @@
  */
 import { Scene, Mesh, MeshBuilder, StandardMaterial, Color3, Vector3, TrailMesh, TransformNode } from '@babylonjs/core';
 import { Projectile } from '../entities/Projectile';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 interface ProjectileVisual {
     mesh: Mesh;

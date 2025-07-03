@@ -4,12 +4,12 @@
  */
 
 import { Mesh, Scene } from "@babylonjs/core";
-import { GameObject } from '../core/GameObject';
+import { GameObject } from '../engine/core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { HealthComponent } from '../components/HealthComponent';
 import { CargoCapacityType, VoxelMaterial, VoxelFace } from '../components/TrainCarVoxelComponent';
 import { VoxelRenderComponent } from '../renderers/VoxelRenderComponent';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 /**
  * Individual voxel unit that makes up train cars

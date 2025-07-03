@@ -3,7 +3,7 @@
  */
 import { Scene, MeshBuilder, Color3, Vector3, LinesMesh } from "@babylonjs/core";
 import { Rail, RailConfig } from "../entities/Rail";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Rail visual style configuration

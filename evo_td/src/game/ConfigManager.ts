@@ -2,7 +2,7 @@
  * Centralized configuration management system
  * Provides type-safe access to game configuration values
  */
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 export interface GameConfig {
     // Core game settings

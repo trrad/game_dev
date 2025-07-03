@@ -4,10 +4,10 @@
  */
 import { Projectile, ProjectileConfig } from '../entities/Projectile';
 import { ProjectileRenderer } from '../renderers/ProjectileRenderer';
-import { TimeManager } from '../core/TimeManager';
-import { EventStack, EventCategory } from '../core/EventStack';
-import { SceneManager } from '../core/SceneManager';
-import { Logger, LogCategory } from '../utils/Logger';
+import { TimeManager } from '../engine/core/TimeManager';
+import { EventStack, EventCategory } from '../engine/core/EventStack';
+import { SceneManager } from '../engine/scene/SceneManager';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 export class ProjectileSystem {
     private projectiles: Map<string, Projectile> = new Map();

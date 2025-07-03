@@ -332,3 +332,41 @@ Remember: This is an ECS-based game engine. Always think in terms of entities, c
 - **All entities** inherit from GameObject and use component composition
 
 This reality check helps you give accurate advice based on what's actually implemented vs. aspirational documentation.
+
+## Development Tools and Batch Update Patterns
+
+The project includes proven patterns for large-scale refactoring and code changes in the `dev_tools/` directory.
+
+### Batch Update Scripts for Large Refactoring
+
+When doing systematic changes across many files (like the engine/game directory restructure), use scripted approaches rather than manual file-by-file edits:
+
+**Key Resources:**
+- `dev_tools/batch_file_updater_template.ps1` - Generalized template for batch file updates
+- `dev_tools/import_path_migration_example.ps1` - Example of import path refactoring
+- `dev_tools/README.md` - Complete documentation of the batch update pattern
+
+**Success Story:**
+The import path migration during engine/game separation:
+- Reduced compilation errors from 350+ to 50 (90% improvement)
+- Updated 41 files across 2 script runs
+- Systematic, trackable, and reversible changes
+
+### When to Use Batch Scripts
+
+Consider scripted approaches for:
+- **Import path changes** (renaming directories, restructuring modules)
+- **API refactoring** (method renames, parameter changes)
+- **Component/class renames** (updating all references consistently)
+- **Configuration format changes** (updating config files across the project)
+- **Library migrations** (switching from one library to another)
+
+### AI-Assisted Refactoring Best Practices
+
+1. **Pattern Recognition**: AI identifies what needs to change and creates the mapping
+2. **Script Generation**: Use templates to create systematic update scripts
+3. **Incremental Validation**: Test changes in small batches before full deployment
+4. **Progress Tracking**: Use scripts that report what files were modified
+5. **Human Review**: Always review the patterns before applying to the entire codebase
+
+This approach enables confident large-scale changes while maintaining code quality and project stability.

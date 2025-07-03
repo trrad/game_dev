@@ -7,14 +7,14 @@
  * This could be integrated in the future to centralize UI management.
  */
 
-import { CSSLoader } from "../utils/CSSLoader";
+import { CSSLoader } from "../ui/CSSLoader";
 import { TimeControlsUI } from "./TimeControlsUI";
 import { EventLogUI } from "./EventLogUI";
 import { UIFactory } from "./UIFactory";
 import { UISystem } from "../systems/UISystem";
-import { TimeManager } from "../core/TimeManager";
-import { EventStack, EventCategory } from "../core/EventStack";
-import { Logger, LogCategory } from "../utils/Logger";
+import { TimeManager } from "../engine/core/TimeManager";
+import { EventStack, EventCategory } from "../engine/core/EventStack";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 export class UIManager {
     private cssLoader: CSSLoader;

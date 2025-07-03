@@ -3,9 +3,9 @@
  * This component handles the specific positioning logic for train cars that need to follow
  * behind a lead engine while maintaining proper spacing and formation.
  */
-import { Component } from '../core/Component';
-import type { GameObject } from '../core/GameObject';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Component } from '../engine/core/Component';
+import type { GameObject } from '../engine/core/GameObject';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 export interface TrainCarPositionState {
     /** Position index within the train (0 = engine, 1 = first car, etc.) */

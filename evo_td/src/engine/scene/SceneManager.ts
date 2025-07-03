@@ -31,13 +31,13 @@ import {
     StandardMaterial
 } from "@babylonjs/core";
 
-import { GameObject } from './GameObject';
-import { PositionComponent } from '../components/PositionComponent';
-import { RenderComponent } from '../renderers/RenderComponent';
-import { TimeManager } from './TimeManager';
-import { EventStack } from './EventStack';
+import { GameObject } from '../core/GameObject';
+import { PositionComponent } from '../../components/PositionComponent';
+import { RenderComponent } from '../../renderers/RenderComponent';
+import { TimeManager } from '../core/TimeManager';
+import { EventStack } from '../core/EventStack';
 import { ObjectTracker } from '../utils/ObjectTracker';
-import { eventStack, EventCategory } from './EventStack';
+import { eventStack, EventCategory } from '../core/EventStack';
 
 /**
  * Configuration options for SceneManager

@@ -1,6 +1,6 @@
 import { Vector3, Mesh, TransformNode, Scene, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
-import { GameObject } from "../core/GameObject";
-import { Logger, LogCategory } from "../utils/Logger";
+import { GameObject } from "../engine/core/GameObject";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 import { PositionComponent } from "../components/PositionComponent";
 import { HealthComponent } from "../components/HealthComponent";
 import { InventoryComponent } from "../components/InventoryComponent";

@@ -3,8 +3,8 @@
  * Provides a toggleable event/console log window for game events
  */
 
-import { EventStack, EventLogEntry, EventCategory } from "../core/EventStack";
-import { LogCategory } from "../utils/Logger";
+import { EventStack, EventLogEntry, EventCategory } from "../engine/core/EventStack";
+import { LogCategory } from "../engine/utils/Logger";
 import { CSS_CLASSES, defaultUIConfig } from "./assets/ui-config";
 
 export class EventLogUI {

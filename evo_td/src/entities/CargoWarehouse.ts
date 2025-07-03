@@ -3,7 +3,7 @@
  */
 import { Building, BuildingType, BuildingConfig, BuildingState } from "./Building";
 import { Vector3 } from "@babylonjs/core";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 export interface CargoWarehouseConfig extends BuildingConfig {
     maxStock?: number;

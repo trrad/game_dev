@@ -6,7 +6,7 @@ import { Mesh, Scene, Vector3, StandardMaterial, Color3, AbstractMesh } from "@b
 import { RenderComponent, RenderConfig } from "./RenderComponent";
 import { Attachment } from "../entities/Attachment";
 import { PositionComponent } from "../components/PositionComponent";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Attachment render component that handles visual representation of attachments

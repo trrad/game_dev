@@ -6,10 +6,10 @@
 import { Train } from "../entities/Train";
 import { Station } from "../entities/Station";
 import { TrainSystem } from "../systems/TrainSystem";
-import { EventStack, EventCategory } from "../core/EventStack";
+import { EventStack, EventCategory } from "../engine/core/EventStack";
 import { PositionComponent } from '../components/PositionComponent';
-import { MathUtils } from '../utils/MathUtils';
-import { Logger, LogCategory } from "../utils/Logger";
+import { MathUtils } from '../engine/utils/MathUtils';
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 export interface JourneyOption {
     stationId: string;

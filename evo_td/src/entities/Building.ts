@@ -2,12 +2,12 @@
  * Building - Represents a building entity within a station
  * Follows proper ECS pattern by extending GameObject and using PositionComponent
  */
-import { GameObject } from "../core/GameObject";
+import { GameObject } from "../engine/core/GameObject";
 import { PositionComponent } from "../components/PositionComponent";
 import { HealthComponent } from "../components/HealthComponent";
 import { Vector3 } from "@babylonjs/core";
-import { Logger, LogCategory } from "../utils/Logger";
-import { GeometryUtils, BoundingBox } from "../utils/GeometryUtils";
+import { Logger, LogCategory } from "../engine/utils/Logger";
+import { GeometryUtils, BoundingBox } from "../engine/utils/GeometryUtils";
 
 export enum BuildingType {
     CARGO_WAREHOUSE = 'cargo_warehouse',

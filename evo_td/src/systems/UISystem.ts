@@ -3,9 +3,9 @@
  * Handles creation, management and events for UI elements
  */
 
-import { GameObject } from '../core/GameObject';
-import { Component } from '../core/Component';
-import { Logger, LogCategory } from '../utils/Logger';
+import { GameObject } from '../engine/core/GameObject';
+import { Component } from '../engine/core/Component';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 /**
  * Types of UI elements supported by the system

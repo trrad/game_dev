@@ -5,7 +5,7 @@
 import { Vector3 } from '@babylonjs/core';
 import { AttachmentSlotType, AttachmentSize } from '../entities/Attachment';
 import { AttachmentSlot, SlotGrid, AttachmentSlotConfig } from '../components/AttachmentSlotComponent';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 /**
  * Standard train car dimensions and specifications

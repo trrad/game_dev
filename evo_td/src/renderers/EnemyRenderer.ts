@@ -7,7 +7,7 @@ import { Enemy } from "../entities/Enemy";
 import { HealthComponent } from "../components/HealthComponent";
 import { PositionComponent } from "../components/PositionComponent";
 import { AIBehaviorComponent, AIState } from "../components/AIBehaviorComponent";
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from "../engine/utils/Logger";
 
 /**
  * Visual configuration for enemies

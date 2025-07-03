@@ -3,8 +3,8 @@
  */
 
 import { Attachment, AttachmentConfig, AttachmentType, AttachmentSlotType } from './Attachment';
-import { Logger, LogCategory } from '../utils/Logger';
-import { EventStack } from '../core/EventStack';
+import { Logger, LogCategory } from '../engine/utils/Logger';
+import { EventStack } from '../engine/core/EventStack';
 
 /**
  * Pre-defined attachment configurations

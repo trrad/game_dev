@@ -2,10 +2,10 @@
  * Projectile entity for visual representation of turret attacks
  * Uses standard ECS components for position and movement
  */
-import { GameObject } from '../core/GameObject';
+import { GameObject } from '../engine/core/GameObject';
 import { PositionComponent } from '../components/PositionComponent';
 import { MovementComponent } from '../components/MovementComponent';
-import { MathUtils } from '../utils/MathUtils';
+import { MathUtils } from '../engine/utils/MathUtils';
 
 export interface ProjectileConfig {
     id: string;

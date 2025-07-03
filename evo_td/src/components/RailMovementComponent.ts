@@ -2,9 +2,9 @@
  * RailMovementComponent - Manages movement behavior for rail-constrained entities.
  * This component handles speed, acceleration, and movement state for entities moving along rails.
  */
-import { Component } from '../core/Component';
-import type { GameObject } from '../core/GameObject';
-import { Logger, LogCategory } from '../utils/Logger';
+import { Component } from '../engine/core/Component';
+import type { GameObject } from '../engine/core/GameObject';
+import { Logger, LogCategory } from '../engine/utils/Logger';
 
 export interface RailMovementState {
     /** Current movement speed (units per second) */

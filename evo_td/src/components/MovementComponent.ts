@@ -3,8 +3,8 @@
  * Provides basic movement properties for free-moving entities (enemies, projectiles, etc.).
  * For rail-constrained movement, use RailMovementComponent instead.
  */
-import { Component } from '../core/Component';
-import type { GameObject } from '../core/GameObject';
+import { Component } from '../engine/core/Component';
+import type { GameObject } from '../engine/core/GameObject';
 
 export interface MovementState {
     speed: number;
