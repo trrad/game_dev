@@ -10,9 +10,9 @@
  */
 
 import { GameObject } from '../engine/core/GameObject';
-import { SceneNodeComponent } from '../engine/scene/SceneNodeComponent';
-import { HealthComponent } from '../components/HealthComponent';
-import { RadiusComponent } from '../components/RadiusComponent';
+import { NodeComponent } from '../engine/components/NodeComponent';
+import { HealthComponent } from '../engine/components/HealthComponent';
+import { RadiusComponent } from '../engine/components/RadiusComponent';
 import { EventStack } from '../engine/core/EventStack';
 import { Engine, Scene } from '@babylonjs/core';
 
@@ -68,13 +68,13 @@ export class SerializationDemo {
         const gameObject = new GameObject('TestEntity', eventStack);
         
         // Add components
-        const sceneNode = new SceneNodeComponent(scene);
+        const sceneNode = new NodeComponent(scene);
         sceneNode.setLocalPosition(10, 20, 30);
         sceneNode.setLocalRotation(0, Math.PI / 4, 0);
         sceneNode.setLocalScale(2, 2, 2);
         
         const health = new HealthComponent(150, 1.0);
-        health.takeDamage(50, 'fire');
+        health.takeDamage(50, 'kinetic');
         
         const radius = new RadiusComponent(25, 'interaction');
         
@@ -94,7 +94,7 @@ export class SerializationDemo {
         const newGameObject = new GameObject('TestEntity', eventStack);
         
         // Add same component types (in practice, you'd have component factories)
-        newGameObject.addComponent(new SceneNodeComponent(scene));
+        newGameObject.addComponent(new NodeComponent(scene));
         newGameObject.addComponent(new HealthComponent(0, 0));
         newGameObject.addComponent(new RadiusComponent(0, 'default'));
         
@@ -102,7 +102,7 @@ export class SerializationDemo {
         newGameObject.deserialize(gameObjectData);
         
         // Verify restoration
-        const newSceneNode = newGameObject.getComponent<SceneNodeComponent>('sceneNode');
+        const newSceneNode = newGameObject.getComponent<NodeComponent>('sceneNode');
         const newHealth = newGameObject.getComponent<HealthComponent>('health');
         const newRadius = newGameObject.getComponent<RadiusComponent>('radius');
         
@@ -121,13 +121,14 @@ export class SerializationDemo {
      */
     static demoNetworkSnapshots(): void {
         console.log('\n=== Network Snapshot Demo ===');
-        
+        const engine = new Engine(null, true);
+        const scene = new Scene(engine);
         const eventStack = new EventStack();
         const gameObject = new GameObject('NetworkEntity', eventStack);
         
         // Add components that commonly change
-        const sceneNode = new SceneNodeComponent();
-        sceneNode.setPosition(100, 0, 100);
+        const sceneNode = new NodeComponent(scene);
+        sceneNode.setLocalPosition(100, 0, 100);
         
         const health = new HealthComponent(200, 0);
         
@@ -135,12 +136,12 @@ export class SerializationDemo {
         gameObject.addComponent(health);
         
         console.log('Initial state:');
-        console.log('- Position:', sceneNode.getPosition());
+        console.log('- Position:', sceneNode.getLocalPosition());
         console.log('- Health:', health.getHealth());
         
         // Simulate game updates
-        sceneNode.setPosition(110, 0, 105); // Entity moved
-        health.takeDamage(25, 'physical'); // Entity took damage
+        sceneNode.setLocalPosition(110, 0, 105); // Entity moved
+        health.takeDamage(25, 'kinetic'); // Entity took damage
         
         // Get network snapshot (lightweight)
         const snapshot = gameObject.getNetworkSnapshot();
@@ -149,24 +150,24 @@ export class SerializationDemo {
         
         // Create another entity and apply the snapshot
         const otherEntity = new GameObject('NetworkEntity', eventStack);
-        otherEntity.addComponent(new SceneNodeComponent());
+        otherEntity.addComponent(new NodeComponent(scene));
         otherEntity.addComponent(new HealthComponent(200, 0));
         
         console.log('Before applying snapshot:');
-        const otherSceneNode = otherEntity.getComponent<SceneNodeComponent>('sceneNode');
+        const otherSceneNode = otherEntity.getComponent<NodeComponent>('sceneNode');
         const otherHealth = otherEntity.getComponent<HealthComponent>('health');
-        console.log('- Position:', otherSceneNode?.getPosition());
+        console.log('- Position:', otherSceneNode?.getLocalPosition());
         console.log('- Health:', otherHealth?.getHealth());
         
         // Apply network snapshot
         otherEntity.applyNetworkSnapshot(snapshot);
         
         console.log('After applying snapshot:');
-        console.log('- Position:', otherSceneNode?.getPosition());
+        console.log('- Position:', otherSceneNode?.getLocalPosition());
         console.log('- Health:', otherHealth?.getHealth());
         
         // Verify sync
-        console.log('Positions match:', JSON.stringify(sceneNode.getPosition()) === JSON.stringify(otherSceneNode?.getPosition()));
+        console.log('Positions match:', JSON.stringify(sceneNode.getLocalPosition()) === JSON.stringify(otherSceneNode?.getLocalPosition()));
         console.log('Health matches:', health.getHealth() === otherHealth?.getHealth());
     }
     
@@ -175,17 +176,18 @@ export class SerializationDemo {
      */
     static demoGameObjectCloning(): void {
         console.log('\n=== GameObject Cloning Demo ===');
-        
+        const engine = new Engine(null, true);
+        const scene = new Scene(engine);
         const eventStack = new EventStack();
         const original = new GameObject('CloneTest', eventStack);
         
         // Set up complex state
-        const sceneNode = new SceneNodeComponent();
-        sceneNode.setPosition(50, 25, 75);
-        sceneNode.setScale(1.5, 1.5, 1.5);
+        const sceneNode = new NodeComponent(scene);
+        sceneNode.setLocalPosition(50, 25, 75);
+        sceneNode.setLocalScale(1.5, 1.5, 1.5);
         
         const health = new HealthComponent(300, 2.0);
-        health.takeDamage(100, 'magic');
+        health.takeDamage(100, 'kinetic');
         
         const radius = new RadiusComponent(30, 'aura');
         radius.setCustomType('magic_field');
@@ -196,7 +198,7 @@ export class SerializationDemo {
         
         console.log('Original GameObject:');
         console.log('- ID:', original.id);
-        console.log('- Position:', sceneNode.getPosition());
+        console.log('- Position:', sceneNode.getLocalPosition());
         console.log('- Health:', health.getHealth());
         console.log('- Radius Type:', radius.getRadiusType());
         
@@ -206,28 +208,28 @@ export class SerializationDemo {
         const clone = new GameObject('CloneTest', eventStack);
         
         // Add same component types
-        clone.addComponent(new SceneNodeComponent());
+        clone.addComponent(new NodeComponent(scene));
         clone.addComponent(new HealthComponent(0, 0));
         clone.addComponent(new RadiusComponent(0, 'default'));
         
         // Restore cloned state
         clone.deserialize(cloneData);
         
-        const cloneSceneNode = clone.getComponent<SceneNodeComponent>('sceneNode');
+        const cloneSceneNode = clone.getComponent<NodeComponent>('sceneNode');
         const cloneHealth = clone.getComponent<HealthComponent>('health');
         const cloneRadius = clone.getComponent<RadiusComponent>('radius');
         
         console.log('Cloned GameObject:');
         console.log('- ID:', clone.id, '(different from original)');
-        console.log('- Position:', cloneSceneNode?.getPosition());
+        console.log('- Position:', cloneSceneNode?.getLocalPosition());
         console.log('- Health:', cloneHealth?.getHealth());
         console.log('- Radius Type:', cloneRadius?.getRadiusType());
         
         // Verify independence
-        sceneNode.setPosition(999, 999, 999);
+        sceneNode.setLocalPosition(999, 999, 999);
         console.log('After modifying original:');
-        console.log('- Original Position:', sceneNode.getPosition());
-        console.log('- Clone Position:', cloneSceneNode?.getPosition(), '(unchanged)');
+        console.log('- Original Position:', sceneNode.getLocalPosition());
+        console.log('- Clone Position:', cloneSceneNode?.getLocalPosition(), '(unchanged)');
     }
     
     /**
@@ -235,16 +237,16 @@ export class SerializationDemo {
      */
     static demoSaveLoadGameState(): void {
         console.log('\n=== Save/Load Game State Demo ===');
-        
+        const engine = new Engine(null, true);
+        const scene = new Scene(engine);
         const eventStack = new EventStack();
-        
         // Create a scene with multiple entities
         const entities: GameObject[] = [];
         
         // Player entity
         const player = new GameObject('Player', eventStack);
-        const playerNode = new SceneNodeComponent();
-        playerNode.setPosition(0, 0, 0);
+        const playerNode = new NodeComponent(scene);
+        playerNode.setLocalPosition(0, 0, 0);
         const playerHealth = new HealthComponent(100, 1.0);
         player.addComponent(playerNode);
         player.addComponent(playerHealth);
@@ -253,10 +255,10 @@ export class SerializationDemo {
         // Enemy entities
         for (let i = 0; i < 3; i++) {
             const enemy = new GameObject('Enemy', eventStack);
-            const enemyNode = new SceneNodeComponent();
-            enemyNode.setPosition(i * 10, 0, i * 5);
+            const enemyNode = new NodeComponent(scene);
+            enemyNode.setLocalPosition(i * 10, 0, i * 5);
             const enemyHealth = new HealthComponent(50, 0);
-            enemyHealth.takeDamage(Math.random() * 20, 'physical'); // Random damage
+            enemyHealth.takeDamage(Math.random() * 20, 'kinetic'); // Random damage
             const enemyRadius = new RadiusComponent(15, 'detection');
             
             enemy.addComponent(enemyNode);
@@ -267,9 +269,9 @@ export class SerializationDemo {
         
         console.log('Game State before save:');
         entities.forEach((entity, index) => {
-            const node = entity.getComponent<SceneNodeComponent>('sceneNode');
+            const node = entity.getComponent<NodeComponent>('sceneNode');
             const health = entity.getComponent<HealthComponent>('health');
-            console.log(`- ${entity.type} ${index}: pos=${JSON.stringify(node?.getPosition())}, hp=${health?.getHealth()}`);
+            console.log(`- ${entity.type} ${index}: pos=${JSON.stringify(node?.getLocalPosition())}, hp=${health?.getHealth()}`);
         });
         
         // "Save" the game state
@@ -291,7 +293,7 @@ export class SerializationDemo {
             
             // Add components based on what was saved
             if (entityData.components.sceneNode) {
-                entity.addComponent(new SceneNodeComponent());
+                entity.addComponent(new NodeComponent(scene));
             }
             if (entityData.components.health) {
                 entity.addComponent(new HealthComponent(0, 0));
@@ -307,9 +309,9 @@ export class SerializationDemo {
         
         console.log('Game State after load:');
         loadedEntities.forEach((entity, index) => {
-            const node = entity.getComponent<SceneNodeComponent>('sceneNode');
+            const node = entity.getComponent<NodeComponent>('sceneNode');
             const health = entity.getComponent<HealthComponent>('health');
-            console.log(`- ${entity.type} ${index}: pos=${JSON.stringify(node?.getPosition())}, hp=${health?.getHealth()}`);
+            console.log(`- ${entity.type} ${index}: pos=${JSON.stringify(node?.getLocalPosition())}, hp=${health?.getHealth()}`);
         });
         
         // Verify loaded state matches original

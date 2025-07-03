@@ -1,17 +1,33 @@
 /**
- * TransformComponent - Manages hierarchical spatial relationships
+ * SceneNodeComponent - Manages hierarchical relationships in the scene graph
  * Provides a bridge between our ECS and Babylon.js scene graph
  */
 
-import { Component } from '../components/Component';
+import { Component } from './Component';
 import { TransformNode, Vector3, Matrix, Quaternion, Scene } from '@babylonjs/core';
 import { Logger, LogCategory } from '../utils/Logger';
 import { GameObject } from '../core/GameObject';
+import { 
+    SceneGraphEventSystem, 
+    SceneEvents, 
+    SceneGraphEvent, 
+    SceneGraphEventListener, 
+    EventListenerOptions,
+    EventOptions 
+} from '../scene/SceneGraphEventSystem';
 
 /**
- * TransformComponent data interface for serialization
+ * SceneNodeComponent data interface for serialization
  */
-export interface TransformComponentData {
+/**
+ * Represents the data structure for a node component in the engine.
+ * 
+ * @property position - Optional 3D position of the node, defined by x, y, and z coordinates.
+ * @property rotation - Optional 3D rotation of the node, defined by x, y, and z angles.
+ * @property scale - Optional 3D scale of the node, defined by x, y, and z factors.
+ * @property parentId - Optional identifier of the parent node, used for serialization purposes. Can be a string or null.
+ */
+export interface NodeComponentData {
     position?: { x: number, y: number, z: number };
     rotation?: { x: number, y: number, z: number };
     scale?: { x: number, y: number, z: number };
@@ -19,32 +35,38 @@ export interface TransformComponentData {
 }
 
 /**
- * TransformComponent manages hierarchical spatial relationships between entities
+ * NodeComponent manages hierarchical relationships between entities
  * using Babylon.js TransformNodes as the underlying implementation.
+ * 
+ * This is the core building block of our scene graph, providing:
+ * 1. Parent-child relationships between entities
+ * 2. Hierarchical transformation inheritance
+ * 3. Local and world space coordinate conversions
+ * 4. Access to underlying Babylon.js TransformNode for rendering
  */
-export class TransformComponent extends Component<TransformComponentData> {
-    public readonly type = 'transform';
+export class NodeComponent extends Component<NodeComponentData> {
+    public readonly type = 'Node';
     
     private _node: TransformNode;
-    private _children: TransformComponent[] = [];
-    private _parent: TransformComponent | null = null;
+    private _children: NodeComponent[] = [];
+    private _parent: NodeComponent | null = null;
     private _scene: Scene;
     
     /**
-     * Create a new TransformComponent
+     * Create a new SceneNodeComponent
      * @param scene Babylon.js scene
-     * @param parent Optional parent transform component
+     * @param parent Optional parent scene node component
      */
-    constructor(scene: Scene, parent?: TransformComponent) {
+    constructor(scene: Scene, parent?: NodeComponent) {
         super();
         
         this._scene = scene;
         
         // Create the transform node with a unique name
-        const nodeName = `transform_${this.instanceId}`;
+        const nodeName = `node_${this.instanceId}`;
         this._node = new TransformNode(nodeName, scene);
         
-        Logger.log(LogCategory.SYSTEM, `Created TransformComponent with node ${nodeName}`);
+        Logger.log(LogCategory.SYSTEM, `Created NodeComponent with node ${nodeName}`);
         
         // Set parent if provided
         if (parent) {
@@ -60,10 +82,10 @@ export class TransformComponent extends Component<TransformComponentData> {
         
         if (this._gameObject) {
             // Update node name to include GameObject ID for better debugging
-            this._node.name = `transform_${this._gameObject.id}`;
+            this._node.name = `node_${this._gameObject.id}`;
             
             Logger.log(LogCategory.SYSTEM, 
-                `TransformComponent attached to ${this._gameObject.id}`);
+                `NodeComponent attached to ${this._gameObject.id}`);
         }
     }
     
@@ -87,7 +109,7 @@ export class TransformComponent extends Component<TransformComponentData> {
         }
         
         Logger.log(LogCategory.SYSTEM, 
-            `TransformComponent ${this.instanceId} disposed`);
+            `NodeComponent ${this.instanceId} disposed`);
             
         super.dispose();
     }
@@ -95,7 +117,7 @@ export class TransformComponent extends Component<TransformComponentData> {
     /**
      * Serialize this component's state
      */
-    serialize(): TransformComponentData {
+    serialize(): NodeComponentData {
         return {
             position: {
                 x: this._node.position.x,
@@ -120,7 +142,7 @@ export class TransformComponent extends Component<TransformComponentData> {
      * Deserialize this component's state
      * @param data The serialized data
      */
-    deserialize(data: TransformComponentData): void {
+    deserialize(data: NodeComponentData): void {
         if (data.position) {
             this._node.position.set(data.position.x, data.position.y, data.position.z);
         }
@@ -137,11 +159,13 @@ export class TransformComponent extends Component<TransformComponentData> {
         // This is typically handled by a deserialization manager
     }
     
+    //=== HIERARCHY METHODS ===//
+    
     /**
-     * Set the parent of this transform
-     * @param parent The parent transform or null to attach to scene root
+     * Set the parent of this node
+     * @param parent The parent node or null to attach to scene root
      */
-    setParent(parent: TransformComponent | null): void {
+    setParent(parent: NodeComponent | null): void {
         // Remove from current parent if exists
         if (this._parent) {
             this._parent.removeChild(this);
@@ -156,27 +180,27 @@ export class TransformComponent extends Component<TransformComponentData> {
             parent._children.push(this);
             
             Logger.log(LogCategory.SYSTEM, 
-                `Transform ${this.instanceId} parented to ${parent.instanceId}`);
+                `Node ${this.instanceId} parented to ${parent.instanceId}`);
         } else {
             this._node.parent = null;
             Logger.log(LogCategory.SYSTEM, 
-                `Transform ${this.instanceId} unparented`);
+                `Node ${this.instanceId} unparented`);
         }
     }
     
     /**
-     * Add a child transform to this transform
-     * @param child The child transform to add
+     * Add a child node to this node
+     * @param child The child node to add
      */
-    addChild(child: TransformComponent): void {
+    addChild(child: NodeComponent): void {
         child.setParent(this);
     }
     
     /**
-     * Remove a child transform from this transform
-     * @param child The child transform to remove
+     * Remove a child node from this node
+     * @param child The child node to remove
      */
-    removeChild(child: TransformComponent): void {
+    removeChild(child: NodeComponent): void {
         const index = this._children.indexOf(child);
         if (index !== -1) {
             this._children.splice(index, 1);
@@ -184,22 +208,50 @@ export class TransformComponent extends Component<TransformComponentData> {
             child._node.parent = null;
             
             Logger.log(LogCategory.SYSTEM, 
-                `Removed child transform ${child.instanceId} from ${this.instanceId}`);
+                `Removed child node ${child.instanceId} from ${this.instanceId}`);
         }
     }
     
     /**
-     * Get all child transforms
+     * Get all child nodes
      */
-    getChildren(): TransformComponent[] {
+    getChildren(): NodeComponent[] {
         return [...this._children];
     }
     
     /**
-     * Get the parent transform
+     * Get all descendants (children, grandchildren, etc.)
      */
-    getParent(): TransformComponent | null {
+    getAllDescendants(): NodeComponent[] {
+        let descendants: NodeComponent[] = [];
+        
+        for (const child of this._children) {
+            descendants.push(child);
+            descendants = descendants.concat(child.getAllDescendants());
+        }
+        
+        return descendants;
+    }
+    
+    /**
+     * Get the parent node
+     */
+    getParent(): NodeComponent | null {
         return this._parent;
+    }
+    
+    /**
+     * Find if this node is an ancestor of another node
+     */
+    isAncestorOf(node: NodeComponent): boolean {
+        let parent = node.getParent();
+        while (parent) {
+            if (parent === this) {
+                return true;
+            }
+            parent = parent.getParent();
+        }
+        return false;
     }
     
     /**
@@ -208,6 +260,15 @@ export class TransformComponent extends Component<TransformComponentData> {
     getTransformNode(): TransformNode {
         return this._node;
     }
+    
+    /**
+     * Get the attached GameObject
+     */
+    get gameObject(): GameObject | undefined {
+        return this._gameObject;
+    }
+    
+    //=== TRANSFORM METHODS ===//
     
     /**
      * Set local position (relative to parent)
@@ -293,7 +354,6 @@ export class TransformComponent extends Component<TransformComponentData> {
      * Get world rotation as Quaternion
      */
     getWorldRotationQuaternion(): Quaternion {
-        const quat = new Quaternion();
         // Clone the quaternion since Babylon doesn't have a copyTo method
         return this._node.absoluteRotationQuaternion.clone();
     }
@@ -343,7 +403,6 @@ export class TransformComponent extends Component<TransformComponentData> {
     /**
      * Look at a world position
      * @param targetPosition The position to look at
-     * @param upVector Optional up vector (not used in basic implementation)
      */
     lookAt(targetPosition: Vector3): void {
         // Correct usage of lookAt with proper parameters
@@ -395,5 +454,103 @@ export class TransformComponent extends Component<TransformComponentData> {
         }
         
         return false;
+    }
+    
+    // ============================================================
+    // Scene Graph Event System Integration
+    // ============================================================
+    
+    /**
+     * Add event listener to this scene node
+     */
+    addEventListener(
+        eventType: string, 
+        listener: SceneGraphEventListener, 
+        options?: EventListenerOptions
+    ): void {
+        SceneEvents.addEventListener(this, eventType, listener, options);
+    }
+    
+    /**
+     * Remove event listener from this scene node
+     */
+    removeEventListener(
+        eventType: string, 
+        listener: SceneGraphEventListener, 
+        options?: EventListenerOptions
+    ): void {
+        SceneEvents.removeEventListener(this, eventType, listener, options);
+    }
+    
+    /**
+     * Dispatch an event on this scene node
+     */
+    dispatchEvent(event: SceneGraphEvent): boolean {
+        return SceneEvents.dispatchEvent(event);
+    }
+    
+    /**
+     * Emit an event on this scene node
+     */
+    emit(eventType: string, payload?: any, options?: EventOptions): boolean {
+        return SceneEvents.emitToNode(eventType, payload, this, options);
+    }
+    
+    /**
+     * Emit event to parent node only
+     */
+    emitToParent(eventType: string, payload?: any): boolean {
+        if (!this._parent) return false;
+        return SceneEvents.emitToNode(eventType, payload, this._parent, { bubbles: false });
+    }
+    
+    /**
+     * Emit event to all children
+     */
+    emitToChildren(eventType: string, payload?: any, recursive: boolean = false): void {
+        for (const child of this._children) {
+            SceneEvents.emitToNode(eventType, payload, child, { bubbles: false });
+            
+            if (recursive) {
+                child.emitToChildren(eventType, payload, true);
+            }
+        }
+    }
+    
+    /**
+     * Emit event to all sibling nodes
+     */
+    emitToSiblings(eventType: string, payload?: any): void {
+        if (!this._parent) return;
+        
+        for (const sibling of this._parent._children) {
+            if (sibling !== this) {
+                SceneEvents.emitToNode(eventType, payload, sibling, { bubbles: false });
+            }
+        }
+    }
+    
+    /**
+     * Emit event to all nodes within radius (spatial event)
+     */
+    emitToRadius(
+        eventType: string, 
+        payload: any, 
+        radius: number, 
+        filter?: (node: NodeComponent) => boolean
+    ): void {
+        const center = this.getWorldPosition();
+        SceneEvents.emitToRadius(eventType, payload, center, radius, filter);
+    }
+    
+    /**
+     * Get all scene nodes within radius of this node
+     */
+    getNodesInRadius(
+        radius: number, 
+        filter?: (node: NodeComponent) => boolean
+    ): NodeComponent[] {
+        const center = this.getWorldPosition();
+        return SceneEvents.getNodesInRadius(center, radius, filter);
     }
 }

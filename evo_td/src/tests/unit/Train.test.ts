@@ -2,11 +2,11 @@
  * Unit tests for the Train entity and its components.
  */
 import { Train } from '../../entities/Train';
-import { MovementComponent } from '../../components/MovementComponent';
-import { PositionComponent } from '../../components/PositionComponent';
+import { MovementComponent } from '../../engine/components/MovementComponent';
+import { PositionComponent } from '../../engine/components/PositionComponent';
 import { TrainSystem } from '../../systems/TrainSystem';
 import type { TrainConfig } from '../../entities/Train';
-import type { Position3D } from '../../components/PositionComponent';
+import type { Position3D } from '../../engine/components/PositionComponent';
 
 describe('Train Entity', () => {
     let train: Train;

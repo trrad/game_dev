@@ -31,10 +31,10 @@ import {
     StandardMaterial
 } from "@babylonjs/core";
 import { SceneEvents } from './SceneGraphEventSystem';
-import { SceneNodeComponent } from './SceneNodeComponent';
+import { NodeComponent } from '../components/NodeComponent';
 import { GameObject } from '../core/GameObject';
-import { PositionComponent } from '../../components/PositionComponent';
-import { RenderComponent } from '../../renderers/RenderComponent';
+import { PositionComponent } from '../components/PositionComponent';
+import { RenderComponent } from '../components/RenderComponent';
 import { TimeManager } from '../core/TimeManager';
 import { EventStack } from '../core/EventStack';
 import { ObjectTracker } from '../utils/ObjectTracker';
@@ -111,6 +111,8 @@ export class SceneManager {
     private focusedStationId: string | null = null;
     private originalCameraPosition: Vector3 | null = null;
     private originalCameraTarget: Vector3 | null = null;
+    /** The root node for the scene graph */
+    private sceneRoot: NodeComponent;
 
     /**
      * Create a new SceneManager
@@ -140,8 +142,8 @@ export class SceneManager {
         this.camera.attachControl(engine.getRenderingCanvas(), true);
         
         // Initialize scene graph event system with scene root
-        const sceneRoot = new SceneNodeComponent(this.scene);
-        SceneEvents.setSceneRoot(sceneRoot);
+        this.sceneRoot = new NodeComponent(this.scene);
+        SceneEvents.setSceneRoot(this.sceneRoot);
 
         // Set up basic lighting
         const hemiLight = new HemisphericLight(
@@ -352,6 +354,13 @@ export class SceneManager {
      */
     getCameraTrackingTarget(): GameObject | null {
         return this.cameraTrackingTarget;
+    }
+
+    /**
+     * Get the root NodeComponent for parenting scene entities
+     */
+    public getRootNodeComponent(): NodeComponent {
+        return this.sceneRoot;
     }
 
     /**

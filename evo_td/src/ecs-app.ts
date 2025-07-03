@@ -15,13 +15,14 @@ import {
     Mesh
 } from "@babylonjs/core";
 
-// Import renderers
-import { StationRenderer } from "./renderers/StationRenderer";
-import { RailRenderer } from "./renderers/RailRenderer";
-import { EnemyRenderer } from "./renderers/EnemyRenderer";
-import { GroundRenderer } from "./renderers/GroundRenderer";
-import { LightRenderer } from "./renderers/LightRenderer";
-import { ProjectileRenderer } from "./renderers/ProjectileRenderer";
+// TODO: In the future, all rendering logic should be implemented as components attached to entities.
+// These direct imports are temporary and will be removed once the NodeObject/entity-attached renderer refactor is complete.
+import { StationRenderer } from "./game/entities/Station/StationRenderer";
+import { RailRenderer } from "./game/entities/Rail/RailRenderer";
+import { EnemyRenderer } from "./game/entities/Enemy/EnemyRenderer";
+import { GroundRenderer } from "./game/renderers/GroundRenderer";
+import { LightRenderer } from "./game/renderers/LightRenderer";
+import { ProjectileRenderer } from "./game/entities/Projectile/ProjectileRenderer";
 
 // Import core ECS classes
 import { GameObject } from "./engine/core/GameObject";
@@ -29,35 +30,33 @@ import { SceneManager } from "./engine/scene/SceneManager";
 import { StationManager } from "./game/StationManager";
 
 // Import components
-import { PositionComponent } from "./components/PositionComponent";
-import { MovementComponent } from "./components/MovementComponent";
+import { PositionComponent } from "./engine/components/PositionComponent";
+import { MovementComponent } from "./engine/components/MovementComponent";
 
 // Import game entities
-import { Station, StationConfig } from "./entities/Station";
-import { Rail, RailConfig } from "./entities/Rail";
-import { TrainCar, TrainCarConfig } from "./entities/TrainCar";
-import { TrainConfig } from "./entities/Train";
+import { Station, StationConfig } from "./game/entities/Station/Station";
+import { Rail, RailConfig } from "./game/entities/Rail/Rail";
+import { TrainCar, TrainCarConfig } from "./game/entities/Trains/TrainCar/TrainCar";
+import { TrainConfig } from "./game/entities/Trains/Train";
 
 // Import UI and utility systems
 import { eventStack, EventCategory, EventStack } from "./engine/core/EventStack";
 import { Logger, LogCategory } from "./engine/utils/Logger";
-import { UISystem } from "./systems/UISystem";
-
-import { UIFactory } from "./ui/UIFactory";
-import { EventLogUI } from "./ui/EventLogUI";
-import { TrainJourneyControlsUI } from "./ui/TrainJourneyControlsUI";
-import { TimeManager } from "./engine/core/TimeManager";
-
-// Import train-related classes for later use
-import { Train } from "./entities/Train";
-import { TrainSystem } from "./systems/TrainSystem";
-import { EnemySystem } from "./systems/EnemySystem";
-import { ProjectileSystem } from "./systems/ProjectileSystem";
+import { UISystem } from "./game/systems/UISystem";
+import { TrainSystem } from "./game/systems/TrainSystem";
+import { EnemySystem } from "./game/systems/EnemySystem";
+import { ProjectileSystem } from "./game/systems/ProjectileSystem";
 
 // Import attachment system components
-import { AttachmentFactory } from "./entities/AttachmentFactory";
-import { TrainCarModificationUI } from "./ui/TrainCarModificationUI";
-import { CSSLoader } from "./ui/CSSLoader";
+import { AttachmentFactory } from "./game/entities/Attachment/AttachmentFactory";
+import { TrainCarModificationUI } from "./game/ui/TrainCarModificationUI";
+import { CSSLoader } from "./game/ui/CSSLoader";
+import { UIManager } from "./game/ui/UIManager";
+import { UIFactory } from "./game/ui/UIFactory";
+import { EventLogUI } from "./game/ui/EventLogUI";
+import { TrainJourneyControlsUI } from "./game/ui/TrainJourneyControlsUI";
+import { TimeManager } from "./engine/core/TimeManager";
+import { Train } from "./game/entities/Trains/Train";
 
 class ECSApp {
     private canvas: HTMLCanvasElement;
@@ -806,8 +805,7 @@ class ECSApp {
             train.addCar(car);
         }
         
-        // Initialize car positions now that cars are added to the train
-        this.trainSystem.initializeCarPositions(train.id);
+        // Car positions are now initialized automatically when added to the train
         
         Logger.log(LogCategory.TRAIN, `Train cars associated with train`, {
             trainId: train.id,

@@ -1,6 +1,6 @@
 import { SceneManager, SceneManagerConfig } from '../../engine/scene/SceneManager';
 import { GameObject } from '../../engine/core/GameObject';
-import { PositionComponent } from '../../components/PositionComponent';
+import { PositionComponent } from '../../engine/components/PositionComponent';
 import { 
     Vector3, 
     Engine, 

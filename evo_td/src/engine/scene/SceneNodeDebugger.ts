@@ -4,7 +4,7 @@
  */
 
 import { Scene, LinesMesh, Vector3, Color3, AxesViewer, Material, StandardMaterial } from '@babylonjs/core';
-import { SceneNodeComponent } from './SceneNodeComponent';
+import { NodeComponent } from '../components/NodeComponent';
 import { Logger, LogCategory } from '../utils/Logger';
 
 /**
@@ -20,7 +20,7 @@ export interface SceneNodeDebugOptions {
     /** Size of the axes visualization */
     axesSize?: number;
     /** Only show debug for specific nodes (empty = show all) */
-    nodeFilter?: (node: SceneNodeComponent) => boolean;
+    nodeFilter?: (node: NodeComponent) => boolean;
 }
 
 /**
@@ -89,7 +89,7 @@ export class SceneNodeDebugger {
      * Update visualizations for a set of root nodes
      * @param rootNodes Root nodes to visualize (with their children)
      */
-    visualize(rootNodes: SceneNodeComponent[]): void {
+    visualize(rootNodes: NodeComponent[]): void {
         if (!this._enabled) return;
         
         // Clear previous visualizations
@@ -107,7 +107,7 @@ export class SceneNodeDebugger {
     /**
      * Recursively visualize a node and its children
      */
-    private _visualizeNodeHierarchy(node: SceneNodeComponent): void {
+    private _visualizeNodeHierarchy(node: NodeComponent): void {
         // Apply filter if one is set
         if (this._options.nodeFilter && !this._options.nodeFilter(node)) {
             return;
@@ -138,7 +138,7 @@ export class SceneNodeDebugger {
     /**
      * Draw a line between parent and child nodes
      */
-    private _drawConnectionLine(parent: SceneNodeComponent, child: SceneNodeComponent): void {
+    private _drawConnectionLine(parent: NodeComponent, child: NodeComponent): void {
         const points = [
             parent.getWorldPosition(),
             child.getWorldPosition()

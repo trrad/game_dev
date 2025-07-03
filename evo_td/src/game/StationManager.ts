@@ -2,7 +2,7 @@
  * StationManager - Handles generation, management, and coordination of expanded stations
  */
 import { Vector3 } from "@babylonjs/core";
-import { Station, StationConfig } from "../entities/Station";
+import { Station, StationConfig } from "./entities/Station/Station";
 import { TimeManager } from "../engine/core/TimeManager";
 import { EventStack } from "../engine/core/EventStack";
 import { Logger, LogCategory } from "../engine/utils/Logger";
