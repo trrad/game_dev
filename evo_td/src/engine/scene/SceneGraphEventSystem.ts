@@ -4,8 +4,8 @@
  */
 
 import { Vector3 } from "@babylonjs/core";
-import { SceneNodeComponent } from "./SceneNodeComponent";
-import { ComponentEvent } from "../core/Component";
+import { NodeComponent } from "../components/NodeComponent";
+import { ComponentEvent } from "../components/Component";
 
 export enum EventPhase {
     CAPTURE = 1,    // Top-down from scene root to target
@@ -22,8 +22,8 @@ export interface SceneGraphEvent extends ComponentEvent {
     sourceId: string;
     
     // New scene graph properties
-    target: SceneNodeComponent;           // The target node
-    currentTarget: SceneNodeComponent;    // Current node in event path
+    target: NodeComponent;           // The target node
+    currentTarget: NodeComponent;    // Current node in event path
     phase: EventPhase;                    // Current event phase
     bubbles: boolean;                     // Should event bubble up?
     cancelable: boolean;                  // Can event be cancelled?
@@ -46,7 +46,7 @@ export interface EventTarget {
     type: 'node' | 'radius' | 'hierarchy' | 'broadcast';
     
     // Specific node targeting
-    node?: SceneNodeComponent;
+    node?: NodeComponent;
     
     // Radius-based targeting
     center?: Vector3;
@@ -54,11 +54,11 @@ export interface EventTarget {
     radiusType?: 'collision' | 'interaction' | 'detection' | 'render';
     
     // Hierarchy targeting
-    root?: SceneNodeComponent;
+    root?: NodeComponent;
     maxDepth?: number;
     
     // Filtering
-    filter?: (node: SceneNodeComponent) => boolean;
+    filter?: (node: NodeComponent) => boolean;
 }
 
 export interface EventOptions {
@@ -80,15 +80,15 @@ export type SceneGraphEventListener = (event: SceneGraphEvent) => void;
  * Scene Graph Event System - manages hierarchical event propagation
  */
 export class SceneGraphEventSystem {
-    private sceneRoot: SceneNodeComponent | null = null;
-    private eventListeners: Map<string, Map<SceneNodeComponent, SceneGraphEventListener[]>> = new Map();
-    private captureListeners: Map<string, Map<SceneNodeComponent, SceneGraphEventListener[]>> = new Map();
+    private sceneRoot: NodeComponent | null = null;
+    private eventListeners: Map<string, Map<NodeComponent, SceneGraphEventListener[]>> = new Map();
+    private captureListeners: Map<string, Map<NodeComponent, SceneGraphEventListener[]>> = new Map();
     
-    constructor(sceneRoot?: SceneNodeComponent) {
+    constructor(sceneRoot?: NodeComponent) {
         this.sceneRoot = sceneRoot || null;
     }
     
-    setSceneRoot(root: SceneNodeComponent): void {
+    setSceneRoot(root: NodeComponent): void {
         this.sceneRoot = root;
     }
     
@@ -96,7 +96,7 @@ export class SceneGraphEventSystem {
      * Add event listener to a scene node
      */
     addEventListener(
-        node: SceneNodeComponent,
+        node: NodeComponent,
         eventType: string,
         listener: SceneGraphEventListener,
         options?: EventListenerOptions
@@ -128,7 +128,7 @@ export class SceneGraphEventSystem {
      * Remove event listener from a scene node
      */
     removeEventListener(
-        node: SceneNodeComponent,
+        node: NodeComponent,
         eventType: string,
         listener: SceneGraphEventListener,
         options?: EventListenerOptions
@@ -198,7 +198,7 @@ export class SceneGraphEventSystem {
     emitToNode(
         eventType: string,
         payload: any,
-        node: SceneNodeComponent,
+        node: NodeComponent,
         options?: EventOptions
     ): boolean {
         const event = this.createEvent(eventType, payload, node, options);
@@ -213,7 +213,7 @@ export class SceneGraphEventSystem {
         payload: any,
         center: Vector3,
         radius: number,
-        filter?: (node: SceneNodeComponent) => boolean
+        filter?: (node: NodeComponent) => boolean
     ): void {
         const nodesInRadius = this.getNodesInRadius(center, radius, filter);
         
@@ -232,7 +232,7 @@ export class SceneGraphEventSystem {
     emitToHierarchy(
         eventType: string,
         payload: any,
-        root: SceneNodeComponent,
+        root: NodeComponent,
         maxDepth?: number
     ): void {
         const nodes = this.getNodesInHierarchy(root, undefined, maxDepth);
@@ -249,11 +249,11 @@ export class SceneGraphEventSystem {
     getNodesInRadius(
         center: Vector3,
         radius: number,
-        filter?: (node: SceneNodeComponent) => boolean
-    ): SceneNodeComponent[] {
+        filter?: (node: NodeComponent) => boolean
+    ): NodeComponent[] {
         if (!this.sceneRoot) return [];
         
-        const result: SceneNodeComponent[] = [];
+        const result: NodeComponent[] = [];
         const radiusSquared = radius * radius;
         
         this.traverseNodes(this.sceneRoot, (node) => {
@@ -274,11 +274,11 @@ export class SceneGraphEventSystem {
      * Get all nodes in hierarchy starting from root
      */
     getNodesInHierarchy(
-        root: SceneNodeComponent,
-        filter?: (node: SceneNodeComponent) => boolean,
+        root: NodeComponent,
+        filter?: (node: NodeComponent) => boolean,
         maxDepth?: number
-    ): SceneNodeComponent[] {
-        const result: SceneNodeComponent[] = [];
+    ): NodeComponent[] {
+        const result: NodeComponent[] = [];
         
         this.traverseNodes(root, (node, depth) => {
             if (maxDepth !== undefined && depth > maxDepth) return false;
@@ -298,7 +298,7 @@ export class SceneGraphEventSystem {
     private createEvent(
         eventType: string,
         payload: any,
-        target: SceneNodeComponent,
+        target: NodeComponent,
         options?: EventOptions
     ): SceneGraphEvent {
         const event: SceneGraphEvent = {
@@ -338,9 +338,9 @@ export class SceneGraphEventSystem {
     /**
      * Build propagation path from scene root to target
      */
-    private buildPropagationPath(target: SceneNodeComponent): SceneNodeComponent[] {
-        const path: SceneNodeComponent[] = [];
-        let current: SceneNodeComponent | null = target;
+    private buildPropagationPath(target: NodeComponent): NodeComponent[] {
+        const path: NodeComponent[] = [];
+        let current: NodeComponent | null = target;
         
         while (current) {
             path.unshift(current);
@@ -385,8 +385,8 @@ export class SceneGraphEventSystem {
      * Traverse nodes in the scene graph
      */
     private traverseNodes(
-        root: SceneNodeComponent,
-        callback: (node: SceneNodeComponent, depth: number) => boolean | void,
+        root: NodeComponent,
+        callback: (node: NodeComponent, depth: number) => boolean | void,
         depth: number = 0
     ): void {
         const result = callback(root, depth);
@@ -401,3 +401,5 @@ export class SceneGraphEventSystem {
 
 // Global instance for scene graph events
 export const SceneEvents = new SceneGraphEventSystem();
+
+

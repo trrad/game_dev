@@ -2,10 +2,13 @@
 
 ## Current Status
 
-The Train Trading Game has a solid ECS foundation with basic train movement, enemy combat, and 3D voxel rendering. The codebase has been recently refactored for consistency and maintainability, with clean separation between game logic and rendering systems.
+The Train Trading Game is transitioning from an ECS foundation to a hierarchical scene graph architecture with Babylon.js integration. The codebase has undergone significant refactoring for improved maintainability, with clear separation between engine and game logic.
 
 ### What's Working (Descriptive)
-- **Core ECS Architecture**: GameObject base class with component system
+- **Scene Graph Architecture**: Hierarchical node structure with parent-child relationships
+- **SceneNodeComponent**: Core component for hierarchical transformations
+- **SceneGraphEventSystem**: Advanced event propagation with bubbling and capturing phases
+- **RadiusComponent**: Spatial operations for collision, proximity, and LOD systems
 - **Train System**: Multi-car trains with voxel-based construction
 - **Enemy System**: Dynamic spawning, AI behaviors, and combat mechanics
 - **3D Rendering**: Babylon.js integration with component-based rendering
@@ -15,71 +18,73 @@ The Train Trading Game has a solid ECS foundation with basic train movement, ene
 - **Logging & Observability**: Comprehensive debugging and metrics
 
 ### Recent Improvements
-- ✅ **Legacy Code Cleanup**: Removed deprecated rendering systems and duplicate components
-- ✅ **Naming Standardization**: Consistent method patterns and component naming
-- ✅ **Utility Consolidation**: `MathUtils` and `GeometryUtils` for common operations
-- ✅ **Architecture Documentation**: Clear separation of concerns and design patterns
+- ✅ **Scene Graph Implementation**: Complete hierarchical node system with parent-child relationships
+- ✅ **Engine/Game Separation**: Clean directory structure with clear separation of concerns
+- ✅ **Event System Overhaul**: Scene graph-aware event propagation with bubbling and capturing
+- ✅ **Spatial System**: RadiusComponent for collision detection, proximity, and spatial operations
+- ✅ **Entity Migration**: Initial integration of entities with Scene Graph (TrainCarVoxel)
 
 ## Short-Term Roadmap (Next 2-4 Weeks)
 
-### Phase 4: Core Gameplay Polish
-**Goal**: Refine existing systems for smooth, engaging gameplay
+### Phase 5: Scene Graph Integration
+**Goal**: Complete the transition to scene graph architecture
 
-#### Train System Enhancements
-- **TODO**: Implement proper train car coupling physics
-- **TODO**: Add train acceleration/deceleration curves for smooth movement
-- **TODO**: Create car-specific damage propagation (engine damage affects speed)
-- **TODO**: Implement train inventory management across multiple cars
+#### SceneManager Integration (HIGHEST PRIORITY)
+- **TODO**: Update SceneManager to use SceneNodeComponent for registration
+- **TODO**: Support hierarchical object relationships in rendering
+- **TODO**: Eliminate manual position syncing between components
+- **TODO**: Connect scene events to SceneGraphEventSystem
 
-#### Combat System Improvements
-- **TODO**: Add projectile trails and impact effects
-- **TODO**: Implement shield/armor systems for defensive gameplay
-- **TODO**: Create weapon cooldown and reload mechanics
-- **TODO**: Add enemy death animations and cleanup
+#### Train System Hierarchy
+- **TODO**: Convert Train to parent node with TrainCars as children
+- **TODO**: Make TrainCars parent nodes for TrainCarVoxels
+- **TODO**: Update train movement to propagate through hierarchy
+- **TODO**: Ensure correct local/world coordinate transformations
 
-#### Station & Economy Foundation
-- **TODO**: Implement basic cargo trading (buy/sell mechanics)
-- **TODO**: Add station specializations (mining, manufacturing, etc.)
-- **TODO**: Create dynamic pricing based on supply/demand
-- **TODO**: Add station upgrade system with player investment
+#### Combat System Integration
+- **TODO**: Integrate weapon systems with scene graph
+- **TODO**: Use RadiusComponent for weapon targeting and range
+- **TODO**: Implement hierarchical damage propagation
+- **TODO**: Create projectile systems using scene graph
 
-### Phase 5: User Experience & Polish
-**Goal**: Make the game accessible and enjoyable
+### Phase 6: Spatial Systems
+**Goal**: Implement advanced spatial operations using scene graph
 
-#### UI/UX Improvements
-- **TODO**: Create comprehensive train modification interface
-- **TODO**: Add minimap showing rail network and stations
-- **TODO**: Implement context-sensitive tutorials
-- **TODO**: Add audio feedback for actions and events
+#### Collision System
+- **TODO**: Create unified collision system using RadiusComponent
+- **TODO**: Implement spatial partitioning for performance
+- **TODO**: Add collision response and physics behaviors
+- **TODO**: Support complex collision shapes and hierarchies
+
+#### Proximity & LOD System
+- **TODO**: Implement dynamic Level-of-Detail based on camera distance
+- **TODO**: Create proximity-based interaction system
+- **TODO**: Add spatial event triggers for game mechanics
+- **TODO**: Optimize rendering based on visibility and importance
 
 #### Performance Optimization
-- **TODO**: Implement Level-of-Detail (LoD) system for distant objects
-- **TODO**: Add object pooling for projectiles and effects
-- **TODO**: Optimize rendering for mobile devices
+- **TODO**: Implement batch rendering for similar objects
+- **TODO**: Add frustum culling for off-screen objects
+- **TODO**: Optimize scene graph traversal for large hierarchies
 - **TODO**: Create asset streaming system for large worlds
-
-#### Quality of Life Features
-- **TODO**: Add auto-save and session persistence
-- **TODO**: Create preset train configurations
-- **TODO**: Implement route planning and automation
-- **TODO**: Add statistics tracking and progress indicators
 
 ## Medium-Term Roadmap (1-3 Months)
 
-### Phase 6: Multiplayer Foundation
-**Goal**: Enable cooperative multiplayer gameplay
+### Phase 7: Multiplayer Foundation
+**Goal**: Enable cooperative multiplayer gameplay with scene graph synchronization
 
 #### Network Architecture
 - **TODO**: Integrate Colyseus multiplayer framework
-- **TODO**: Implement deterministic game simulation
-- **TODO**: Add client-side prediction with server reconciliation
-- **TODO**: Create robust state synchronization
+- **TODO**: Implement efficient scene graph serialization
+- **TODO**: Add hierarchical state synchronization
+- **TODO**: Create delta compression for scene updates
+- **TODO**: Implement client-side prediction with server reconciliation
 
-#### Guild System
-- **TODO**: Implement player guilds with shared resources
-- **TODO**: Add guild progression and unlockable benefits
-- **TODO**: Create cooperative missions requiring multiple players
-- **TODO**: Implement guild-based trade route sharing
+#### Networked Scene Graph
+- **TODO**: Create authority model for scene graph nodes
+- **TODO**: Implement interest management based on spatial proximity
+- **TODO**: Add bandwidth optimization for scene updates
+- **TODO**: Support late-joining players with scene reconstruction
 
 #### Social Features
 - **TODO**: Add in-game chat and communication tools
@@ -87,17 +92,20 @@ The Train Trading Game has a solid ECS foundation with basic train movement, ene
 - **TODO**: Implement guild leaderboards and achievements
 - **TODO**: Add player train showcasing and sharing
 
-### Phase 7: World Generation & Content
-**Goal**: Create dynamic, replayable game worlds
+### Phase 8: World Generation & Content
+**Goal**: Create dynamic, replayable game worlds with scene graph integration
 
-#### Procedural Generation
-- **TODO**: Implement world generation algorithms for station placement
-- **TODO**: Create biome system with different environmental challenges
+#### Procedural World Generation
+- **TODO**: Create scene graph-based world generation algorithms
+- **TODO**: Implement biome system with different environmental challenges
 - **TODO**: Add procedural trade good generation and economic simulation
-- **TODO**: Implement dynamic events and world state changes
+- **TODO**: Create dynamic world events using scene graph events
 
 #### Content Expansion
-- **TODO**: Add more train car types (specialized cargo, luxury passenger)
+- **TODO**: Add more train car types with unique scene graph behaviors
+- **TODO**: Create specialized attachment systems with hierarchy support
+- **TODO**: Implement advanced building types with internal hierarchies
+- **TODO**: Add complex station layouts with multiple interaction zones
 - **TODO**: Create diverse attachment categories (utility, defensive, economic)
 - **TODO**: Implement rare and legendary equipment with unique effects
 - **TODO**: Add seasonal events and limited-time content

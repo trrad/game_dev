@@ -4,41 +4,61 @@ This document provides AI assistants with comprehensive context about the Train 
 
 ## Project Overview
 
-This is an **Entity-Component-System (ECS) based train trading game** built with TypeScript, using Babylon.JS for 3D rendering. The game features modular trains with voxel-based construction, combat against dynamic enemies, and a cooperative multiplayer trading system.
+This is a **Scene Graph-based train trading game** built with TypeScript, using Babylon.js for 3D rendering. Originally built with an Entity-Component-System (ECS) architecture, the project has evolved to use a hierarchical scene graph for improved object relationships and spatial operations. The game features modular trains with voxel-based construction, combat against dynamic enemies, and a cooperative multiplayer trading system.
 
 ### Technology Stack
 - **Language**: TypeScript with strict mode
-- **Architecture**: Entity-Component-System (ECS)
-- **Rendering**: Babylon.JS for 3D graphics
+- **Architecture**: Hierarchical Scene Graph with GameObject-Component patterns
+- **Rendering**: Babylon.js for 3D graphics
 - **Build Tool**: Vite
 - **Testing**: Jest
 - **Networking**: Colyseus (planned for multiplayer)
 
 ### Current Development Phase
-The project has undergone systematic refactoring (Phases 1-3) to establish clean ECS architecture:
-- **Phase 1**: Legacy file cleanup and architectural alignment
-- **Phase 2**: Entity/Component refactoring with constructor-based initialization
-- **Phase 3**: Naming standardization and utility consolidation
+The project has undergone systematic architectural evolution through multiple phases:
+- **Phase 1-3**: Legacy code cleanup, component refactoring, and naming standardization
+- **Phase 4**: Initial engine/game separation and scene graph foundation
+- **Phase 5 (Current)**: Scene Graph integration with core game entities
+  - Implemented SceneNodeComponent for hierarchical relationships
+  - Created SceneGraphEventSystem for event propagation through hierarchy
+  - Added RadiusComponent for spatial operations and proximity detection
+  - Integrated initial game entities with scene graph architecture
 
 ## Project Structure
 
 ```
 src/
-├── ecs-app.ts              # Main ECS application entry point
-├── core/                   # Core framework classes
-│   ├── GameObject.ts       # Base entity class
-│   ├── Component.ts        # Base component interface
-│   ├── SceneManager.ts     # 3D scene and rendering coordination
-│   └── TimeManager.ts      # Game time and delta calculations
-├── components/             # ECS components (with methods, not just data)
-│   ├── PositionComponent.ts    # 3D position and spatial operations
-│   ├── HealthComponent.ts      # Health, damage, and regeneration
-│   ├── MovementComponent.ts    # Velocity and physics properties
-│   ├── AIBehaviorComponent.ts  # Enemy AI state and decision making
-│   ├── RailPositionComponent.ts      # Train position along rails
-│   ├── TrainCarPositionComponent.ts  # Car position within trains
-│   └── AttachmentSlotComponent.ts    # 3D grid attachment mounting
-├── entities/               # Game entities (extend GameObject)
+├── ecs-app.ts              # Main application entry point
+├── engine/                # Engine core (rendering, scene graph, utils)
+│   ├── core/              # Core engine classes and interfaces
+│   │   ├── Component.ts   # Base component class
+│   │   ├── GameObject.ts  # Base game object class
+│   │   ├── EventStack.ts  # Event management system
+│   │   └── TimeManager.ts # Game time and delta calculations
+│   ├── scene/             # Scene graph implementation
+│   │   ├── SceneNodeComponent.ts  # Hierarchical transform component
+│   │   ├── SceneGraphEventSystem.ts  # Event propagation system
+│   │   ├── SceneManager.ts  # 3D scene and rendering coordination
+│   │   └── SceneNodeDebugger.ts  # Visual debugging for hierarchy
+│   ├── rendering/         # Rendering system (Babylon.js)
+│   │   └── RenderResourceManager.ts  # Resource loading and caching
+│   └── utils/             # Engine utilities
+│       ├── MathUtils.ts   # Mathematical operations and vectors
+│       ├── GeometryUtils.ts  # Spatial calculations and collision
+│       ├── Logger.ts      # Structured logging and observability
+│       └── ObjectTracker.ts  # Global entity registry and lookup
+├── game/                  # Game-specific implementation
+│   ├── components/        # Game-specific components
+│   ├── entities/          # Game entity factories
+│   ├── systems/           # Game systems (logic processors)
+│   └── config/            # Game configuration
+├── components/            # Shared components
+│   ├── RadiusComponent.ts     # Spatial radius for collision/detection
+│   ├── HealthComponent.ts     # Health, damage, and regeneration
+│   ├── InventoryComponent.ts  # Cargo storage and capacity management
+│   ├── AIBehaviorComponent.ts # Enemy AI state and decision making
+│   └── AttachmentSlotComponent.ts  # 3D grid attachment mounting
+├── entities/              # Entity implementations
 │   ├── Train.ts           # Multi-car train entities
 │   ├── TrainCar.ts        # Individual train cars with voxel grids
 │   ├── TrainCarVoxel.ts   # Individual voxel entities
@@ -46,57 +66,31 @@ src/
 │   ├── Station.ts         # Trading and service hubs
 │   ├── Rail.ts            # Path connections between stations
 │   ├── Building.ts        # Station buildings and structures
-│   ├── Attachment.ts      # Equipment mounted on train cars
-│   └── Projectile.ts      # Weapon projectiles
-├── systems/               # ECS systems (coordinate gameplay)
+│   └── Attachment.ts      # Equipment mounted on train cars
+├── systems/               # System implementations
 │   ├── TrainSystem.ts     # Train movement and car coordination
 │   ├── EnemySystem.ts     # Enemy spawning, AI, and combat
-│   ├── ProjectileSystem.ts # Projectile physics and collision
 │   └── UISystem.ts        # User interface management
-├── renderers/             # Rendering components (extend RenderComponent)
-│   ├── VoxelRenderComponent.ts      # Individual voxel rendering
-│   ├── CarRenderComponent.ts        # Car-level render coordination
-│   ├── TrainRenderComponent.ts      # Train-level render coordination
-│   ├── AttachmentRenderComponent.ts # Equipment and weapon rendering
-│   ├── EnemyRenderer.ts             # Enemy visual representation
-│   └── StationRenderer.ts           # Station and building rendering
-├── utils/                 # Utility functions and helpers
-│   ├── MathUtils.ts       # Mathematical operations and vectors
-│   ├── GeometryUtils.ts   # Spatial calculations and collision
-│   ├── ObjectTracker.ts   # Global entity registry and lookup
-│   └── Logger.ts          # Structured logging and observability
-└── ui/                    # User interface components
-    ├── UIManager.ts       # UI system coordination
-    ├── TimeControlsUI.ts  # Game time manipulation
-    └── TrainJourneyControlsUI.ts  # Train control interface
-```
-│   ├── TimeControlsUI.ts
-│   ├── EventLogUI.ts
-│   └── TrainCarModificationUI.ts
-├── utils/                 # Utility functions
-│   ├── MathUtils.ts
-│   ├── GeometryUtils.ts
-│   ├── Logger.ts
-│   └── ObjectTracker.ts
-├── core/                  # Core ECS framework
-│   ├── GameObject.ts
-│   ├── Component.ts
-│   ├── SceneManager.ts
-│   ├── TimeManager.ts
-│   └── EventStack.ts
+├── ui/                    # User interface components
+│   ├── UIManager.ts       # UI system coordination
+│   ├── TimeControlsUI.ts  # Game time manipulation
+│   └── EventLogUI.ts      # Event logging and display
 └── net/                   # Networking code
-    └── ColyseusClient.ts
+    └── ColyseusClient.ts  # Multiplayer client implementation
 ```
 
 ## Architectural Principles
 
-### ECS Pattern (Our Implementation)
-1. **Entities** (`GameObject`): Containers with unique IDs that hold components
-2. **Components**: Functional units that contain BOTH data and methods (extend `Component<T>`)
-3. **Systems**: Coordinate entities and handle gameplay mechanics (extend `SystemManager`)
-4. **Global Registry**: `ObjectTracker` provides entity lookup by ID or type
+### Scene Graph Architecture
+1. **Hierarchical Nodes** (`SceneNodeComponent`): Parent-child relationships with transform inheritance
+2. **Event Propagation**: Events flow through the scene graph with capturing and bubbling phases
+3. **Spatial Operations**: Built-in support for radius-based queries, collision, and proximity detection
+4. **Serialization**: Complete serialization/deserialization support for networking and save/load
 
-### Component Design Patterns (CRITICAL - Different from typical ECS)
+### Component Design Patterns
+1. **Components**: Functional units that contain BOTH data and methods (extend `Component`)
+2. **Entities** (`GameObject`): Containers with unique IDs that hold components
+3. **Global Registry**: `ObjectTracker` provides entity lookup by ID or type
 - **Constructor Initialization**: Components initialize in constructors, NOT separate `initialize()` methods
 - **Functional Components**: Components have methods like `getPosition()`, `setPosition()`, `takeDamage()`
 - **Type Safety**: All components extend `Component<T>` with typed data

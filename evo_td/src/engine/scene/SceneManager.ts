@@ -31,14 +31,15 @@ import {
     StandardMaterial
 } from "@babylonjs/core";
 import { SceneEvents } from './SceneGraphEventSystem';
-import { SceneNodeComponent } from './SceneNodeComponent';
-import { GameObject } from '../core/GameObject';
-import { PositionComponent } from '../../components/PositionComponent';
-import { RenderComponent } from '../../renderers/RenderComponent';
-import { TimeManager } from '../core/TimeManager';
-import { EventStack } from '../core/EventStack';
-import { ObjectTracker } from '../utils/ObjectTracker';
-import { eventStack, EventCategory } from '../core/EventStack';
+import { NodeComponent } from '../components/NodeComponent';
+import { GameObject } from "../core/GameObject";
+import { PositionComponent } from "../components/PositionComponent";
+import { RenderComponent } from '../components/RenderComponent';
+import type { Component } from "../components/Component";
+import { TimeManager } from "../core/TimeManager";
+import { EventStack } from "../core/EventStack";
+import { ObjectTracker } from "../utils/ObjectTracker";
+import { eventStack, EventCategory } from "../core/EventStack";
 
 /**
  * Configuration options for SceneManager
@@ -140,7 +141,7 @@ export class SceneManager {
         this.camera.attachControl(engine.getRenderingCanvas(), true);
         
         // Initialize scene graph event system with scene root
-        const sceneRoot = new SceneNodeComponent(this.scene);
+        const sceneRoot = new NodeComponent(this.scene);
         SceneEvents.setSceneRoot(sceneRoot);
 
         // Set up basic lighting
@@ -871,3 +872,5 @@ export class SceneManager {
         eventStack.info(EventCategory.SYSTEM, "events_subscribed", "SceneManager subscribed to station focus events");
     }
 }
+
+
