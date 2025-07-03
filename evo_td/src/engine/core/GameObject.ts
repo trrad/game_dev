@@ -7,7 +7,7 @@
  * 2. Your editor/TypeScript server is refreshed.
  * 3. tsconfig.json includes 'src' (it does).
  */
-import type { Component } from '../components/Component';
+import type { Component } from './Component';
 import { Logger, LogCategory } from '../utils/Logger';
 import { ObjectTracker } from '../utils/ObjectTracker';
 import type { EventStack } from './EventStack';
@@ -501,4 +501,3 @@ export class GameObject implements GameObjectEventEmitter {
         // Override in subclasses
     }
 }
-

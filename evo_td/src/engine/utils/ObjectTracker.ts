@@ -2,7 +2,7 @@
  * Tracks all active game objects for debugging and memory management.
  * Helps identify memory leaks and track object lifecycles.
  */
-import type { GameObject } from "../core/GameObject";
+import type { GameObject } from '../core/GameObject';
 import { Logger, LogCategory } from './Logger';
 
 export class ObjectTracker {
@@ -90,4 +90,3 @@ export class ObjectTracker {
         Logger.debug(LogCategory.SYSTEM, 'ObjectTracker cleared');
     }
 }
-

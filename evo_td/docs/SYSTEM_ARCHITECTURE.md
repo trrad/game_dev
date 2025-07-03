@@ -2,127 +2,96 @@
 
 ## Architecture Overview
 
-The Train Trading Game uses a **Hierarchical Scene Graph** architecture with GameObject-Component patterns and clean engine/game separation. This design enables complex object hierarchies, efficient spatial operations, and robust event propagation while maintaining modularity and testability.
+The Train Trading Game uses a **Component-Entity-System (ECS)** architecture with clear separation between game logic, rendering, and networking. This design enables scalable multiplayer gameplay, cross-platform deployment, and modular feature development.
 
 ### Design Principles
 
-1. **Hierarchical Composition**: Game objects exist in parent-child relationships within a scene graph
-2. **Transform Inheritance**: Position, rotation, and scale cascade through the hierarchy
-3. **Scene Graph Event System**: Events propagate through the hierarchy with bubbling and capturing phases
-4. **Engine/Game Separation**: Clear distinction between reusable engine code and game-specific logic
-5. **Spatial Awareness**: Native support for proximity, collision, and radius-based operations
-6. **Observable by Design**: Every system includes built-in metrics, logging, and debugging capabilities
+1. **Observable by Design**: Every system includes built-in metrics, logging, and debugging capabilities
+2. **Event-Driven Communication**: Systems communicate through events, not direct coupling
+3. **Deterministic Game Logic**: All gameplay is reproducible for network synchronization
+4. **Composition over Inheritance**: Entities are built from reusable components
+5. **Clear Layer Separation**: Game logic, rendering, and network concerns are isolated
 
 ## System Layers
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                     Client Architecture                           │
-├───────────────┬───────────────────────┬───────────────────────────┤
-│  Game Layer   │     Engine Layer      │      Networking Layer     │
-│               │                       │                           │
-│ ┌───────────┐ │ ┌───────────────────┐ │ ┌─────────────────────┐   │
-│ │Game Systems│ │ │Scene Graph       │ │ │   Colyseus Client   │   │
-│ │- TrainSys  │ │ │- SceneNode       │◄┼─┤ - State Sync        │   │
-│ │- EnemySys  │ │ │- Event Propagation│ │ │ - Event Relay      │   │
-│ │- UISys     │ │ │- Spatial Queries  │ │ │ - Scene Graph Sync │   │
-│ └───────────┘ │ └───────────────────┘ │ └─────────────────────┘   │
-│               │         ▲             │                           │
-│ ┌───────────┐ │         │             │                           │
-│ │Game Entities│◄────────┘             │                           │
-│ │- Train     │ │ ┌───────────────────┐│                           │
-│ │- TrainCar  │ │ │Rendering System   ││                           │
-│ │- Station   │ │ │(Babylon.js)       ││                           │
-│ │- Enemy     │ │ │- SceneManager     ││                           │
-│ └───────────┘ │ │- Visual Registration││                          │
-│               │ └───────────────────┘│                           │
-└───────────────┴───────────────────────┴───────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     Client Architecture                     │
+├─────────────────┬─────────────────┬─────────────────────────┤
+│   Game Logic    │   Rendering     │      Networking         │
+│                 │                 │                         │
+│ ┌─────────────┐ │ ┌─────────────┐ │ ┌─────────────────────┐ │
+│ │ECS Systems  │ │ │SceneManager │ │ │   Colyseus Client   │ │
+│ │- TrainSys   │ │ │(Babylon.js) │ │ │ - State Sync        │ │
+│ │- EnemySys   │ │ └─────────────┘ │ │ - Event Relay       │ │
+│ │- UISys      │ │ ┌─────────────┐ │ │ - Network Prediction│ │
+│ └─────────────┘ │ │RenderComps  │ │ └─────────────────────┘ │
+│ ┌─────────────┐ │ │- VoxelRend  │ │                         │
+│ │Game Entities│ │ │- TrainRend  │ │                         │
+│ │- Train      │ │ │- UIRend     │ │                         │
+│ │- Station    │ │ └─────────────┘ │                         │
+│ │- Enemy      │ │                 │                         │
+│ └─────────────┘ │                 │                         │
+└─────────────────┴─────────────────┴─────────────────────────┘
 ```
 
 ## Core Framework
 
-### Engine Layer
-
-The engine layer provides core functionality that is game-agnostic and reusable:
-
-#### SceneNodeComponent
-The foundation of our hierarchical scene graph:
-- **Parent-Child Relationships**: Establish and manage hierarchical relationships
-- **Transform Operations**: Local and world position, rotation, and scale
-- **Event Propagation**: Hierarchical event system with bubbling and capturing
-- **Spatial Awareness**: Query nearby objects and emit radius-based events
-
-```typescript
-// Simplified structure - see src/engine/scene/SceneNodeComponent.ts for implementation
-class SceneNodeComponent extends Component {
-    private _parent: SceneNodeComponent | null;
-    private _children: SceneNodeComponent[];
-    
-    // Transform properties
-    localPosition: Vector3;
-    localRotation: Quaternion;
-    localScale: Vector3;
-    
-    // Hierarchy methods
-    addChild(child: SceneNodeComponent): void;
-    removeChild(child: SceneNodeComponent): void;
-    
-    // Transform methods
-    getWorldPosition(): Vector3;
-    getWorldRotation(): Quaternion;
-    setWorldPosition(position: Vector3): void;
-    
-    // Event methods
-    addEventListener(type: string, listener: EventListener): void;
-    emitToChildren(event: GameEvent): void;
-    emitToParent(event: GameEvent): void;
-    emitToRadius(event: GameEvent, radius: number): void;
-}
-```
-
-#### GameObject Foundation
+### GameObject Foundation
 The base class for all game entities, providing:
 - **Unique Identification**: Every entity has a stable ID for networking
 - **Component Management**: Add, remove, and query components
 - **Lifecycle Management**: Creation, update, and disposal
 - **Event Integration**: Built-in event emission and subscription
-- **Serialization**: Support for saving/loading and network synchronization
+
+```typescript
+// Simplified structure - see src/core/GameObject.ts for implementation
+abstract class GameObject {
+    readonly id: string;
+    readonly type: string;
+    
+    addComponent<T extends Component>(component: T): T;
+    getComponent<T extends Component>(type: string): T | undefined;
+    removeComponent(type: string): void;
+    hasComponent(type: string): boolean;
+}
+```
+
+### Component System
+Reusable behaviors that can be attached to any GameObject:
 
 #### Core Components
-- **SceneNodeComponent**: Hierarchical transformation and parent-child relationships
-- **RadiusComponent**: Spatial operations like collision, proximity, and radius-based events
-- **PositionComponent**: Legacy 3D position support (transitioning to SceneNodeComponent)
+- **PositionComponent**: 3D position, rotation, and basic spatial operations
 - **HealthComponent**: Health points, damage handling, and regeneration
+- **MovementComponent**: Velocity, acceleration, and physics properties
+- **InventoryComponent**: Cargo storage and capacity management
 
-### Scene Graph Event System
+#### Specialized Components
+- **RailPositionComponent**: Train position along rail networks
+- **AIBehaviorComponent**: Enemy AI state and decision making
+- **AttachmentSlotComponent**: 3D grid-based attachment mounting
+- **TrainCarVoxelComponent**: Individual voxel management within cars
 
-Our scene graph includes a sophisticated event system that enables complex interactions between objects:
-
-#### Event Propagation Phases
-- **Capture Phase**: Events travel from the root node down to the target
-- **Target Phase**: Event is processed at the intended target node
-- **Bubble Phase**: Events bubble up from the target to the root
-
-#### Event Features
-- **Event Prevention**: Stop propagation or prevent default behaviors
-- **Spatial Targeting**: Emit events to objects within a specific radius
-- **Filtering**: Apply filters to target specific nodes or component types
-- **Event Hierarchies**: Events can target entire subtrees or specific branches
-
-### Game Systems
-Coordinate gameplay mechanics within the scene graph:
+### System Managers
+Coordinate gameplay mechanics and component interactions:
 
 #### TrainSystem (`src/systems/TrainSystem.ts`)
-- **Journey Management**: Route planning and train movement within scene graph
-- **Hierarchy Management**: Train cars as children of train with proper transforms
-- **Attachment Integration**: Weapon firing and utility activation through event system
-- **State Synchronization**: Network updates for hierarchical scene graph
+- **Journey Management**: Route planning and train movement
+- **Car Coordination**: Multi-car physics and positioning
+- **Attachment Integration**: Weapon firing and utility activation
+- **State Synchronization**: Network updates for train positions
 
 #### EnemySystem (`src/systems/EnemySystem.ts`)
 - **Dynamic Spawning**: Procedural enemy generation based on activity
-- **Spatial Awareness**: Use RadiusComponent for detection and targeting
-- **Combat Resolution**: Damage calculation and health management through events
+- **AI Behavior Trees**: State-driven enemy decision making
+- **Combat Resolution**: Damage calculation and health management
 - **Evolution Mechanics**: Adaptive difficulty and enemy progression
+
+#### UISystem (`src/systems/UISystem.ts`)
+- **Interface Management**: Dynamic UI element creation and updates
+- **Input Processing**: Touch and mouse interaction handling
+- **State Presentation**: Game data visualization and feedback
+- **Responsive Layout**: Cross-platform UI adaptation
 
 ## Entity Architecture
 
@@ -306,3 +275,39 @@ function gameLoop(deltaTime: number) {
 ---
 
 *This document describes the current system architecture. Implementation details are found in individual source files with comprehensive JSDoc documentation.*
+
+## Implementation Status
+
+### ✅ Fully Implemented
+- **Core ECS Framework**: `GameObject`, component system, and entity management are complete
+- **Entity Architecture**: All major entities (Train, TrainCar, Station, Enemy) exist and are functional
+- **Component System**: Core components (Position, Health, Movement, etc.) are implemented
+- **Rendering System**: Component-based rendering with VoxelRenderComponent, CarRenderComponent, and AttachmentRenderComponent
+- **Math/Geometry Utilities**: MathUtils and GeometryUtils are consolidated and in use
+- **Logging System**: Comprehensive Logger with categories and structured output
+- **Object Tracking**: ObjectTracker provides global entity registry and lookup
+
+### 🔨 Partially Implemented  
+- **Train System**: Basic train movement exists, but journey management and multi-car physics need expansion
+- **Enemy System**: Basic enemy entities exist, but AI behavior trees and evolution mechanics are minimal
+- **UI System**: Basic UI components exist, but responsive layout and touch handling need work
+- **Attachment System**: Attachment entities and slots exist, but dynamic mounting and full 3D placement need refinement
+- **Station/Building System**: Station entities exist, but modular building expansion is not implemented
+
+### 📋 Planned/Stubbed
+- **Network Architecture**: Colyseus client exists but multiplayer functionality is minimal
+- **Performance Optimizations**: Object pooling, spatial partitioning, and LoD systems are planned but not implemented
+- **AI Behavior Trees**: Enemy AI is basic state-based, not full behavior tree implementation
+- **Asset Streaming**: Static asset loading only, no dynamic streaming
+- **Persistence**: No save/load system currently implemented
+
+### Key Implementation Notes
+- **Entry Point**: Game runs through `src/ecs-app.ts` (not the old `src/app.ts`)
+- **Scene Management**: Uses SceneManager in `src/core/SceneManager.ts` for Babylon.js integration
+- **Game Loop**: Standard update cycle in ecs-app.ts coordinates all systems
+- **Component Registration**: Components are added to entities via `addComponent()` method
+- **Event System**: Basic event emission exists on GameObject, but full event-driven communication needs expansion
+- **Voxel System**: TrainCarVoxel entities exist with individual health and rendering
+- **Rail System**: Basic rail entities exist but spline-based routing is not fully implemented
+
+This status helps developers understand what exists vs. what's planned, and guides future development priorities.

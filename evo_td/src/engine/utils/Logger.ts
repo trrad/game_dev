@@ -4,7 +4,7 @@
  * All calls are translated and forwarded to src/core/EventStack.ts
  */
 
-import { eventStack, EventCategory } from "../core/EventStack";
+import { eventStack, EventCategory } from '../core/EventStack';
 
 /**
  * Legacy LogCategory enum for backward compatibility
@@ -148,4 +148,3 @@ export class Logger {
         return words.join('_') || 'log_event';
     }
 }
-

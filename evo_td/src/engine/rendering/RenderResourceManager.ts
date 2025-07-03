@@ -12,7 +12,7 @@ import {
     InstancedMesh,
     AbstractMesh
 } from '@babylonjs/core';
-import { Logger, LogCategory } from "../utils/Logger";
+import { Logger, LogCategory } from '../utils/Logger';
 
 /**
  * RenderResourceManager handles the pooling and reuse of rendering resources
@@ -297,4 +297,3 @@ export class RenderResourceManager {
         };
     }
 }
-

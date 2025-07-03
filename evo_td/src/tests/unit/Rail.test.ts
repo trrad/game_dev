@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import { Rail, RailConfig } from "../../game/entities/Rail/Rail";
+import { Rail, RailConfig } from "../../entities/Rail";
 
 describe('Rail', () => {
     let testConfig: RailConfig;

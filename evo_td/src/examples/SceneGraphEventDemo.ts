@@ -3,10 +3,10 @@
  * Demonstrates hierarchical event propagation and spatial events
  */
 
-import { Scene, Vector3 } from '@babylonjs/core';
-import { NodeComponent } from '../engine/components/NodeComponent';
+import { Scene, Engine, Vector3 } from '@babylonjs/core';
+import { SceneNodeComponent } from '../engine/scene/SceneNodeComponent';
 import { SceneEvents } from '../engine/scene/SceneGraphEventSystem';
-import { RadiusComponent } from '../engine/components/RadiusComponent';
+import { RadiusComponent } from '../components/RadiusComponent';
 import { GameObject } from '../engine/core/GameObject';
 
 /**
@@ -16,17 +16,17 @@ import { GameObject } from '../engine/core/GameObject';
 export function demonstrateTrainCarCommunication(scene: Scene) {
     // Create train hierarchy
     const train = new GameObject('Train', undefined, scene);
-    const trainNode = new NodeComponent(scene);
+    const trainNode = new SceneNodeComponent(scene);
     train.addComponent(trainNode);
     
     // Create engine car
     const engineCar = new GameObject('TrainCar', undefined, scene);
-    const engineNode = new NodeComponent(scene, trainNode);
+    const engineNode = new SceneNodeComponent(scene, trainNode);
     engineCar.addComponent(engineNode);
     
     // Create passenger car
     const passengerCar = new GameObject('TrainCar', undefined, scene);
-    const passengerNode = new NodeComponent(scene, trainNode);
+    const passengerNode = new SceneNodeComponent(scene, trainNode);
     passengerCar.addComponent(passengerNode);
     
     // Set up positions
@@ -85,7 +85,7 @@ export function demonstrateSpatialDetection(scene: Scene) {
     
     // Create train
     const train = new GameObject('Train', undefined, scene);
-    const trainNode = new NodeComponent(scene);
+    const trainNode = new SceneNodeComponent(scene);
     const trainRadius = new RadiusComponent(10, 'interaction'); // 10 unit interaction radius
     train.addComponent(trainNode);
     train.addComponent(trainRadius);
@@ -93,7 +93,7 @@ export function demonstrateSpatialDetection(scene: Scene) {
     
     // Create enemy
     const enemy = new GameObject('Enemy', undefined, scene);
-    const enemyNode = new NodeComponent(scene);
+    const enemyNode = new SceneNodeComponent(scene);
     const enemyDetection = new RadiusComponent(15, 'detection'); // 15 unit detection radius
     enemy.addComponent(enemyNode);
     enemy.addComponent(enemyDetection);
@@ -142,7 +142,7 @@ export function demonstrateExplosionDamage(scene: Scene) {
     const entities = [];
     for (let i = 0; i < 5; i++) {
         const entity = new GameObject('Vehicle', undefined, scene);
-        const node = new NodeComponent(scene);
+        const node = new SceneNodeComponent(scene);
         const radius = new RadiusComponent(2, 'collision');
         
         entity.addComponent(node);

@@ -1,6 +1,6 @@
-# Scene Graph Train Trading Game
+# ECS Train Trading Game
 
-A hierarchical scene graph-based train trading game built with TypeScript and Babylon.js. Features trains that move along rails with modular voxel-based construction, cargo trading mechanics, and combat against enemies. Originally built with ECS architecture, now enhanced with a robust scene graph hierarchy.
+An Entity-Component-System (ECS) based train trading game built with TypeScript. Features trains that move along rails, carry cargo, and engage in trading mechanics while defending against enemies.
 
 ## Quick Start
 
@@ -33,73 +33,56 @@ npm run build
 
 ## Current Features
 
-- **Scene Graph Architecture**: Hierarchical node-based game object structure
-- **Train System**: Multi-car trains with rail-based movement and parent-child relationships
+- **ECS Architecture**: Clean Entity-Component-System design
+- **Train System**: Multi-car trains with rail-based movement
 - **Enemy AI**: Hostile entities with pathfinding and combat
-- **Voxel Rendering**: Colorful 3D voxel graphics with Babylon.js
+- **Voxel Rendering**: Colorful pixel-art style graphics
 - **Time Controls**: Pause, normal speed, and fast-forward
 - **Attachment System**: Weapons and cargo attachments for train cars
 - **Trading Mechanics**: Station-based resource trading (in development)
-- **Event System**: Scene graph-aware event propagation with bubbling and capture phases
-- **Spatial System**: Radius-based proximity detection for interactions and combat
 
 ## Project Structure
 ```
 src/
-├── ecs-app.ts              # Main application entry point
-├── engine/                # Engine core (rendering, scene graph, utils)
-│   ├── core/              # Core engine classes and interfaces
-│   │   ├── Component.ts   # Base component class
-│   │   └── GameObject.ts  # Base game object class
-│   ├── scene/             # Scene graph implementation
-│   │   ├── SceneNodeComponent.ts  # Hierarchical transform component
-│   │   └── SceneGraphEventSystem.ts  # Event propagation system
-│   ├── rendering/         # Rendering system (Babylon.js)
-│   └── utils/             # Engine utilities
-├── game/                  # Game-specific implementation
-│   ├── components/        # Game-specific components
-│   ├── entities/          # Game entity factories
-│   ├── systems/           # Game systems (logic processors)
-│   └── config/            # Game configuration
-├── components/            # Shared components
-├── entities/              # Entity implementations
-├── systems/               # System implementations
-├── ui/                    # User interface components
-└── net/                   # Networking code
+├── ecs-app.ts              # Main ECS application entry point
+├── components/             # ECS components (data containers)
+├── entities/              # Entity factories and complex entities
+├── systems/              # ECS systems (logic processors)
+├── renderers/            # Rendering components
+├── ui/                   # User interface components
+├── utils/                # Utility functions and helpers
+├── core/                 # Core ECS framework and managers
+└── net/                  # Networking code
 ```
 
 ## Technology Stack
 
 - **TypeScript** - Main development language
 - **Vite** - Build tool and development server
-- **Babylon.js** - 3D rendering engine
+- **HTML5 Canvas** - Rendering engine
 - **Jest** - Testing framework
 - **Colyseus** - Multiplayer networking (in development)
 
 ## Development Status
 
-The project has undergone significant architectural evolution from ECS principles to a more robust scene graph architecture. See [Scene Graph Roadmap](docs/roadmap/scene_graph_roadmap.md) and [Current Status](docs/scene_graph_current_status.md) for detailed information.
+The project has undergone significant refactoring to align with ECS principles. See [Roadmap](docs/ROADMAP.md) for current status and planned improvements.
 
 ### Recently Completed
-✅ Scene Graph Architecture Implementation  
-✅ Engine/Game Directory Separation  
-✅ SceneNodeComponent Hierarchical System  
-✅ Scene Graph Event System with Bubbling/Capturing  
-✅ RadiusComponent for Spatial Operations  
-✅ Game Entity Integration with Scene Graph (TrainCarVoxel)  
-✅ Import Path Migration and Error Reduction  
+✅ Legacy code removal and cleanup  
+✅ ECS architecture implementation  
+✅ Component and system refactoring  
+✅ Math and geometry utility consolidation  
+✅ Documentation overhaul  
 
 ### In Progress
-🔄 SceneManager Integration with Scene Graph  
-🔄 Train System Hierarchy Implementation  
-🔄 Entity Migration to Scene Graph Architecture  
-🔄 Engine/Game Split Finalization  
+🔄 Performance optimization  
+🔄 Advanced AI behaviors  
+🔄 Enhanced trading mechanics  
 
 ### Planned
-📋 Spatial Systems (Collision, Proximity, LOD)  
-📋 Optimized Rendering with Scene Graph  
-📋 Multiplayer Networking  
-📋 Mobile Platform Support  
+📋 Multiplayer networking  
+📋 Procedural content generation  
+📋 Mobile platform support  
 
 ## Contributing
 
