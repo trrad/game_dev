@@ -107,6 +107,44 @@ export class Train extends GameNodeObject {
             playerId: this._playerId,
             config: this._config
         });
+
+        // Listen for journey:request events from UI or other sources
+        this.addEventListener('journey:request', (event) => {
+            const { trainId, railId, destinationStationId, targetSpeed } = event.payload || {};
+            // Only process if this is the correct train
+            if (trainId !== this.id) return;
+
+            // Get the RailMovementComponent
+            const railMovement = this.getComponent<RailMovementComponent>('railMovement');
+            if (!railMovement) {
+                Logger.warn(LogCategory.TRAIN, `No RailMovementComponent found for train ${this.id}`);
+                this.emit('journey:failed', {
+                    trainId: this.id,
+                    railId,
+                    destinationStationId,
+                    reason: 'no_rail_movement_component'
+                });
+                return;
+            }
+
+            // Start the journey using the movement component
+            try {
+                railMovement.startJourney(destinationStationId, targetSpeed);
+                this.emit('journey:started', {
+                    trainId: this.id,
+                    railId,
+                    destinationStationId
+                });
+            } catch (error) {
+                Logger.warn(LogCategory.TRAIN, `Failed to start journey: ${error}`);
+                this.emit('journey:failed', {
+                    trainId: this.id,
+                    railId,
+                    destinationStationId,
+                    reason: error?.message || 'unknown_error'
+                });
+            }
+        });
     }
 
     /**
@@ -656,5 +694,18 @@ export class Train extends GameNodeObject {
             Logger.warn(LogCategory.TRAIN, `Failed to start journey: ${error}`);
             return false;
         }
+    }
+
+    // Add the actual journey start logic here
+    private startRailJourney(railId: string, destinationStationId: string): boolean {
+        // Only start a journey if not already moving
+        if (this._state.isMoving) {
+            Logger.warn(LogCategory.TRAIN, `Train ${this.id} is already moving.`);
+            return false;
+        }
+        // Optionally: validate railId and destinationStationId here
+        // For now, just start movement
+        this.startMovement(railId, destinationStationId);
+        return true;
     }
 }

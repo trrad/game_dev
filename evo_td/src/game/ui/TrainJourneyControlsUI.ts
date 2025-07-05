@@ -6,7 +6,7 @@
 import { Train } from "../entities/Trains/Train";
 import { Station } from "../entities/Station/Station";
 import { TrainSystem } from "../systems/TrainSystem";
-import { EventStack, EventCategory } from "../../engine/core/EventStack";
+import { GameNodeObject } from '../../engine/core/GameNodeObject';
 import { PositionComponent } from '../../engine/components/PositionComponent';
 import { MathUtils } from '../../engine/utils/MathUtils';
 import { Logger, LogCategory } from "../../engine/utils/Logger";
@@ -18,11 +18,10 @@ export interface JourneyOption {
     railName: string;
 }
 
-export class TrainJourneyControlsUI {
+export class TrainJourneyControlsUI extends GameNodeObject {
     private container: HTMLElement;
     private train: Train;
     private trainSystem: TrainSystem;
-    private eventStack: EventStack;
     private stations: Map<string, Station>;
     private rails: Map<string, any>; // Rail objects
     private currentStationId: string | null = null;
@@ -31,18 +30,23 @@ export class TrainJourneyControlsUI {
     constructor(
         train: Train, 
         trainSystem: TrainSystem, 
-        eventStack: EventStack,
         stations: Map<string, Station>,
-        rails: Map<string, any>
+        rails: Map<string, any>,
+        scene?: any,
+        parentNode?: any
     ) {
+        super('train_journey_controls_ui', undefined, scene, parentNode);
         this.train = train;
         this.trainSystem = trainSystem;
-        this.eventStack = eventStack;
         this.stations = stations;
         this.rails = rails;
 
         this.createUI();
         this.startMonitoring();
+
+        // Listen for journey started/completed events via node-based API
+        this.train.addEventListener('journey:started', () => this.hideControls());
+        this.train.addEventListener('journey:completed', () => this.updateUI());
     }
 
     /**
@@ -168,13 +172,6 @@ export class TrainJourneyControlsUI {
         });
 
         this.container.style.display = 'block';
-        
-        // Log to event stack
-        this.eventStack.info(EventCategory.UI, 'station_ui_shown', `Journey controls shown for ${stationConfig.name}`, {
-            stationId: stationConfig.id,
-            stationName: stationConfig.name,
-            availableDestinations: journeyOptions.length
-        }, 'TrainJourneyControlsUI');
     }
 
     /**
@@ -184,8 +181,6 @@ export class TrainJourneyControlsUI {
         if (this.container.style.display !== 'none') {
             this.container.style.display = 'none';
             this.currentStationId = null;
-            
-            this.eventStack.info(EventCategory.UI, 'station_ui_hidden', 'Journey controls hidden - train not at station', null, 'TrainJourneyControlsUI');
         }
     }
 
@@ -223,31 +218,27 @@ export class TrainJourneyControlsUI {
     private startJourney(railId: string, destinationStationId: string): void {
         // Hide controls immediately when journey starts
         this.hideControls();
-        
-        const success = this.trainSystem.startRailJourney(this.train.id, railId, destinationStationId);
-        
-        if (success) {
-            const destinationStation = this.stations.get(destinationStationId);
-            const destinationName = destinationStation ? (destinationStation as any)._config.name : destinationStationId;
-            
-            this.eventStack.info(EventCategory.TRAIN, 'journey_initiated_by_player', `Player started journey to ${destinationName}`, {
-                trainId: this.train.id,
-                railId,
-                destinationStationId,
-                destinationName
-            }, 'TrainJourneyControlsUI');
-        } else {
-            // If journey failed, we might want to show controls again after a brief delay
-            setTimeout(() => {
-                this.updateUI();
-            }, 100);
-            
-            this.eventStack.error(EventCategory.ERROR, 'journey_start_failed', `Failed to start journey to ${destinationStationId}`, {
-                trainId: this.train.id,
-                railId,
-                destinationStationId
-            }, 'TrainJourneyControlsUI');
-        }
+
+        // Emit journey:request event from the UI node (not the train)
+        this.emit('journey:request', {
+            trainId: this.train.id,
+            railId,
+            destinationStationId
+        });
+    }
+
+    /**
+     * Public method to show the journey controls UI
+     */
+    public show(): void {
+        this.container.style.display = 'block';
+    }
+
+    /**
+     * Public method to hide the journey controls UI
+     */
+    public hide(): void {
+        this.container.style.display = 'none';
     }
 
     /**

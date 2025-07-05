@@ -5,6 +5,9 @@
 import { Component } from '../../engine/components/Component';
 import type { GameObject } from '../../engine/core/GameObject';
 import { Logger, LogCategory } from '../../engine/utils/Logger';
+import { NodeComponent } from '../../engine/components/NodeComponent';
+import { RailPathComponent } from './RailPathComponent';
+import type { GameNodeObject } from '../../engine/core/GameNodeObject';
 
 export interface RailPositionState {
     /** ID of the current rail segment */
@@ -144,6 +147,25 @@ export class RailPositionComponent extends Component<RailPositionState> {
             newDirection: this._direction,
             progress: this._progress
         });
+    }
+
+    /**
+     * Helper: Update the attached NodeComponent's transform to match the current rail position
+     * (Requires map of rail entities by id)
+     */
+    updateNodeTransform(railEntities: Map<string, GameNodeObject>): void {
+        if (!this._gameObject) return;
+        const node = this._gameObject.getComponent('Node') as NodeComponent | undefined;
+        if (!node || !this._isOnRail || !this._railId) return;
+        const railEntity = railEntities.get(this._railId);
+        if (!railEntity) return;
+        const railPath = railEntity.getComponent('rail_path') as RailPathComponent | undefined;
+        if (!railPath) return;
+        const progress = this.getEffectiveProgress();
+        const position = railPath.getPositionAt(progress);
+        const tangent = railPath.getTangentAt(progress);
+        node.setLocalPositionFromVector(position);
+        node.lookAt(position.add(tangent));
     }
 
     // Getters

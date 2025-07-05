@@ -1,8 +1,7 @@
 import { Vector3, Mesh } from "@babylonjs/core";
 // Fix import paths for engine and entity modules
-import { GameObject } from "../../../engine/core/GameObject";
+import { GameNodeObject } from "../../../engine/core/GameNodeObject";
 import { Logger, LogCategory } from "../../../engine/utils/Logger";
-import { PositionComponent } from "../../../engine/components/PositionComponent";
 import { HealthComponent } from "../../../engine/components/HealthComponent";
 import { StationPerimeterComponent } from "../../components/StationPerimeterComponent";
 import { Building, BuildingType } from "../Buildings/Building";
@@ -47,32 +46,19 @@ export interface MarketPrices {
  * Station represents a node in the rail network where trains can stop.
  * Stations have levels, reputation, and dynamic cargo pricing.
  */
-export class Station extends GameObject {
+export class Station extends GameNodeObject {
     private _config: StationConfig;
     private _state: StationState;
     private _mesh?: Mesh;
     private _marketPrices: MarketPrices = {};
     private _lastPriceUpdate: number = 0;
     
-    constructor(config: StationConfig, eventStack?: EventStack) {
-        super('station', eventStack);
+    constructor(config: StationConfig, eventStack?: EventStack, scene?: any, parentNode?: any) {
+        super('station', eventStack, scene, parentNode);
         this._config = config;
-        
-        // Debug log to see the auto-generated ID versus the config ID
-        Logger.log(LogCategory.SYSTEM, `Station created with IDs - GameObject ID: ${this.id}, Config ID: ${config.id}`);
-        
-        // Add required components
-        this.addComponent(new PositionComponent());
-        const pos = this.getComponent<PositionComponent>('position');
-        if (pos) {
-            // Convert Vector3 to Position3D interface
-            pos.setPosition({
-                x: config.position.x,
-                y: config.position.y,
-                z: config.position.z
-            });
-            Logger.log(LogCategory.SYSTEM, `Station ${config.id} position set to: (${config.position.x}, ${config.position.y}, ${config.position.z})`);
-        }
+        // Set position using NodeComponent
+        this.node.setLocalPosition(config.position.x, config.position.y, config.position.z);
+        Logger.log(LogCategory.SYSTEM, `Station created with IDs - GameNodeObject ID: ${this.id}, Config ID: ${config.id}`);
         
         this._state = {
             level: 1,
@@ -107,14 +93,8 @@ export class Station extends GameObject {
     }
 
     get position(): Vector3 {
-        const pos = this.getComponent<PositionComponent>('position');
-        if (pos) {
-            const p = pos.getPosition();
-            // Convert Position3D to Vector3
-            return new Vector3(p.x, p.y, p.z);
-        } else {
-            return this._config.position;
-        }
+        // Use node's world position
+        return this.node.getWorldPosition();
     }
 
     get connectedRails(): string[] {

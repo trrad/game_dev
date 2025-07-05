@@ -734,8 +734,7 @@ export class TrainCar extends GameNodeObject {
             this._state.health = Math.round(healthPercentage * (this._config.maxHealth || 100));
             this._state.isDamaged = this._state.health < (this._config.maxHealth || 100) * 0.8;
             this._state.isOperational = this._state.health > (this._config.maxHealth || 100) * 0.2;
-            
-            Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} health updated: ${this._state.health}% (${totalVoxelHealth}/${maxVoxelHealth} voxel health)`);
+            // Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} health updated: ${this._state.health}% (${totalVoxelHealth}/${maxVoxelHealth} voxel health)`); // Disabled for event system debug
         }
     }
     
@@ -779,7 +778,7 @@ export class TrainCar extends GameNodeObject {
             .sort((a, b) => a.getCurrentHealth() - b.getCurrentHealth()); // Most damaged first
         
         if (damagedVoxels.length === 0) {
-            Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} has no damaged voxels to repair`);
+            // Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} has no damaged voxels to repair`); // Disabled for event system debug
             return;
         }
         
@@ -788,7 +787,7 @@ export class TrainCar extends GameNodeObject {
         
         voxelsToRepair.forEach(voxel => {
             voxel.heal(repairAmount);
-            Logger.log(LogCategory.TRAIN, `Repaired voxel ${voxel.id} by ${repairAmount} points`);
+            // Logger.log(LogCategory.TRAIN, `Repaired voxel ${voxel.id} by ${repairAmount} points`); // Disabled for event system debug
         });
         
         // Update car health after repairs
@@ -899,7 +898,7 @@ export class TrainCar extends GameNodeObject {
         this._state.isDamaged = this._state.health < (this._config.maxHealth || 100) * 0.8;
         this._state.isOperational = this._state.health > (this._config.maxHealth || 100) * 0.2;
         
-        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} took ${amount} damage, health: ${this._state.health}`);
+        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} took ${amount} damage, health: ${this._state.health}`); // Optionally disable if too verbose
     }
     
     /**
@@ -910,7 +909,7 @@ export class TrainCar extends GameNodeObject {
         this._state.health = Math.min(maxHealth, this._state.health + amount);
         this._state.isDamaged = this._state.health < maxHealth * 0.8;
         
-        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} repaired ${amount} points, health: ${this._state.health}`);
+        Logger.log(LogCategory.TRAIN, `TrainCar ${this.id} repaired ${amount} points, health: ${this._state.health}`); // Optionally disable if too verbose
     }
     
     /**

@@ -5,6 +5,10 @@
 import { Component } from '../../engine/components/Component';
 import type { GameObject } from '../../engine/core/GameObject';
 import { Logger, LogCategory } from '../../engine/utils/Logger';
+import { NodeComponent } from '../../engine/components/NodeComponent';
+import { RailPositionComponent } from './RailPositionComponent';
+import { RailPathComponent } from './RailPathComponent';
+import type { GameNodeObject } from '../../engine/core/GameNodeObject';
 
 export interface RailMovementState {
     /** Current movement speed (units per second) */
@@ -106,9 +110,41 @@ export class RailMovementComponent extends Component<RailMovementState> {
     }
 
     /**
-     * Update movement state based on time passed
+     * Update the entity's node transform to match its position along the rail path
+     * Should be called after progress changes
      */
-    updateMovement(deltaTime: number): void {
+    updateNodeTransform(railEntities: Map<string, GameNodeObject>): void {
+        if (!this._gameObject) return;
+        const railPos = this._gameObject.getComponent('railPosition') as RailPositionComponent | undefined;
+        const node = this._gameObject.getComponent('Node') as NodeComponent | undefined;
+        if (!railPos || !node) return;
+        if (!railPos.isOnRail()) return;
+        const railId = railPos.getRailId();
+        if (!railId) return;
+        const railEntity = railEntities.get(railId);
+        if (!railEntity) return;
+        const railPath = railEntity.getComponent('rail_path') as RailPathComponent | undefined;
+        if (!railPath) return;
+
+        // Get effective progress (with offset)
+        const progress = railPos.getEffectiveProgress();
+        const position = railPath.getPositionAt(progress);
+        const tangent = railPath.getTangentAt(progress);
+
+        // Set position
+        node.setLocalPositionFromVector(position);
+        // Set orientation: look along tangent (forward)
+        const lookTarget = position.add(tangent);
+        node.lookAt(lookTarget);
+    }
+
+    /**
+     * Update movement state based on time passed
+     * (Refactored: also updates node transform after progress changes)
+     * @param deltaTime Time step
+     * @param railEntities Map of railId to rail entity (must be provided by system)
+     */
+    updateMovement(deltaTime: number, railEntities: Map<string, GameNodeObject>): void {
         if (!this._isMoving && !this._isDecelerating) return;
 
         const oldSpeed = this._speed;
@@ -146,6 +182,21 @@ export class RailMovementComponent extends Component<RailMovementState> {
                 isAccelerating: this._isAccelerating,
                 isDecelerating: this._isDecelerating
             });
+        }
+
+        // === NEW: Update progress and node transform ===
+        const railPos = this._gameObject?.getComponent('railPosition') as RailPositionComponent | undefined;
+        if (railPos && railPos.isOnRail()) {
+            // Find current rail entity and its length
+            const railId = railPos.getRailId();
+            const railEntity = railId ? railEntities.get(railId) : undefined;
+            const railPath = railEntity?.getComponent('rail_path') as RailPathComponent | undefined;
+            const railLength = railPath ? railPath.path3d.length() : 1;
+            // Calculate progress delta
+            const deltaProgress = this.calculateProgressDelta(deltaTime, railLength);
+            railPos.updateProgress(deltaProgress);
+            // Update node transform to match new position
+            this.updateNodeTransform(railEntities);
         }
     }
 

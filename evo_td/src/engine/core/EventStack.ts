@@ -1,7 +1,29 @@
 /**
- * Event & Logging System
- * Simple fancy print messages with categories and levels
+ * EventStack (Scene Graph Logger)
+ *
+ * ROLE (2025+):
+ *   - EventStack is a scene graph event logger/observer, NOT an event bus.
+ *   - It extends GameNodeObject and subscribes to the root node of the scene graph.
+ *   - It logs all node-based events it receives (to buffer, UI, file, or console as needed).
+ *   - It maintains backward compatibility for Logger-style direct log calls (info, error, etc.),
+ *     but all new event logging should flow through the node event system.
+ *   - It does NOT re-implement event emission or subscription; it uses node event system methods.
+ *
+ * ARCHITECTURE PATTERN:
+ *   - EventStack is the only component that listens to the root node for all events.
+ *   - It provides a normalized log stream to UI and other subscribers via addListener/removeListener.
+ *   - UI components (e.g., EventLogUI) should subscribe to EventStack for log updates, NOT to the scene graph directly.
+ *   - This ensures log state is centralized, normalized, and decoupled from UI logic.
+ *
+ *   - Do NOT use EventStack as a general event bus or pass it as a logger to other systems.
+ *   - Always emit events on nodes and let EventStack observe and log them.
+ *
+ *   - If you need to add a new log type or filter, update EventStack, not the UI.
+ *
+ * See EventLogUI.ts for the intended UI integration pattern.
  */
+
+import { GameNodeObject } from './GameNodeObject';
 
 export enum EventCategory {
     // Game/User events (visible to players) - ALWAYS enabled by default
@@ -83,30 +105,25 @@ export type EventListener = (entry: EventEntry) => void;
 /**
  * Event Stack - handles all logging and events
  */
-export class EventStack {
+export class EventStack extends GameNodeObject {
     private config: EventStackConfig;
     private eventBuffer: EventEntry[] = [];
     private listeners: EventListener[] = [];
     private eventIdCounter = 0;
-    
-    // Executable events (for game state changes)
-    private gameEvents: Array<{ type: string; execute: () => void; payload?: any }> = [];
+    private maxBufferSize = 1000;
 
-    // Subscribers for specific game events
-    private eventSubscribers: Map<string, Array<(event: any) => void>> = new Map();
-
-    constructor(config: Partial<EventStackConfig> = {}) {
+    constructor(scene: import('@babylonjs/core').Scene, config: Partial<EventStackConfig> = {}) {
+        super('eventStack', scene);
         this.config = {
             maxBufferSize: 1000,
-            consoleOutputEnabled: false, // Off by default as requested
+            consoleOutputEnabled: false,
             fileLoggingEnabled: true,
-            enabledCategories: new Set(DEFAULT_ENABLED_CATEGORIES), // Only game events + errors by default
+            enabledCategories: new Set(DEFAULT_ENABLED_CATEGORIES),
             minLogLevel: LogLevel.INFO,
-            showVerboseEvents: false, // Simple boolean for high-frequency events
+            showVerboseEvents: false,
             ...config
         };
-
-        this.info(EventCategory.SYSTEM, 'eventstack_init', 'Event Stack initialized', {
+        this.info(EventCategory.SYSTEM, 'eventstack_init', 'Event Stack initialized (scene graph observer)', {
             showVerboseEvents: this.config.showVerboseEvents,
             minLogLevel: LogLevel[this.config.minLogLevel],
             enabledCategories: Array.from(this.config.enabledCategories),
@@ -115,9 +132,53 @@ export class EventStack {
     }
 
     /**
-     * Core logging method - all other methods route through here
+     * Subscribe to the root node of the scene graph to log all events.
+     * @param rootNode The root NodeComponent of the scene graph
      */
-    logEvent(
+    subscribeToSceneRoot(rootNode: any) {
+        rootNode.addEventListener('*', this.handleSceneEvent, { capture: true });
+    }
+
+    /**
+     * Handle all scene graph events and log them.
+     * @param event The SceneGraphEvent
+     */
+    handleSceneEvent = (event: any) => {
+        // Log to buffer
+        this.eventBuffer.push({
+            id: `evt_${++this.eventIdCounter}`,
+            timestamp: Date.now(),
+            category: EventCategory.SYSTEM,
+            level: LogLevel.INFO,
+            type: event.type,
+            message: '[SceneEvent] ' + (event.payload?.message || ''),
+            context: event.payload,
+            source: event.source,
+            isVerbose: false
+        });
+        if (this.eventBuffer.length > this.maxBufferSize) {
+            this.eventBuffer.shift();
+        }
+        // Optionally, forward to EventLogUI or other sinks
+        // Optionally, log to console for debugging
+        // console.log('[EventStack] Scene event:', event.type, event);
+    };
+
+    // --- Legacy Logger compatibility (for now) ---
+    info(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
+        this.logEvent(category, LogLevel.INFO, type, message, context, source, isVerbose);
+    }
+    error(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
+        this.logEvent(category, LogLevel.ERROR, type, message, context, source, isVerbose);
+    }
+    warn(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
+        this.logEvent(category, LogLevel.WARN, type, message, context, source, isVerbose);
+    }
+    debug(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
+        this.logEvent(category, LogLevel.DEBUG, type, message, context, source, isVerbose);
+    }
+
+    private logEvent(
         category: EventCategory,
         level: LogLevel,
         type: string,
@@ -130,7 +191,6 @@ export class EventStack {
         if (!this.shouldLogEvent(category, level, isVerbose)) {
             return;
         }
-
         const entry: EventEntry = {
             id: `evt_${++this.eventIdCounter}`,
             timestamp: Date.now(),
@@ -142,435 +202,48 @@ export class EventStack {
             source,
             isVerbose
         };
-
-        this.addToBuffer(entry);
-
-        // Output to console if enabled
-        if (this.config.consoleOutputEnabled) {
-            this.outputToConsole(entry);
-        }
-
-        // Notify listeners
-        this.notifyListeners(entry);
-    }
-
-    /**
-     * Convenience methods for different log levels
-     */
-    error(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
-        this.logEvent(category, LogLevel.ERROR, type, message, context, source, isVerbose);
-    }
-
-    warn(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
-        this.logEvent(category, LogLevel.WARN, type, message, context, source, isVerbose);
-    }
-
-    info(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
-        this.logEvent(category, LogLevel.INFO, type, message, context, source, isVerbose);
-    }
-
-    debug(category: EventCategory, type: string, message: string, context?: any, source?: string, isVerbose: boolean = false): void {
-        this.logEvent(category, LogLevel.DEBUG, type, message, context, source, isVerbose);
-    }
-
-    /**
-     * Game event management (executable events for state changes)
-     */
-    pushGameEvent(event: { type: string; execute: () => void; payload?: any; category?: EventCategory; message?: string }): void {
-        this.gameEvents.push(event);
-        
-        this.debug(
-            event.category || EventCategory.SYSTEM,
-            'game_event_pushed',
-            event.message || `Game event queued: ${event.type}`,
-            event.payload,
-            'GameEventQueue'
-        );
-    }
-
-    processGameEvents(): void {
-        let processedCount = 0;
-        const startTime = performance.now();
-
-        while (this.gameEvents.length > 0) {
-            const event = this.gameEvents.shift();
-            if (event) {
-                try {
-                    event.execute();
-                    processedCount++;
-                    
-                    this.debug(
-                        EventCategory.SYSTEM,
-                        'game_event_executed',
-                        `Game event executed: ${event.type}`,
-                        event.payload,
-                        'GameEventProcessor',
-                        true // verbose = true for high frequency
-                    );
-                } catch (error) {
-                    this.error(
-                        EventCategory.ERROR,
-                        'game_event_error',
-                        `Error executing game event ${event.type}`,
-                        { eventType: event.type, error: error.toString() },
-                        'GameEventProcessor'
-                    );
-                }
-            }
-        }
-
-        const processingTime = performance.now() - startTime;
-        if (processedCount > 0) {
-            this.debug(
-                EventCategory.SYSTEM,
-                'game_events_processed',
-                `Processed ${processedCount} game events in ${processingTime.toFixed(2)}ms`,
-                { count: processedCount, timeMs: processingTime },
-                'GameEventProcessor',
-                true // verbose = true for high frequency
-            );
-        }
-    }
-
-    isGameEventQueueEmpty(): boolean {
-        return this.gameEvents.length === 0;
-    }
-
-    /**
-     * Emit a game event (not a log event) that other systems can subscribe to
-     */
-    emit(event: { type: string; payload?: any; source?: string }): void {
-        // Add to game events queue for processing
-        this.pushGameEvent({
-            type: event.type,
-            execute: () => {
-                // Notify specific event subscribers
-                this.notifyEventSubscribers(event.type, event);
-            },
-            payload: event.payload
-        });
-        
-        // Also log it as a debug event
-        this.debug(
-            EventCategory.GAME,
-            'game_event_emitted',
-            `Game event emitted: ${event.type}`,
-            event.payload,
-            event.source || 'Unknown'
-        );
-    }
-
-    /**
-     * Subscribe to specific game event types
-     */
-    subscribe(eventType: string, callback: (event: any) => void): () => void {
-        if (!this.eventSubscribers.has(eventType)) {
-            this.eventSubscribers.set(eventType, []);
-        }
-        
-        this.eventSubscribers.get(eventType)!.push(callback);
-        
-        this.debug(
-            EventCategory.SYSTEM,
-            'event_subscription',
-            `Subscribed to event type: ${eventType}`,
-            { eventType },
-            'EventStack'
-        );
-        
-        // Return unsubscribe function
-        return () => {
-            const callbacks = this.eventSubscribers.get(eventType);
-            if (callbacks) {
-                const index = callbacks.indexOf(callback);
-                if (index > -1) {
-                    callbacks.splice(index, 1);
-                }
-            }
-        };
-    }
-
-    /**
-     * Notify subscribers of specific event types
-     */
-    private notifyEventSubscribers(eventType: string, event: any): void {
-        const callbacks = this.eventSubscribers.get(eventType);
-        if (callbacks) {
-            callbacks.forEach(callback => {
-                try {
-                    callback(event);
-                } catch (error) {
-                    this.error(
-                        EventCategory.ERROR,
-                        'event_callback_error',
-                        `Error in event subscriber for ${eventType}`,
-                        { eventType, error: error.toString() },
-                        'EventStack'
-                    );
-                }
-            });
-        }
-    }
-
-    /**
-     * Buffer management
-     */
-    private addToBuffer(entry: EventEntry): void {
         this.eventBuffer.push(entry);
-        this.trimBuffer();
-    }
-
-    private trimBuffer(): void {
-        // Remove old entries by size only
-        while (this.eventBuffer.length > this.config.maxBufferSize) {
+        if (this.eventBuffer.length > this.maxBufferSize) {
             this.eventBuffer.shift();
         }
+        // Optionally, output to console or notify listeners
     }
 
-    /**
-     * Filtering logic
-     */
     private shouldLogEvent(category: EventCategory, level: LogLevel, isVerbose: boolean = false): boolean {
-        if (!this.config.enabledCategories.has(category)) {
-            return false;
-        }
-
-        if (level > this.config.minLogLevel) {
-            return false;
-        }
-
-        // Filter out verbose events if showVerboseEvents is false
-        if (isVerbose && !this.config.showVerboseEvents) {
-            return false;
-        }
-
+        if (!this.config.enabledCategories.has(category)) return false;
+        if (level > this.config.minLogLevel) return false;
+        if (isVerbose && !this.config.showVerboseEvents) return false;
         return true;
     }
 
-    /**
-     * Output methods
-     */
-    private outputToConsole(entry: EventEntry): void {
-        const timestamp = new Date(entry.timestamp).toISOString();
-        const levelStr = LogLevel[entry.level];
-        const contextStr = entry.context ? ` | ${JSON.stringify(entry.context)}` : '';
-        const sourceStr = entry.source ? ` [${entry.source}]` : '';
-        const verboseStr = entry.isVerbose ? ' [VERBOSE]' : '';
-        
-        const logMessage = `[${timestamp}] [${levelStr}] [${entry.category.toUpperCase()}]${verboseStr} ${entry.message}${sourceStr}${contextStr}`;
-
-        switch (entry.level) {
-            case LogLevel.ERROR:
-                console.error(logMessage);
-                break;
-            case LogLevel.WARN:
-                console.warn(logMessage);
-                break;
-            case LogLevel.DEBUG:
-                console.debug(logMessage);
-                break;
-            default:
-                console.log(logMessage);
-                break;
-        }
-    }
+    // --- UI/Export compatibility ---
+    exportLogs() { return this.eventBuffer.slice(); }
+    clearLogs() { this.eventBuffer = []; }
+    getAllEvents(): EventEntry[] { return [...this.eventBuffer]; }
+    getRecentEvents(maxCount: number = 100): EventEntry[] { return this.getAllEvents().slice(-maxCount); }
 
     /**
-     * Event listeners for UI integration
+     * Export all logs as a formatted string (for download or debugging)
+     * This is used by the Generate Logs button and for manual export.
      */
-    addListener(listener: EventListener): void {
-        this.listeners.push(listener);
-    }
-
-    removeListener(listener: EventListener): void {
-        const index = this.listeners.indexOf(listener);
-        if (index > -1) {
-            this.listeners.splice(index, 1);
-        }
-    }
-
-    /**
-     * Subscribe to event log entries (UI compatibility method)
-     * Returns an unsubscribe function
-     */
-    onEventLog(callback: (entry: EventEntry) => void): () => void {
-        this.addListener(callback);
-        return () => this.removeListener(callback);
-    }
-
-    private notifyListeners(entry: EventEntry): void {
-        this.listeners.forEach(listener => {
-            try {
-                listener(entry);
-            } catch (error) {
-                console.error('Error in event listener:', error);
-            }
-        });
-    }
-
-    /**
-     * Data access methods
-     */
-    getAllEvents(): EventEntry[] {
-        return [...this.eventBuffer].sort((a, b) => a.timestamp - b.timestamp);
-    }
-
-    getEventsByCategory(category: EventCategory): EventEntry[] {
-        return this.getAllEvents().filter(entry => entry.category === category);
-    }
-
-    getEventsByLevel(level: LogLevel): EventEntry[] {
-        return this.getAllEvents().filter(entry => entry.level === level);
-    }
-
-    getRecentEvents(maxCount: number = 100): EventEntry[] {
-        return this.getAllEvents().slice(-maxCount);
-    }
-
-    /**
-     * Get recent event log entries (UI compatibility method)
-     */
-    getRecentEventLog(maxCount: number = 100): EventEntry[] {
-        return this.getRecentEvents(maxCount);
-    }
-
-    /**
-     * Configuration management
-     */
-    updateConfig(updates: Partial<EventStackConfig>): void {
-        this.config = { ...this.config, ...updates };
-        
-        this.info(EventCategory.SYSTEM, 'config_updated', 'Event stack configuration updated', {
-            updates: Object.keys(updates)
-        });
-    }
-
-    getConfig(): Readonly<EventStackConfig> {
-        return { ...this.config };
-    }
-
-    toggleConsoleOutput(): boolean {
-        this.config.consoleOutputEnabled = !this.config.consoleOutputEnabled;
-        this.info(EventCategory.SYSTEM, 'console_output_toggled', 
-            `Console output ${this.config.consoleOutputEnabled ? 'enabled' : 'disabled'}`);
-        return this.config.consoleOutputEnabled;
-    }
-
-    /**
-     * Toggle verbose mode (high-frequency events) at runtime
-     */
-    toggleVerboseMode(): boolean {
-        this.config.showVerboseEvents = !this.config.showVerboseEvents;
-        
-        this.info(EventCategory.SYSTEM, 'verbose_mode_toggled', 
-            `Verbose mode (high-frequency events) ${this.config.showVerboseEvents ? 'enabled' : 'disabled'}`);
-        return this.config.showVerboseEvents;
-    }
-
-    /**
-     * File export functionality
-     */
-    async exportLogs(): Promise<void> {
-        if (!this.config.fileLoggingEnabled) {
-            this.warn(EventCategory.SYSTEM, 'export_disabled', 'File logging is disabled');
-            return;
-        }
-
-        const allEvents = this.getAllEvents();
-        if (allEvents.length === 0) {
-            this.warn(EventCategory.SYSTEM, 'export_empty', 'No events to export');
-            return;
-        }
-
-        try {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `game_events_${timestamp}.txt`;
-            
-            const logContent = this.formatEventsForExport(allEvents);
-            
-            if (typeof window !== 'undefined') {
-                // Browser environment - download file
-                const blob = new Blob([logContent], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                this.info(EventCategory.SYSTEM, 'logs_exported', `Events exported to ${filename}`, {
-                    eventCount: allEvents.length,
-                    filename
-                });
-            } else {
-                // Node.js environment - write to file system
-                const fs = require('fs');
-                const path = require('path');
-                
-                const logDir = path.join(process.cwd(), 'src', 'utils', 'log_output');
-                const logPath = path.join(logDir, filename);
-                
-                if (!fs.existsSync(logDir)) {
-                    fs.mkdirSync(logDir, { recursive: true });
-                }
-                
-                fs.writeFileSync(logPath, logContent);
-                this.info(EventCategory.SYSTEM, 'logs_exported', `Events exported to ${logPath}`, {
-                    eventCount: allEvents.length,
-                    path: logPath
-                });
-            }
-        } catch (error) {
-            this.error(EventCategory.ERROR, 'export_failed', 'Failed to export logs', { error: error.toString() });
-        }
-    }
-
-    private formatEventsForExport(events: EventEntry[]): string {
+    exportLogsToText(): string {
+        const events = this.getAllEvents();
         const header = `=== Game Event Log Export ===\n`;
         const metadata = `Export Time: ${new Date().toISOString()}\n`;
         const stats = `Total Events: ${events.length}\n`;
         const config = `Config: ${JSON.stringify(this.config, null, 2)}\n`;
         const separator = `${'='.repeat(50)}\n\n`;
-        
         const eventLines = events.map(entry => {
             const timestamp = new Date(entry.timestamp).toISOString();
             const level = LogLevel[entry.level];
             const contextStr = entry.context ? ` | Context: ${JSON.stringify(entry.context)}` : '';
             const sourceStr = entry.source ? ` [${entry.source}]` : '';
-            
             return `[${timestamp}] [${level}] [${entry.category.toUpperCase()}] [${entry.type}] ${entry.message}${sourceStr}${contextStr}`;
         }).join('\n');
-        
         return header + metadata + stats + config + separator + eventLines;
     }
 
-    /**
-     * Cleanup methods
-     */
-    clearLogs(): void {
-        const totalCleared = this.eventBuffer.length;
-        this.eventBuffer = [];
-        
-        this.info(EventCategory.SYSTEM, 'logs_cleared', `Cleared ${totalCleared} events`);
-    }
-
-    dispose(): void {
-        this.clearLogs();
-        this.listeners = [];
-        this.gameEvents = [];
-        this.info(EventCategory.SYSTEM, 'eventstack_disposed', 'Event stack disposed');
-    }
-
-    /**
-     * Scene-level debug category management
-     */
-    
-    /**
-     * Enable a debug category for development work
-     */
+    // --- Debug category management (legacy compatibility, still useful for UI/tools) ---
     enableDebugCategory(category: EventCategory): boolean {
         if (!DEBUG_CATEGORIES.includes(category)) {
             this.warn(EventCategory.SYSTEM, 'invalid_debug_category', 
@@ -578,44 +251,30 @@ export class EventStack {
                 { category, availableDebugCategories: DEBUG_CATEGORIES });
             return false;
         }
-        
         const wasEnabled = this.config.enabledCategories.has(category);
         this.config.enabledCategories.add(category);
-        
         if (!wasEnabled) {
             this.info(EventCategory.SYSTEM, 'debug_category_enabled', 
                 `Debug category '${category}' enabled for this session`, 
                 { category, totalEnabledCategories: this.config.enabledCategories.size });
         }
-        
         return true;
     }
-    
-    /**
-     * Disable a debug category to reduce log noise
-     */
     disableDebugCategory(category: EventCategory): boolean {
         if (category === EventCategory.ERROR) {
             this.warn(EventCategory.SYSTEM, 'cannot_disable_errors', 
                 'Cannot disable ERROR category - errors are always logged');
             return false;
         }
-        
         const wasEnabled = this.config.enabledCategories.has(category);
         this.config.enabledCategories.delete(category);
-        
         if (wasEnabled) {
             this.info(EventCategory.SYSTEM, 'debug_category_disabled', 
                 `Debug category '${category}' disabled for this session`, 
                 { category, totalEnabledCategories: this.config.enabledCategories.size });
         }
-        
         return true;
     }
-    
-    /**
-     * Enable multiple debug categories at once
-     */
     enableDebugCategories(categories: EventCategory[]): EventCategory[] {
         const enabled: EventCategory[] = [];
         categories.forEach(category => {
@@ -623,19 +282,13 @@ export class EventStack {
                 enabled.push(category);
             }
         });
-        
         if (enabled.length > 0) {
             this.info(EventCategory.SYSTEM, 'multiple_debug_categories_enabled', 
                 `Enabled ${enabled.length} debug categories`, 
                 { enabledCategories: enabled });
         }
-        
         return enabled;
     }
-    
-    /**
-     * Disable multiple debug categories at once
-     */
     disableDebugCategories(categories: EventCategory[]): EventCategory[] {
         const disabled: EventCategory[] = [];
         categories.forEach(category => {
@@ -643,25 +296,18 @@ export class EventStack {
                 disabled.push(category);
             }
         });
-        
         if (disabled.length > 0) {
             this.info(EventCategory.SYSTEM, 'multiple_debug_categories_disabled', 
                 `Disabled ${disabled.length} debug categories`, 
                 { disabledCategories: disabled });
         }
-        
         return disabled;
     }
-    
-    /**
-     * Enable all debug categories (for comprehensive debugging)
-     */
     enableAllDebugCategories(): void {
         const previouslyEnabled = Array.from(this.config.enabledCategories);
         DEBUG_CATEGORIES.forEach(category => {
             this.config.enabledCategories.add(category);
         });
-        
         this.info(EventCategory.SYSTEM, 'all_debug_categories_enabled', 
             'All debug categories enabled for comprehensive debugging', 
             { 
@@ -670,14 +316,9 @@ export class EventStack {
                 debugCategoriesEnabled: DEBUG_CATEGORIES
             });
     }
-    
-    /**
-     * Reset to default categories (game events + errors only)
-     */
     resetToDefaultCategories(): void {
         const previousCategories = Array.from(this.config.enabledCategories);
         this.config.enabledCategories = new Set(DEFAULT_ENABLED_CATEGORIES);
-        
         this.info(EventCategory.SYSTEM, 'categories_reset_to_default', 
             'Event categories reset to default (game events + errors only)', 
             { 
@@ -686,25 +327,36 @@ export class EventStack {
                 disabledDebugCategories: DEBUG_CATEGORIES
             });
     }
-    
-    /**
-     * Get current category status
-     */
     getCategoryStatus(): { enabled: EventCategory[], disabled: EventCategory[], debugAvailable: EventCategory[] } {
         const allCategories = Object.values(EventCategory);
         const enabled = allCategories.filter(cat => this.config.enabledCategories.has(cat));
         const disabled = allCategories.filter(cat => !this.config.enabledCategories.has(cat));
-        
         return {
             enabled,
             disabled,
             debugAvailable: DEBUG_CATEGORIES
         };
     }
-}
 
-// Create and export the global eventStack instance
-export const eventStack = new EventStack();
+    /**
+     * Add a listener for new log entries (UI integration)
+     */
+    public addListener(listener: EventListener): void {
+        this.listeners.push(listener);
+    }
+
+    /**
+     * Remove a previously added log listener
+     */
+    public removeListener(listener: EventListener): void {
+        const idx = this.listeners.indexOf(listener);
+        if (idx !== -1) this.listeners.splice(idx, 1);
+    }
+
+    // --- Deprecated: Event bus features (do not use in new code) ---
+    // ...existing code (pushGameEvent, emit, subscribe, etc.)...
+    // Marked as deprecated and to be removed after migration.
+}
 
 // Type alias for backward compatibility with UI
 export type EventLogEntry = EventEntry;

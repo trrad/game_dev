@@ -2,23 +2,40 @@
 
 This document provides AI assistants with comprehensive context about the Train Trading Game project for effective development assistance.
 
+## 🎯 Current Mission: Scene Graph Migration
+
+**PRIMARY OBJECTIVE**: We are actively migrating from a mixed architecture to a unified **Scene Graph Event System** with hierarchical NodeComponent-based entities. This is the top priority for all development work.
+
+### Migration Status Overview
+✅ **COMPLETED**: Scene graph foundation (NodeComponent, GameNodeObject, SceneGraphEventSystem)  
+🔄 **IN PROGRESS**: Entity integration and SceneManager refactoring  
+📋 **NEXT**: System conversion to use scene graph queries and events  
+
+### Key Architecture Principles
+- **All entities extend GameNodeObject** (which includes NodeComponent for scene graph participation)
+- **Events flow through scene graph hierarchy** with DOM-like capture/bubble phases
+- **Voxels are individual NodeObjects** (not instanced) for per-voxel logic and events
+- **Train cars use dual-point rail attachment** for realistic wheel-based movement
+- **Single global root node** managed by SceneManager; EventStack is being deprecated
+
 ## Project Overview
 
 This is an **Entity-Component-System (ECS) based train trading game** built with TypeScript, using Babylon.JS for 3D rendering. The game features modular trains with voxel-based construction, combat against dynamic enemies, and a cooperative multiplayer trading system.
 
 ### Technology Stack
 - **Language**: TypeScript with strict mode
-- **Architecture**: Entity-Component-System (ECS)
+- **Architecture**: Entity-Component-System (ECS) with Scene Graph hierarchy
 - **Rendering**: Babylon.JS for 3D graphics
 - **Build Tool**: Vite
 - **Testing**: Jest
 - **Networking**: Colyseus (planned for multiplayer)
 
 ### Current Development Phase
-The project has undergone systematic refactoring (Phases 1-3) to establish clean ECS architecture:
-- **Phase 1**: Legacy file cleanup and architectural alignment
-- **Phase 2**: Entity/Component refactoring with constructor-based initialization
-- **Phase 3**: Naming standardization and utility consolidation
+The project is in **Phase 2** of the Scene Graph Migration:
+- **Phase 1**: ✅ Scene graph foundation established
+- **Phase 2**: 🔄 Entity integration and event system unification
+- **Phase 3**: 📋 Component refactoring and dependency validation
+- **Phase 4**: 📋 System integration with scene graph queries
 
 ## Project Structure
 
@@ -30,20 +47,23 @@ evo_td/
 ├── ecs-app.ts                # Main ECS application entry point
 ├── engine/                   # Engine framework (generic, reusable)
 │   ├── core/                 # Core ECS framework
-│   │   ├── GameObject.ts
-│   │   ├── Component.ts
-│   │   ├── SceneManager.ts
-│   │   ├── TimeManager.ts
-│   │   └── EventStack.ts
+│   │   ├── GameObject.ts     # Base game object
+│   │   ├── GameNodeObject.ts # Scene graph participating game object
+│   │   ├── SceneManager.ts   # Scene and rendering management
+│   │   ├── TimeManager.ts    # Time management system
+│   │   └── EventStack.ts     # Legacy event system (being deprecated)
 │   ├── components/           # ECS components (engine-level)
-│   │   ├── NodeComponent.ts
+│   │   ├── Component.ts      # Base component class
+│   │   ├── NodeComponent.ts  # Scene graph node with hierarchical events
 │   │   ├── PositionComponent.ts
 │   │   ├── HealthComponent.ts
 │   │   ├── MovementComponent.ts
 │   │   ├── RadiusComponent.ts
 │   │   └── RenderComponent.ts
-│   ├── scene/
-│   │   └── SceneManager.ts
+│   ├── scene/                # Scene graph and event systems
+│   │   ├── SceneManager.ts   # Scene graph aware scene manager
+│   │   ├── SceneGraphEventSystem.ts  # Hierarchical event system
+│   │   └── SceneNodeDebugger.ts     # Debug tools for scene graph
 │   ├── utils/                # Engine utilities
 │   │   ├── Logger.ts
 │   │   ├── MathUtils.ts
@@ -77,41 +97,97 @@ evo_td/
 - **Constructor Initialization**: Components initialize in constructors, NOT separate `initialize()` methods
 - **Functional Components**: Components have methods like `getPosition()`, `setPosition()`, `takeDamage()`
 - **Type Safety**: All components extend `Component<T>` with typed data
-- **Component Registration**: Add components to entities with `entity.addComponent(component)`
+## 🚀 Migration-Specific Development Guidelines
 
-### Entity Creation Patterns (Current Reality)
-- **Direct Construction**: Create entities directly (`new Train(config)`, `new Enemy(config)`)
-- **Component Assembly**: Entities add all required components in their constructors
-- **Automatic Tracking**: Entities register with `ObjectTracker` automatically when created
-- **ID-Based Lookup**: Use `ObjectTracker.getById(id)` to find any entity by ID or `ObjectTracker.getByType(type)` for all entities of a type
+### Scene Graph Entity Pattern (NEW)
+All new entities should extend `GameNodeObject` for scene graph participation:
 
-### System Coordination (How It Actually Works)
-- **Specialized Systems**: Each system manages specific mechanics (TrainSystem, EnemySystem, UISystem)
-- **Entity Queries**: Systems find entities via `ObjectTracker.getByType()` or maintain their own collections
-- **Structured Logging**: Use `Logger.log(category, message, data)` with categories for observability
-- **Frame-Based Updates**: All update methods receive `deltaTime` parameter
+```typescript
+export class NewEntity extends GameNodeObject {
+    constructor(config: NewEntityConfig, parentNode?: NodeComponent) {
+        super('newEntity', undefined, scene, parentNode);
+        
+        // Position is now handled by this.node
+        this.node.setLocalPosition(config.position.x, config.position.y, config.position.z);
+        
+        // Add other components as needed
+        this.addComponent(new HealthComponent(config.health));
+    }
+}
+```
 
-### Rendering Architecture (Current Implementation)
-- **Component-Based**: Each visual element has a corresponding render component
-- **Hierarchical**: `CarRenderComponent` manages `VoxelRenderComponent` instances
-- **Auto-Discovery**: `SceneManager` automatically finds and renders entities with render components
-- **Resource Management**: Render components handle their own disposal and cleanup
-- **Specialized Systems**: Each system manages specific mechanics (TrainSystem, EnemySystem)
-- **Entity Queries**: Systems find entities via `ObjectTracker.getByType()` or maintain collections
-- **Structured Logging**: Use `Logger` with categories for observability
-- **Frame-Based Updates**: All update methods receive `deltaTime` parameter
+### Event System Migration (IN PROGRESS)
+Replace old event patterns with scene graph events:
 
-### Rendering Architecture
-- **Component-Based**: Each visual element has a corresponding render component
-- **Hierarchical**: CarRenderComponent manages VoxelRenderComponent instances
-- **Auto-Discovery**: SceneManager automatically finds and renders entities with render components
-- **Resource Management**: Render components handle their own disposal and cleanup
+```typescript
+// OLD - GameObject.emit (being deprecated)
+this.emit('damage:taken', { amount: 10 });
+
+// NEW - Scene graph events
+this.node.emit('damage:taken', { amount: 10 });
+this.node.emitToParent('car:damaged', { carId: this.id });
+this.node.emitToRadius('explosion', { damage: 50 }, 15);
+```
+
+### Component Dependencies (NEXT)
+Use dependency validation in component constructors:
+
+```typescript
+export class WeaponComponent extends Component<WeaponComponentData> {
+    constructor(data: WeaponComponentData) {
+        super('weapon', data);
+        this.requiresComponents(['node', 'health']); // Validates at runtime
+    }
+}
+```
+
+### Scene Graph Query Patterns (NEXT)
+Replace direct entity references with scene graph queries:
+
+```typescript
+// OLD - Direct entity management
+const enemies = ObjectTracker.getByType('enemy');
+
+// NEW - Scene graph queries
+const enemies = SceneEvents.getNodesInRadius(position, detectionRange, 
+    (node) => node.gameObject?.type === 'enemy');
+```
+
+## Current Architecture Status
+
+### ✅ Working Systems (Use These)
+- **NodeComponent**: Full hierarchical transform and event system
+- **GameNodeObject**: Base class for all scene graph entities
+- **SceneGraphEventSystem**: DOM-like event propagation with spatial targeting
+- **RadiusComponent**: Spatial queries and collision detection
+
+### 🔄 Migration In Progress (Help Required)
+- **Entity Integration**: Convert Train, TrainCar, Enemy to GameNodeObject
+- **SceneManager**: Update to use scene graph auto-registration
+- **Event Unification**: Replace GameObject.emit with node.emit
+- **System Coordination**: Convert to scene graph queries
+
+### 📋 Legacy Systems (Being Replaced)
+- **EventStack**: Use SceneGraphEventSystem instead
+- **Direct mesh management**: Use NodeComponent transforms
+- **Manual position syncing**: Use hierarchical transforms
 
 ## Development Guidelines
 
 ### Adding New Features
 
-1. **New Component**:
+1. **New Scene Graph Entity**:
+   ```typescript
+   export class NewEntity extends GameNodeObject {
+       constructor(config: NewEntityConfig, parentNode?: NodeComponent) {
+           super('newEntity', undefined, scene, parentNode);
+           this.node.setLocalPosition(config.position.x, config.position.y, config.position.z);
+           this.addComponent(new HealthComponent(config.health));
+       }
+   }
+   ```
+
+2. **New Component**:
    ```typescript
    export interface NewComponentData {
        property: string;
@@ -120,27 +196,46 @@ evo_td/
    export class NewComponent extends Component<NewComponentData> {
        constructor(data: NewComponentData) {
            super('componentName', data);
-       }
-   }
+           this.requiresComponents(['node']); // Scene graph participation
    ```
 
-2. **New System**:
+3. **New System**:
    ```typescript
    export class NewSystem {
        update(deltaTime: number): void {
-           const entities = ObjectTracker.getByType('entityType');
-           // Process entities
+           // NEW - Scene graph queries
+           const entities = SceneEvents.getNodesInRadius(centerPoint, radius, 
+               (node) => node.gameObject?.type === 'entityType');
+           
+           // Process entities using scene graph events
+           entities.forEach(entity => {
+               entity.emit('system:update', { deltaTime });
+           });
        }
    }
    ```
 
-3. **New Entity**:
+4. **Migration Example** (Converting existing entity):
    ```typescript
-   export class NewEntity extends GameObject {
-       constructor(config: NewEntityConfig) {
-           super('entityType');
-           this.addComponent(new PositionComponent());
-           // Add other required components
+   // BEFORE
+   export class Train extends GameObject {
+       constructor(config: TrainConfig) {
+           super('train');
+           this.addComponent(new PositionComponent(config.position));
+       }
+   }
+   
+   // AFTER
+   export class Train extends GameNodeObject {
+       constructor(config: TrainConfig, parentNode?: NodeComponent) {
+           super('train', undefined, scene, parentNode);
+           this.node.setLocalPosition(config.position.x, config.position.y, config.position.z);
+           
+           // Train cars become children of this node
+           config.cars.forEach((carConfig, index) => {
+               const car = new TrainCar(carConfig, this.node);
+               this.node.addChild(car.node);
+           });
        }
    }
    ```
@@ -148,18 +243,28 @@ evo_td/
 ### Code Standards
 
 - **Naming**: Use consistent, descriptive names
-  - Components: `PositionComponent`, `HealthComponent`
+  - Components: `PositionComponent`, `HealthComponent`, `NodeComponent`
   - Systems: `EnemySystem`, `TrainSystem`
-  - Entities: `Train`, `Enemy`, `Station`
+  - Entities: `Train`, `Enemy`, `Station` (all extending `GameNodeObject`)
 - **File Organization**: One class per file, file name matches class name
 - **Imports**: Use relative imports, group by source (core, utils, etc.)
 - **Error Handling**: Use proper TypeScript types, handle null/undefined
-- **Performance**: Avoid object creation in update loops
+- **Performance**: Avoid object creation in update loops, use scene graph queries efficiently
+
+### Migration Priority Order
+
+1. **HIGH**: Convert core entities (Train, TrainCar, Enemy) to `GameNodeObject`
+2. **HIGH**: Update SceneManager to use scene graph auto-registration
+3. **MEDIUM**: Replace event patterns with scene graph events
+4. **MEDIUM**: Convert systems to use scene graph queries
+5. **LOW**: Add component dependency validation
+6. **LOW**: Optimize rendering with scene graph hierarchy
 
 ### Testing
 - Unit tests in `src/tests/unit/`
 - Mock objects in `src/tests/mocks/`
 - Test components, systems, and entities separately
+- **NEW**: Test scene graph event propagation and hierarchy
 - Use descriptive test names and group related tests
 
 ## Current Features
@@ -168,9 +273,11 @@ evo_td/
 - **Train System**: Manages train movement, car coupling, and rail navigation
 - **Enemy System**: Handles enemy AI, pathfinding, and combat
 - **UI System**: Manages user interface updates and interactions
+- **Scene Graph System**: Hierarchical entity management and event propagation
 
 ### Rendering
-- **Voxel-based**: All entities rendered as colored voxel grids
+- **Voxel-based**: All entities rendered as colored voxel grids (individual objects, not instanced)
+- **Hierarchical**: Parent-child relationships for trains, cars, and attachments
 - **Component-based**: Rendering handled by render components
 - **Canvas**: Direct HTML5 Canvas rendering for performance
 
@@ -190,19 +297,40 @@ evo_td/
 - `HealthComponent`: Health/damage system
 - `MovementComponent`: Movement with velocity and direction
 - `RailPositionComponent`: Position on rail network
-- `TrainCarPositionComponent`: Position within a train
+- `NodeComponent`: Scene graph participation with hierarchical transforms and events
+- `TrainCarPositionComponent`: Position within a train (being migrated to NodeComponent)
 
 ### Key Entities
-- `Train`: Multi-car train entity with complex behavior
-- `TrainCar`: Individual train cars with different types
-- `Enemy`: AI-controlled hostile entities
-- `Station`: Trading posts and interaction points
+- `Train`: Multi-car train entity with complex behavior (migrating to GameNodeObject)
+- `TrainCar`: Individual train cars with different types (migrating to GameNodeObject)
+- `Enemy`: AI-controlled hostile entities (migrating to GameNodeObject)
+- `Station`: Trading posts and interaction points (migrating to GameNodeObject)
 
 ### Utilities
 - `MathUtils`: Distance, direction, vector math
 - `GeometryUtils`: Bounding boxes, collision detection
-- `EventStack`: Pub/sub event system
+- `EventStack`: Pub/sub event system (being deprecated in favor of SceneGraphEventSystem)
 - `Logger`: Centralized logging with levels
+
+## 📋 Migration Checklist
+
+### Phase 2: Entity Integration (CURRENT)
+- ☐ **Convert Train to GameNodeObject** - Update train entity to use scene graph
+- ☐ **Convert TrainCar to GameNodeObject** - Train cars as children of train node
+- ☐ **Convert Enemy to GameNodeObject** - Enemies participate in scene graph
+- ☐ **Convert Station to GameNodeObject** - Stations as scene graph nodes
+- ☐ **Update SceneManager** - Use scene graph auto-registration instead of direct mesh management
+
+### Phase 3: Event System Unification (NEXT)
+- ☐ **Replace GameObject.emit** - Use node.emit for all event emission
+- ☐ **Update event listeners** - Convert to scene graph event listeners
+- ☐ **Connect EventStack** - Route legacy events through scene graph
+- ☐ **System conversion** - Update systems to use scene graph events
+
+### Phase 4: System Integration (PLANNED)
+- ☐ **Scene graph queries** - Replace direct entity references with spatial queries
+- ☐ **Component dependencies** - Add validation for required components
+- ☐ **Performance optimization** - Optimize scene graph queries and event propagation
 
 ## Common Tasks
 
@@ -211,19 +339,22 @@ evo_td/
 2. Check `ObjectTracker` for memory leaks
 3. Verify component registration in `ecs-app.ts`
 4. Ensure entities are added to `EntityManager`
+5. **NEW**: Use `SceneNodeDebugger` for scene graph hierarchy visualization
 
 ### Performance
 1. Minimize object creation in update loops
 2. Cache frequently accessed components
-3. Use efficient entity queries
+3. Use efficient entity queries (prefer scene graph queries)
 4. Profile with browser dev tools
+5. **NEW**: Optimize scene graph event propagation with targeted events
 
 ### Adding New Game Mechanics
-1. Identify required components
+1. Identify required components (ensure NodeComponent dependency)
 2. Create or modify systems to handle new behavior
 3. Update UI if user interaction is needed
 4. Add appropriate rendering components
 5. Write tests for new functionality
+6. **NEW**: Consider scene graph event patterns for entity communication
 
 ## Development Workflow
 
@@ -232,6 +363,7 @@ evo_td/
 3. **Implement Incrementally**: Start with components, then systems, then integration
 4. **Test Thoroughly**: Unit tests and manual testing
 5. **Document Changes**: Update relevant documentation
+6. **NEW**: **Follow Migration Patterns**: Use GameNodeObject for new entities, scene graph events for communication
 
 ## Common Pitfalls to Avoid
 
@@ -241,6 +373,9 @@ evo_td/
 - **Memory Leaks**: Always remove entities from managers when destroyed
 - **Performance**: Avoid expensive operations in update loops
 - **Type Safety**: Use proper TypeScript types, avoid `any`
+- **NEW**: **Scene Graph Violations**: Don't bypass NodeComponent for positioning/hierarchy
+- **NEW**: **Event Anti-patterns**: Don't mix old ComponentEvents with new SceneGraphEvents
+- **NEW**: **Legacy Dependencies**: Don't add new dependencies on EventStack (use SceneGraphEventSystem)
 
 ## Current Limitations and TODOs
 
@@ -312,31 +447,7 @@ This reality check helps you give accurate advice based on what's actually imple
 
 ## Development Tools and Batch Update Patterns
 
-The project includes proven patterns for large-scale refactoring and code changes in the `dev_tools/` directory.
-
-### Batch Update Scripts for Large Refactoring
-
-When doing systematic changes across many files (like the engine/game directory restructure), use scripted approaches rather than manual file-by-file edits:
-
-**Key Resources:**
-- `dev_tools/batch_file_updater_template.ps1` - Generalized template for batch file updates
-- `dev_tools/import_path_migration_example.ps1` - Example of import path refactoring
-- `dev_tools/README.md` - Complete documentation of the batch update pattern
-
-**Success Story:**
-The import path migration during engine/game separation:
-- Reduced compilation errors from 350+ to 50 (90% improvement)
-- Updated 41 files across 2 script runs
-- Systematic, trackable, and reversible changes
-
-### When to Use Batch Scripts
-
-Consider scripted approaches for:
-- **Import path changes** (renaming directories, restructuring modules)
-- **API refactoring** (method renames, parameter changes)
-- **Component/class renames** (updating all references consistently)
-- **Configuration format changes** (updating config files across the project)
-- **Library migrations** (switching from one library to another)
+The project includes some patterns for large-scale refactoring and code changes in the `dev_tools/` directory. These should be used sparingly, as they have introduced significant erros when misused in the past.
 
 ### AI-Assisted Refactoring Best Practices
 

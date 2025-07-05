@@ -397,6 +397,28 @@ export class SceneGraphEventSystem {
             this.traverseNodes(child, callback, depth + 1);
         }
     }
+    
+    /**
+     * Register a global event logger to forward all scene events to EventStack
+     * This monkey-patches dispatchEvent to call the logger after every event
+     */
+    registerGlobalLogger(logger: (event: SceneGraphEvent) => void): void {
+        const originalDispatch = this.dispatchEvent.bind(this);
+        this.dispatchEvent = (event: SceneGraphEvent): boolean => {
+            const result = originalDispatch(event);
+            try {
+                // DEBUG: Log every node-based event to the console for verification
+                if (typeof window !== 'undefined' && window && window.console) {
+                    console.log('[SceneGraphEventSystem] Node event:', event.type, event);
+                }
+                logger(event);
+            } catch (err) {
+                // Don't let logger errors break event flow
+                console.error('Global event logger error:', err);
+            }
+            return result;
+        };
+    }
 }
 
 // Global instance for scene graph events

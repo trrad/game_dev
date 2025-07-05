@@ -1,6 +1,7 @@
 import { Vector3, Mesh } from "@babylonjs/core";
-import { GameObject } from "../../../engine/core/GameObject";
+import { GameNodeObject } from "../../../engine/core/GameNodeObject";
 import { Logger, LogCategory } from "../../../engine/utils/Logger";
+import { RailPathComponent } from '../../components/RailPathComponent';
 
 export interface RailConfig {
     id: string;
@@ -23,13 +24,13 @@ export interface RailState {
  * Rail represents a connection between two stations.
  * Rails provide path information for trains and can affect their performance.
  */
-export class Rail extends GameObject {
+export class Rail extends GameNodeObject {
     private _config: RailConfig;
     private _state: RailState;
     private _mesh?: Mesh;
 
-    constructor(config: RailConfig) {
-        super('rail');
+    constructor(config: RailConfig, eventStack?: any, scene?: any, parentNode?: any) {
+        super('rail', eventStack, scene, parentNode);
         this._config = config;
         
         const totalDistance = this.calculateTotalLength();
@@ -39,6 +40,9 @@ export class Rail extends GameObject {
             totalDistance: totalDistance,
             meshCreated: false
         };
+
+        // Attach RailPathComponent for path logic
+        this.addComponent(new RailPathComponent({ points: config.trackPoints }));
 
         // Set up metrics (numeric only)
         this.metrics.set('distance', totalDistance);

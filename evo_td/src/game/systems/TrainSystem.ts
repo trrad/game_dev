@@ -211,61 +211,27 @@ export class TrainSystem {
     private updateTrainRailMovement(train: Train, deltaTime: number): void {
         const railPosition = train.getComponent<RailPositionComponent>('railPosition');
         const railMovement = train.getComponent<RailMovementComponent>('railMovement');
-        const positionComponent = train.getComponent<PositionComponent>('position');
 
-        if (!railPosition || !railMovement || !positionComponent) return;
-
-        // Only update if train is on a rail
+        if (!railPosition || !railMovement) return;
         if (!railPosition.isOnRail()) return;
-
         const railId = railPosition.getRailId();
         if (!railId) return;
-
         const rail = this.rails.get(railId);
         if (!rail) return;
-
-        // Get time scaling factor from TimeManager
         const timeScale = this.timeManager ? this.timeManager.getSpeed() : 1;
         const scaledDeltaTime = deltaTime * timeScale;
 
-        // Update movement state (acceleration/deceleration)
-        railMovement.updateMovement(scaledDeltaTime);
+        // === Node-based movement ===
+        // Update movement state and node transform
+        railMovement.updateMovement(scaledDeltaTime, this.rails);
 
-        // Calculate progress delta based on current speed and rail length
-        const progressDelta = railMovement.calculateProgressDelta(scaledDeltaTime, rail.totalDistance);
-
-        // Update rail progress
-        railPosition.updateProgress(progressDelta);
-
-        // Calculate world position from rail progress
-        const progress = railPosition.getEffectiveProgress();
-        const worldPosition = rail.getPositionAt(progress);
-        const worldDirection = rail.getDirectionAt(progress);
-
-        // Update actual world position
-        positionComponent.setPosition({
-            x: worldPosition.x,
-            y: worldPosition.y,
-            z: worldPosition.z
-        });
-
-        // Calculate rotation from direction vector
-        if (worldDirection) {
-            const rotationY = Math.atan2(worldDirection.x, worldDirection.z);
-            positionComponent.setRotation({
-                x: 0,
-                y: rotationY,
-                z: 0
-            });
+        // Check if journey is complete
+        if (railPosition.hasReachedEnd()) {
+            this.completeJourney(train);
         }
 
         // Update car positions if this train has cars
         this.updateTrainCarPositions(train);
-
-        // Check if journey is complete - simply based on reaching the end
-        if (railPosition.hasReachedEnd()) {
-            this.completeJourney(train);
-        }
     }
 
     /**
@@ -293,12 +259,9 @@ export class TrainSystem {
 
         for (let i = 0; i < trainCars.length; i++) {
             const car = trainCars[i];
-            const carPositionComponent = car.getComponent<PositionComponent>('position');
-
-            if (!carPositionComponent) {
-                Logger.warn(LogCategory.TRAIN, `TrainCar ${car.carId} missing position component`);
-                continue;
-            }
+            const carRailPos = car.getComponent('railPosition');
+            if (!carRailPos) continue;
+            const typedCarRailPos = carRailPos as import('../components/RailPositionComponent').RailPositionComponent;
 
             // Calculate this car's progress along the rail based on its offset distance
             const railLength = rail.totalDistance;
@@ -312,51 +275,14 @@ export class TrainSystem {
                 carProgress = Math.min(1, frontProgress + carProgressOffset);
             }
 
-            // Get this car's world position and direction from the rail
-            const carWorldPosition = rail.getPositionAt(carProgress);
-            const carDirection = rail.getDirectionAt(carProgress);
-
-            if (carWorldPosition && carDirection) {
-                // Update car's position component
-                carPositionComponent.setPosition({
-                    x: carWorldPosition.x,
-                    y: carWorldPosition.y,
-                    z: carWorldPosition.z
-                });
-
-                // Update car's rotation to align with rail direction
-                // CRITICAL: Ensure car and voxel grid rotation aligns with track direction
-                // The voxel grid's X-axis should align with the track direction vector
-                // For reverse direction, flip the rotation 180 degrees
-                let carRotationY = Math.atan2(carDirection.z, carDirection.x);
-                if (railPosition.getDirection() === 'reverse') {
-                    carRotationY += Math.PI;
-                }
-
-                carPositionComponent.setRotation({
-                    x: 0,
-                    y: carRotationY,
-                    z: 0
-                });
-
-                // Debug logging for voxel alignment
-                Logger.log(LogCategory.TRAIN, `Car ${car.carId} aligned with track`, {
-                    carProgress,
-                    direction: railPosition.getDirection(),
-                    carRotationY: carRotationY * (180 / Math.PI), // Convert to degrees for readability
-                    trackDirection: `(${carDirection.x.toFixed(3)}, ${carDirection.z.toFixed(3)})`
-                });
-
-                // Update all voxels in this car to match the car's new position and rotation
-                this.updateCarVoxelPositions(car, carWorldPosition, carRotationY);
-            }
+            typedCarRailPos.setRailPosition(rail.railId, carProgress, railPosition.getDirection());
+            typedCarRailPos.updateNodeTransform(this.rails);
 
             // Update offset for next car (calculate actual voxel-based length + spacing)
-            const voxelComponent = car.getComponent<TrainCarVoxelComponent>('trainCarVoxel');
+            const voxelComponent = car.getComponent('trainCarVoxel');
             const actualCarLength = voxelComponent
-                ? voxelComponent.getDimensions().length * 0.5  // Use voxel spacing from TrainCar
-                : car.length; // Fallback to logical length
-
+                ? (voxelComponent as TrainCarVoxelComponent).getDimensions().length * 0.5
+                : car.length;
             currentOffset += actualCarLength + carSpacing;
         }
     }

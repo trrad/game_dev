@@ -1,4 +1,25 @@
 /**
+ * EventLogUI (Event Log User Interface)
+ *
+ * ROLE:
+ *   - Pure display and user-interaction component for the event log.
+ *   - Subscribes to EventStack for log updates; does NOT listen to the scene graph directly.
+ *   - Does not manage or transform log state; all log normalization, filtering, and buffering is handled by EventStack.
+ *   - Provides UI for filtering, toggling, and exporting logs, but does not mutate the underlying log buffer.
+ *
+ * ARCHITECTURE PATTERN:
+ *   - EventStack is the middleware logger/observer: it listens to the root node of the scene graph and provides a normalized log stream.
+ *   - EventLogUI subscribes to EventStack for log updates and displays them, applying only UI-level filtering (e.g., category, collapsed state).
+ *   - This separation ensures the UI remains simple, testable, and decoupled from the event system and log state management.
+ *
+ *   - Do NOT have EventLogUI listen to the scene graph or emit log events directly; always go through EventStack.
+ *
+ *   - If you need to add a new log type or filter, update EventStack, not EventLogUI.
+ *
+ * See EventStack.ts for more details on the event logging architecture.
+ */
+
+/**
  * Event Log UI Component
  * Provides a toggleable event/console log window for game events
  */
@@ -89,13 +110,17 @@ export class EventLogUI {
     }
 
     private subscribeToEvents(): void {
-        this.unsubscribeEventLog = this.eventStack.onEventLog((entry: EventLogEntry) => {
+        this.unsubscribeEventLog = () => this.eventStack.removeListener(this._eventListener);
+        this._eventListener = (entry: EventLogEntry) => {
             this.addEventEntry(entry);
-        });
+        };
+        this.eventStack.addListener(this._eventListener);
     }
 
+    private _eventListener: (entry: EventLogEntry) => void;
+
     private populateExistingEvents(): void {
-        const existingEvents = this.eventStack.getRecentEventLog(this.maxEntries);
+        const existingEvents = this.eventStack.getRecentEvents(this.maxEntries);
         existingEvents.forEach(entry => this.addEventEntry(entry, false));
         this.scrollToBottom();
     }
@@ -285,6 +310,13 @@ export class EventLogUI {
      */
     public getCollapsedState(): boolean {
         return this.isCollapsed;
+    }
+
+    /**
+     * Public method to show the event log UI
+     */
+    public show(): void {
+        this.container.style.display = 'block';
     }
 
     /**

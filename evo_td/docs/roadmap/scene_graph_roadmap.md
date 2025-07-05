@@ -1,320 +1,574 @@
-# Scene Graph Implementation Roadmap
+# Migration Guide
 
-This document outlines the step-by-step implementation plan for integrating a hierarchical scene graph into our ECS architecture.
+## Overview
 
-## Phase 1: Core Infrastructure (COMPLETED)
+This guide provides step-by-step instructions for migrating the Train Trading Game from the current mixed architecture to the unified Scene Graph Event System. The migration can be done incrementally, allowing the game to remain functional throughout the process.
 
-### ✅ Step 1: SceneNodeComponent Implementation
-- ✅ Created base SceneNodeComponent class (renamed from TransformComponent)
-- ✅ Implemented parent-child relationships
-- ✅ Added local/world transformation methods
-- ✅ Built synchronization with PositionComponent
+**Core Migration Focus**: Entity hierarchy, event unification, and scene graph systems remain the primary objectives. Advanced Babylon.js features are integrated as additional capabilities that build upon these foundations.
 
-### ✅ Step 2: Event System Integration
-- ✅ Implemented scene graph-aware event system
-- ✅ Added event bubbling and capturing
-- ✅ Created spatial event targeting
-- ✅ Integrated events with SceneNodeComponent
+## Migration Phases
 
-### ✅ Step 3: Spatial Components
-- ✅ Created RadiusComponent for spatial operations
-- ✅ Implemented proximity detection and collision
-- ✅ Added helper functions for common spatial operations
-- ✅ Integrated with event system
+### Phase 1: Scene Graph Foundation (Current)
+**Status**: ✅ In Progress  
+**Goal**: Establish scene graph hierarchy for all entities
 
-## Phase 2: SceneManager Integration (CURRENT PHASE)
+### Phase 2: Event System Unification
+**Status**: 🔄 Starting  
+**Goal**: Route all events through scene graph
 
-### Step 1: SceneManager Updates (HIGH PRIORITY)
-- Update SceneManager to use SceneNodeComponent
-- Replace direct mesh registration with scene graph registration
-- Support hierarchical object registration
-- Implement proper transform propagation
+### Phase 3: Component Refactoring
+**Status**: 📋 Planned  
+**Goal**: Implement dependency system and standardize components
 
-### Step 2: Train System Hierarchy
-- Complete TrainCar integration with SceneNodeComponent
-- Establish proper parent-child relationships for Train -> Cars -> Voxels
-- Update Train movement to control entire hierarchy
-- Fix rail positioning to work with scene graph
+### Phase 4: System Integration
+**Status**: 📋 Planned  
+**Goal**: Convert all systems to use scene graph queries and events
 
-### Step 3: Voxel Integration
-- Complete TrainCarVoxel integration with SceneNodeComponent
-- Update voxel positioning to use local coordinates
-- Ensure proper inheritance of transforms
-- Fix attachment positioning using hierarchy
+### Phase 5: Advanced Babylon.js Features
+**Status**: 📋 Future  
+**Goal**: Integrate Path3D, NavigationMesh, visual effects, and skeletal systems
 
-## Phase 3: Spatial Systems Integration
+## Current State Assessment
 
-### Step 1: Collision & Proximity
-- Integrate RadiusComponent with game entities
-- Update collision detection to use scene graph queries
-- Implement spatial event system for proximity triggers
-- Convert enemy detection to use spatial events
+### What's Working
+- `GameNodeObject` base class implemented
+- `NodeComponent` with hierarchical transforms
+- `RadiusComponent` for spatial queries
+- Basic scene graph event system
+- Train→Car→Voxel hierarchy partially implemented
 
-### Step 2: Station & Building Systems
-- Convert static structures to use SceneNodeComponent
-- Implement proper transform hierarchy for buildings
-- Update rendering to leverage scene graph
+### What Needs Migration
+- `SceneManager` still uses direct mesh registration → **Auto-registration via scene graph**
+- Events split between ComponentEvents, GameObject.emit, and scene graph → **Unified scene graph events**
+- Train/Car/Voxel positions updated manually → **Automatic via hierarchy**
+- Systems using direct entity references → **Scene graph queries**
+- Component dependencies not validated → **Dependency validation system**
 
-### Step 3: Debug & Testing
-- Complete SceneNodeDebugger integration
-- Create visualization tools for scene graph
-- Implement hierarchy inspection tools
-- Add performance profiling for scene graph operations
-- Add attachment points for station features
+### New Babylon.js Integration Opportunities
+- **Rails**: Manual spline calculations → **Path3D for deterministic movement**
+- **Enemies**: Basic AI → **NavigationMesh pathfinding + skeletal animation**
+- **Death effects**: Simple removal → **Ragdoll physics (visual only)**
+- **Projectiles**: Basic collision → **Visual effects with physics/logic separation**
+- **Atmosphere**: Basic rendering → **Lens effects and environmental enhancement**
 
-### Step 3: Optimization
-- Implement batched rendering for similar objects
-- Add view frustum culling optimizations
-- Create spatial partition system for large scenes
+## Phase 1: Scene Graph Foundation
 
-## Phase 4: Advanced Features (3-4 weeks)
+### Step 1.1: Convert Entities to GameNodeObject
 
-### Step 1: Shader System
-- Create shader management framework
-- Implement custom material pipeline
-- Add procedural texture generation
-
-### Step 2: Visual Effects
-- Build particle system integration
-- Add post-processing framework
-- Implement environment effects
-
-### Step 3: Animation System
-- Create skeletal animation framework
-- Implement animation blending
-- Add procedural animation capabilities
-
-## Implementation Strategy
-
-### Development Approach
-1. **Incremental Development**: Each component is built and tested individually
-2. **Parallel Systems**: Maintain compatibility with existing systems during transition
-3. **Feature Toggles**: Use flags to switch between old and new systems
-4. **Comprehensive Testing**: Extensive unit and integration testing
-
-### Migration Path
-1. **New Features**: Build using new architecture from the start
-2. **Critical Systems**: Prioritize fixing issues in train/voxel system
-3. **Gradual Conversion**: Move one system at a time to new architecture
-4. **Legacy Support**: Maintain compatibility layers where needed
-
-## Engine/Game Code Separation
-
-In addition to implementing the scene graph, we will restructure the codebase to separate engine code from game-specific code:
-
-### New Directory Structure
-
-```
-src/
-├── engine/                      # Engine-level components (reusable)
-│   ├── core/                    # Core framework
-│   │   ├── Component.ts         # Base component class
-│   │   ├── GameObject.ts        # Base entity class
-│   │   ├── System.ts            # Base system class
-│   │   └── EventStack.ts        # Event management
-│   ├── scene/                   # Scene management
-│   │   ├── SceneManager.ts      # Scene coordination
-│   │   ├── SceneNodeComponent.ts # Hierarchical node management
-│   │   └── CameraManager.ts     # Camera control
-│   ├── rendering/               # Rendering framework
-│   │   ├── RenderResourceManager.ts  # Resource pooling
-│   │   ├── RenderComponent.ts   # Base render component
-│   │   └── MaterialLibrary.ts   # Material management
-│   └── utils/                   # Engine utilities
-│       ├── MathUtils.ts         # Math helpers
-│       └── ObjectTracker.ts     # Entity registry
-│
-├── game/                        # Game-specific components
-│   ├── components/              # Game-specific components
-│   │   ├── TrainComponent.ts    # Train behavior
-│   │   ├── RailComponent.ts     # Rail behavior
-│   │   └── EnemyComponent.ts    # Enemy behavior
-│   ├── entities/                # Game-specific entities
-│   │   ├── Train.ts             # Train entity
-│   │   ├── TrainCar.ts          # Train car entity
-│   │   └── Enemy.ts             # Enemy entity
-│   └── systems/                 # Game-specific systems
-│       ├── TrainSystem.ts       # Train management
-│       └── EnemySystem.ts       # Enemy management
-│
-└── ui/                          # User interface (could be further split)
-    ├── TimeControlsUI.ts        # Time controls
-    └── TrainUI.ts               # Train interface
-```
-
-### Migration Strategy
-
-1. **Create New Structure**: Establish the new directory structure
-2. **Move Engine Components**: Start by moving core engine components
-3. **Update Imports**: Fix import references as files are moved
-4. **Move Game Components**: Then move game-specific components
-5. **Incremental Testing**: Test after each component is moved
-
-## Technical Debt Management
-
-During this refactoring, we'll address these existing issues:
-
-1. **Coordinate System Inconsistencies**: Standardize on right-handed coordinates
-2. **Manual Position Calculations**: Remove error-prone manual transformations
-3. **Memory Management**: Fix potential leaks in render resource handling
-4. **Performance Bottlenecks**: Address individual mesh creation overhead
-5. **Code Organization**: Separate engine and game concerns for better maintainability
-6. **Interface Definitions**: Create clear interfaces between engine and game code
-
-## Success Metrics
-
-The refactoring will be considered successful when:
-
-1. **Visual Correctness**: Voxel rotations properly follow parent objects
-2. **Performance Improvement**: 30%+ increase in FPS with large scenes
-3. **Code Maintainability**: Reduced complexity in spatial transformation code
-4. **Feature Enablement**: New capabilities like LOD and instancing are working
-5. **Code Separation**: Clean boundaries between engine and game code
-6. **Reusability**: Engine components can be reused in different game contexts
-
-## Current Progress
-
-### Completed:
-- ✅ Created new directory structure for engine/game separation
-- ✅ Fixed hierarchical component implementation with proper inheritance
-- ✅ Created RenderResourceManager for optimizing rendering
-- ✅ Updated documentation for component registration and system communication
-- ✅ Added README files for engine and game directories
-- ✅ Renamed TransformComponent to SceneNodeComponent to better reflect its primary purpose
-- ✅ Created SceneNodeDebugger for visualizing hierarchies
-- ✅ Moved core files to new engine structure:
-  - EventStack.ts → engine/core/
-  - TimeManager.ts → engine/core/
-  - SceneManager.ts → engine/scene/
-  - MathUtils.ts, GeometryUtils.ts, Logger.ts, ObjectTracker.ts → engine/utils/
-- ✅ Moved game-specific files:
-  - ConfigManager.ts → game/
-  - StationManager.ts → game/
-- ✅ Completed comprehensive import path migration (2 rounds of bulk updates)
-- ✅ **PROJECT CLEANUP COMPLETE:**
-  - Removed 77 generated .js files from src directory
-  - Updated tsconfig.json to output to separate `dist/` directory
-  - Updated .gitignore to exclude build output
-  - Removed empty directories from refactoring
-  - Source directory is now clean and organized
-- ✅ Started updating import paths in systems and core files
-
-### Currently In Progress:
-- ✅ Updated import paths throughout codebase to use new engine/game structure (2 rounds of bulk updates)
-- ✅ Reduced compilation errors from 350+ to 50 errors (90% reduction!)
-- 🔄 Fixing remaining component usage patterns (getComponent string vs class usage)
-- 🔄 Updating test files with outdated API expectations
-- 🔄 Resolving remaining type compatibility issues
-
-### Progress on Import Migration:
-- Round 1: Updated 20 files with basic import patterns
-- Round 2: Updated 21 additional files with remaining patterns  
-- **Success**: Reduced compilation errors from 350+ to 50 (90% improvement!)
-- **Core Achievement**: All main import path issues resolved
-- Main remaining issues are now functional/behavioral, not structural:
-  - Component usage patterns in TrainCarVoxel.ts (23 errors)
-  - API method mismatches in a few places (EventStack, train methods)
-  - Test file expectations that need updating
-  - Minor Babylon.js API compatibility issues
-
-### Next Critical Steps (Updated Priority):
-
-#### 🚨 **Phase A: Scene Graph Event System (High Priority)**
-Our current ComponentEvents system lacks scene graph awareness. We need:
-1. **Hierarchical Event Propagation**: Events that bubble up/down the scene graph
-2. **Spatial Event Filtering**: Events can target by proximity or hierarchy level
-3. **Event Phases**: Capture and bubble phases like DOM events
-4. **Scene Context**: Events include spatial and hierarchical context
-
-#### 🔄 **Phase B: Entity Integration with SceneGraph (Critical)**
-Major entities need to be converted to use SceneNodeComponent:
-1. **TrainCar Integration**: Cars become children of Train scene node
-2. **TrainCarVoxel Integration**: Voxels become children of Car scene nodes  
-3. **Attachment System**: Attachments use scene hierarchy for proper mounting
-4. **Enemy Integration**: Enemies use scene graph for spatial relationships
-
-#### 💡 **Phase C: Spatial Systems Enhancement**
-Implement generic spatial components for collision and interaction:
-1. **RadiusComponent**: Generic spatial component for collision/proximity/LOD
-2. **Collision Detection**: Leverage scene graph for efficient spatial queries
-3. **Proximity Systems**: AI awareness, interaction zones, trigger areas
-4. **LOD Implementation**: Distance-based optimization using scene hierarchy
-
-#### 🎯 **Phase D: Rendering Optimization**
-1. **Automatic Transform Sync**: Render components follow scene node transforms
-2. **Frustum Culling**: Scene graph-aware visibility determination
-3. **Batching**: Group similar objects in scene hierarchy for performance
-
-## SceneManager Integration Plan
-
-### Current Status
-
-The `SceneManager` class is currently the bridge between our game objects and the rendering system, but it doesn't fully leverage our new scene graph architecture. Here's what needs to be updated:
-
-### 1. Visual Registration Refactoring
-
+**Current Pattern**:
 ```typescript
-// CURRENT APPROACH - Direct mesh registration
-this.sceneManager.registerGameObject(rail, railMesh);
-
-// NEW APPROACH - Scene graph aware registration
-this.sceneManager.registerSceneNode(rail.getComponent('sceneNode'), railVisualMesh);
-```
-
-### 2. Hierarchical Registration
-
-```typescript
-// Current approach - Flat registration
-this.sceneManager.registerGameObject(train, trainMesh);
-this.sceneManager.registerGameObject(trainCar1, car1Mesh);
-this.sceneManager.registerGameObject(trainCar2, car2Mesh);
-
-// New approach - Hierarchical registration
-this.sceneManager.registerHierarchy(train);
-// Child objects auto-registered through scene graph
-```
-
-### 3. Transform Propagation
-
-Currently, the `SceneManager` manually updates positions:
-
-```typescript
-// Current approach
-const posComponent = mapping.gameObject.getComponent<PositionComponent>("position");
-if (posComponent) {
-    const pos = posComponent.getPosition();
-    visual.position.x = pos.x;
-    visual.position.y = pos.y;
-    visual.position.z = pos.z;
+export class Station extends GameObject {
+    constructor(config: StationConfig) {
+        super('station');
+        // Manual position management
+    }
 }
 ```
 
-New approach will leverage SceneNodeComponent's built-in transform hierarchy:
-
+**Migrated Pattern**:
 ```typescript
-// New approach - transforms propagate automatically through the scene graph
-// SceneManager just ensures the root nodes have correct transforms
-const sceneNode = mapping.gameObject.getComponent<SceneNodeComponent>("sceneNode");
-if (sceneNode && sceneNode.hasChanged()) {
-    sceneNode.syncTransformToNode();
+export class Station extends GameNodeObject {
+    constructor(config: StationConfig, parentNode?: NodeComponent) {
+        super('station', scene, parentNode);
+        // Position now handled by node
+        this.node.setLocalPosition(config.position.x, config.position.y, config.position.z);
+    }
 }
 ```
 
-### Implementation Steps
+**Migration Checklist**:
+- ☐ Train extends GameNodeObject
+- ☐ TrainCar extends GameNodeObject  
+- ☐ TrainCarVoxel extends GameNodeObject
+- ☐ Station extends GameNodeObject
+- ☐ Enemy extends GameNodeObject
+- ☐ Projectile extends GameNodeObject
+- ☐ UI elements extend GameNodeObject
 
-1. Add new methods to SceneManager:
-   - `registerSceneNode(sceneNode: SceneNodeComponent, visual?: AbstractMesh): void`
-   - `registerHierarchy(rootGameObject: GameObject): void`
-   - `unregisterHierarchy(rootGameObjectId: string): void`
+### Step 1.2: Establish Hierarchies
 
-2. Update existing visual mappings to track SceneNodeComponent references
+**Current Pattern**:
+```typescript
+// Manual position updates
+this.trainCars.forEach((car, index) => {
+    const offset = index * carSpacing;
+    car.setPosition(trainPos.x - offset, trainPos.y, trainPos.z);
+});
+```
 
-3. Modify the update logic to work with the scene graph:
-   - Only update root nodes, let transforms propagate naturally
-   - Leverage SceneNodeComponent for visibility culling
+**Migrated Pattern**:
+```typescript
+// Automatic via hierarchy
+trainCar.node.setParent(train.node);
+trainCar.node.setLocalPosition(-index * carSpacing, 0, 0);
+// Car follows train automatically!
+```
 
-4. Connect SceneManager to SceneGraphEventSystem for automatic updates
+**Key Hierarchies to Establish**:
+```
+SceneRoot
+├── World
+│   ├── Regions
+│   │   ├── Stations
+│   │   │   └── Buildings
+│   │   └── Rails (🆕 Path3D integration point)
+│   ├── Entities
+│   │   ├── Trains
+│   │   │   └── TrainCars
+│   │   │       └── Voxels
+│   │   │           └── Attachments
+│   │   └── Enemies (🆕 NavigationMesh integration point)
+│   │       └── Mutations
+│   └── Effects (🆕 Visual effects integration point)
+│       └── Projectiles
+├── Systems
+│   ├── TrainSystem
+│   ├── EnemySystem
+│   └── EconomySystem
+└── UI
+    ├── HUD
+    └── Menus
+```
 
-5. Fix specific entity registration in the main app:
-   - Update Train, TrainCar, Rail, Station registrations
-   - Ensure proper parent-child relationships
+### Step 1.3: Update SceneManager
+
+**Current Registration**:
+```typescript
+sceneManager.registerGameObject(train, trainMesh);
+```
+
+**Migrated Registration**:
+```typescript
+// SceneManager discovers renderables via components
+sceneManager.registerHierarchy(train.node);
+// Automatically finds all RenderComponents in hierarchy
+```
+
+**🆕 Babylon.js Integration Considerations**:
+- **Path3D Preparation**: Rails will need spline data structure
+- **Skeleton Support**: Entities may need skeleton attachment points
+- **Physics Bodies**: Visual effects entities need physics impostor setup
+
+## Phase 2: Event System Unification
+
+### Step 2.1: Replace GameObject.emit
+### Or at least modify it to call the node component emit. ie: GameNodeObject.emit(args) -> GameNodeObject.node.emit(args)
+### Can do similar for event listeners -- the high level basic functions of NodeComponent can be re-exposed at the GameObject level just for brevity reasons.
+
+**Current Pattern**:
+```typescript
+this.emit('journey_started', { railId, targetStationId });
+```
+
+**Migrated Pattern**:
+```typescript
+this.node.emit('journey:started', { railId, targetStationId });
+```
+
+### Step 2.2: Replace Event Listeners
+
+**Current Pattern**:
+```typescript
+train.on('damage', (event) => { /* ... */ });
+```
+
+**Migrated Pattern**:
+```typescript
+train.node.addEventListener('damage:taken', (event) => { /* ... */ });
+```
+
+### Step 2.3: Connect EventStack to Scene Graph
+
+**Current**:
+```typescript
+eventStack.info(EventCategory.TRAIN, 'journey_started', 'Train journey started');
+```
+
+**Migrated**:
+```typescript
+// EventStack listens at scene root
+sceneRoot.addEventListener('*', (event) => {
+    eventStack.handleSceneEvent(event);
+}, { capture: true });
+
+// Events automatically logged
+// can also be called via train.emit directly, using an interface that pases calls to the node component for emit/listeners.
+train.node.emit('journey:started', payload); // Auto-logged!
+```
+
+**🆕 Event Types for Babylon.js Integration**:
+```typescript
+// Path3D rail events
+'rail:position:updated' → { progress: number, position: Vector3 }
+'rail:junction:reached' → { junctionId: string, options: string[] }
+
+// NavigationMesh AI events  
+'ai:pathfinding:started' → { target: Vector3, priority: number }
+'ai:pathfinding:completed' → { path: Vector3[], estimatedTime: number }
+
+// Physics/visual events
+'physics:visual:collision' → { visualEffectOnly: true, impact: Vector3 }
+'physics:ragdoll:enabled' → { entity: NodeComponent, mass: number }
+
+// Animation events
+'skeleton:animation:started' → { animationName: string, duration: number }
+'skeleton:bone:attached' → { boneName: string, attachedObject: NodeComponent }
+```
+
+## Phase 3: Component Refactoring
+
+### Step 3.1: Implement Component Dependencies
+
+**Add Base Class**:
+```typescript
+export abstract class DependentComponent<T> extends Component<T> {
+    static dependencies: ComponentDependencies = {
+        required: [],
+        optional: [],
+        provides: []
+    };
+    
+    attachTo(gameObject: GameObject): void {
+        super.attachTo(gameObject);
+        this.validateDependencies();
+    }
+}
+```
+
+**Update Components**:
+```typescript
+export class VoxelRenderComponent extends DependentComponent<RenderConfig> {
+    static dependencies = {
+        required: ['node'],
+        optional: ['health', 'radius'],
+        provides: ['render']
+    };
+}
+```
+
+### Step 3.2: Remove PositionComponent Dependencies
+
+**Current**:
+```typescript
+const pos = entity.getComponent<PositionComponent>('position');
+pos.setPosition({ x: 10, y: 0, z: 5 });
+```
+
+**Migrated**:
+```typescript
+entity.node.setLocalPosition(10, 0, 5);
+// Or for world position:
+entity.node.setWorldPosition(10, 0, 5);
+```
+
+**🆕 New Babylon.js Components**:
+```typescript
+// Path3D component for rail-based movement
+// I think I like having a PathPositionComponent and PathMovementComponent that extend the underying PositionComponent and MovementComponent and are used in wrapping the bablyonJS Node position interface.
+export class RailPathComponent extends DependentComponent<RailConfig> {
+    static dependencies = {
+        required: ['node'],
+        optional: ['physics'],
+        provides: ['rail_movement']
+    };
+    
+    private _path3D: BABYLON.Path3D;
+    private _progress: number = 0;
+    
+    updatePosition(speed: number, deltaTime: number): void {
+        this._progress += speed * deltaTime;
+        const position = this._path3D.getPointAt(this._progress);
+        this._gameObject?.node.setWorldPosition(position.x, position.y, position.z);
+    }
+}
+
+// NavigationMesh component for AI pathfinding
+export class NavigationComponent extends DependentComponent<NavConfig> {
+    static dependencies = {
+        required: ['node'],
+        optional: ['ai'],
+        provides: ['pathfinding']
+    };
+    
+    private _navMesh: BABYLON.RecastJSPlugin;
+    private _currentPath: Vector3[] = [];
+    
+    findPathTo(target: Vector3): Promise<Vector3[]> {
+        return this._navMesh.computePath(
+            this._gameObject?.node.getWorldPosition()!,
+            target
+        );
+    }
+}
+
+// Visual physics component (effects only, no game state)
+export class VisualPhysicsComponent extends DependentComponent<PhysicsConfig> {
+    static dependencies = {
+        required: ['node', 'render'],
+        optional: ['skeleton'],
+        provides: ['visual_physics']
+    };
+    
+    enableRagdoll(): void {
+        // Switch from kinematic to dynamic for visual death effects
+        this._gameObject?.node.emit('physics:ragdoll:request', {
+            visualOnly: true,
+            preserveGameState: true
+        });
+    }
+}
+```
+
+## Phase 4: System Integration
+
+### Step 4.1: Convert System Queries
+
+**Current**:
+```typescript
+export class TrainSystem {
+    private trains: Map<string, Train> = new Map();
+    
+    update(deltaTime: number): void {
+        for (const train of this.trains.values()) {
+            this.updateTrain(train, deltaTime);
+        }
+    }
+}
+```
+
+**Migrated**:
+```typescript
+export class TrainSystem extends GameNodeObject {
+    constructor(parentNode: NodeComponent) {
+        super('system:train', scene, parentNode);
+    }
+    
+    update(deltaTime: number): void {
+        // Query scene graph for trains
+        const trains = this.node.findNodesByType('train');
+        trains.forEach(trainNode => {
+          // not doing position updates in this direct call anymore, but instead automatically based on the node position.
+            this.updateTrain(trainNode.gameObject as Train, deltaTime);
+        });
+    }
+}
+```
+
+### Step 4.2: Event-Based System Communication
+
+**Current**:
+```typescript
+// Direct system references
+this.enemySystem.spawnEnemy(position);
+this.uiSystem.showDamage(amount);
+```
+
+**Migrated**:
+```typescript
+// Event-based
+```typescript
+// Event-based
+this.emit('enemy:spawn:request', { position, type: 'basic' });
+this.emit('ui:damage:display', { amount, worldPosition });
+```
+
+> **Note:** For improved ergonomics, consider defining a shared interface at the `GameNodeObject` level that mirrors basic `emit` and event-listening methods. This allows calls like `this.emit(...)` to delegate to the underlying node, keeping advanced node/event methods on `NodeComponent` as needed. This pattern is cleaner than always using `this.node.emit(...)`.
+```
+
+**🆕 Babylon.js System Integration**:
+```typescript
+export class AdvancedTrainSystem extends GameNodeObject {
+    constructor(parentNode: NodeComponent) {
+        super('system:advanced_train', scene, parentNode);
+        this.setupBabylonIntegration();
+    }
+    
+    private setupBabylonIntegration(): void {
+        // Listen for Path3D rail events
+        this.node.addEventListener('rail:junction:reached', (event) => {
+            this.handleRailJunction(event.payload);
+        });
+        
+        // Listen for visual physics events (don't affect game state)
+        this.node.addEventListener('physics:visual:collision', (event) => {
+            this.spawnVisualEffects(event.payload.impact, event.payload.position);
+        });
+        
+        // Listen for ragdoll requests (visual only)
+        this.node.addEventListener('physics:ragdoll:request', (event) => {
+            if (event.payload.visualOnly) {
+                this.enableVisualRagdoll(event.target);
+            }
+        });
+    }
+}
+```
+
+## Phase 5: Advanced Babylon.js Features
+
+**Status**: 📋 Future Phase  
+**Prerequisites**: Phases 1-4 completed successfully
+
+### Path3D Rail Networks
+- Convert manual spline calculations to Path3D
+- Implement rail junctions and switches
+- Add train scheduling and collision avoidance
+
+### NavigationMesh AI Systems  
+- Replace basic AI with NavigationMesh pathfinding
+- Add crowd simulation for multiple enemies
+- Implement dynamic obstacle avoidance
+
+### Skeletal Animation & Ragdoll
+- Add skeletal meshes for complex entities
+- Implement animation state machines
+- Enable ragdoll physics on death (visual only)
+
+### Visual Effects Pipeline
+- Lens effects for atmospheric enhancement
+- Particle systems for explosions and impacts
+- Motion blur and depth of field effects
+
+### Hybrid Physics Architecture
+- **Game Logic**: Health, movement, collision detection (deterministic)
+- **Visual Effects**: Ragdolls, debris, particle physics (client-side only)
+- **Projectiles**: Instant raycast for damage, visual trail for immersion
+
+## Migration Utilities
+
+### Debug Helpers
+```typescript
+// Add to window for console debugging
+window.debugSceneGraph = () => {
+    const printNode = (node: NodeComponent, depth: number = 0) => {
+        const indent = '  '.repeat(depth);
+        console.log(`${indent}${node.gameObject?.type || 'node'} [${node.instanceId}]`);
+        node.getChildren().forEach(child => printNode(child, depth + 1));
+    };
+    printNode(sceneRoot);
+};
+
+window.debugBabylonFeatures = () => {
+    console.log('🛤️ Path3D Rails:', sceneRoot.findNodesByComponent('rail_movement').length);
+    console.log('🤖 NavigationMesh AI:', sceneRoot.findNodesByComponent('pathfinding').length);
+    console.log('💀 Ragdoll Physics:', sceneRoot.findNodesByComponent('visual_physics').length);
+    console.log('🎭 Skeletal Animations:', sceneRoot.findNodesByComponent('skeleton').length);
+};
+```
+
+### Validation Scripts
+```typescript
+// Validate core migration completion
+export function validateCoreMigration(): void {
+    const entities = ObjectTracker.getAllEntities();
+    const legacy = entities.filter(e => !(e instanceof GameNodeObject));
+    
+    if (legacy.length > 0) {
+        console.warn('❌ Unmigrated entities:', legacy.map(e => e.type));
+    } else {
+        console.log('✅ All entities migrated to GameNodeObject');
+    }
+}
+
+// Check Babylon.js feature readiness
+export function validateBabylonReadiness(): void {
+    const railEntities = sceneRoot.findNodesByType('train');
+    const railReady = railEntities.every(train => train.gameObject?.hasComponent('rail_movement'));
+    
+    const aiEntities = sceneRoot.findNodesByType('enemy'); 
+    const aiReady = aiEntities.every(enemy => enemy.gameObject?.hasComponent('pathfinding'));
+    
+    console.log('🛤️ Path3D Ready:', railReady ? '✅' : '❌');
+    console.log('🤖 NavigationMesh Ready:', aiReady ? '✅' : '❌');
+}
+```
+
+## Testing Migration
+
+### Component Tests
+```typescript
+describe('Core Migration', () => {
+    it('should work with scene graph', () => {
+        const entity = new GameNodeObject('test');
+        const component = new MigratedComponent();
+        entity.addComponent(component);
+        
+        // Test uses node
+        expect(entity.node).toBeDefined();
+        expect(component.validateDependencies()).toBe(true);
+    });
+});
+
+describe('Babylon.js Integration', () => {
+    it('should support Path3D movement', () => {
+        const train = new Train();
+        const railPath = new RailPathComponent(testPath);
+        train.addComponent(railPath);
+        
+        railPath.updatePosition(1.0, 0.016); // 60fps
+        
+        expect(train.node.getWorldPosition()).not.toEqual(Vector3.Zero());
+    });
+});
+```
+
+### Integration Tests
+```typescript
+describe('Scene Graph Integration', () => {
+    it('should propagate events up the tree', (done) => {
+        const train = new Train();
+        const car = new TrainCar();
+        const voxel = new TrainCarVoxel();
+        
+        // Build hierarchy
+        car.node.setParent(train.node);
+        voxel.node.setParent(car.node);
+        
+        // Listen at train level
+        train.node.addEventListener('voxel:destroyed', (event) => {
+            expect(event.target).toBe(voxel.node);
+            expect(event.phase).toBe(EventPhase.BUBBLE);
+            done();
+        });
+        
+        // Emit from voxel
+        voxel.node.emit('voxel:destroyed', { gridPos: [0, 0, 0] });
+    });
+});
+```
+
+## Rollback Plan
+
+If critical issues arise during migration:
+
+1. **Feature Flags**: Use flags to toggle between old/new systems
+2. **Parallel Systems**: Run both systems temporarily  
+3. **Incremental Rollout**: Migrate one entity type at a time
+4. **Compatibility Layer**: Maintain adapters during transition
+
+## Success Criteria
+
+**Core Migration Complete When**:
+- ✅ All entities extend GameNodeObject
+- ✅ No direct GameObject.emit calls remain
+- ✅ SceneManager uses hierarchy registration
+- ✅ All systems query via scene graph
+- ✅ Component dependencies are validated
+- ✅ Event flow visualization shows complete tree
+- ✅ All tests pass with new architecture
+
+**Babylon.js Integration Ready When**:
+- 🔄 Path3D components available for rail entities
+- 🔄 NavigationMesh components available for AI entities
+- 🔄 Visual physics separation implemented
+- 🔄 Skeletal animation framework established
+- 🔄 Visual effects pipeline integrated
+
+**Performance Benchmarks**:
+- 📊 Scene graph queries: <2ms for 1000 entities
+- 📊 Event propagation: <1ms for deep hierarchies
+- 📊 Path3D updates: 60fps with 100+ trains
+- 📊 NavigationMesh queries: <10ms for complex paths
+- 📊 Visual effects: Stable 60fps with full pipeline
+
+The migration prioritizes solid foundations (entity hierarchy, events, components) before adding advanced features. This ensures the core architecture is robust and can support future Babylon.js enhancements without compromising stability or performance.
