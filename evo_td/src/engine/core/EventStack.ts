@@ -108,9 +108,13 @@ export type EventListener = (entry: EventEntry) => void;
 export class EventStack extends GameNodeObject {
     private config: EventStackConfig;
     private eventBuffer: EventEntry[] = [];
+    /**
+     * @deprecated Use ECS node event system instead. This will be removed.
+     */
     private listeners: EventListener[] = [];
     private eventIdCounter = 0;
     private maxBufferSize = 1000;
+    private rootNode: any = null; // Store root node for event emission
 
     constructor(scene: import('@babylonjs/core').Scene, config: Partial<EventStackConfig> = {}) {
         super('eventStack', scene);
@@ -132,10 +136,11 @@ export class EventStack extends GameNodeObject {
     }
 
     /**
-     * Subscribe to the root node of the scene graph to log all events.
+     * Subscribe to the root node of the scene graph to log all events and emit log events.
      * @param rootNode The root NodeComponent of the scene graph
      */
     subscribeToSceneRoot(rootNode: any) {
+        this.rootNode = rootNode;
         rootNode.addEventListener('*', this.handleSceneEvent, { capture: true });
     }
 
@@ -144,20 +149,35 @@ export class EventStack extends GameNodeObject {
      * @param event The SceneGraphEvent
      */
     handleSceneEvent = (event: any) => {
-        // Log to buffer
-        this.eventBuffer.push({
+        // Try to use the event's category, fallback to SYSTEM
+        const category = event.category || event.payload?.category || EventCategory.SYSTEM;
+        // Try to use a meaningful message
+        let message = '';
+        if (event.payload?.message) {
+            message = event.payload.message;
+        } else if (event.type) {
+            message = event.type;
+        } else {
+            message = JSON.stringify(event.payload ?? {});
+        }
+        const entry: EventEntry = {
             id: `evt_${++this.eventIdCounter}`,
             timestamp: Date.now(),
-            category: EventCategory.SYSTEM,
+            category,
             level: LogLevel.INFO,
             type: event.type,
-            message: '[SceneEvent] ' + (event.payload?.message || ''),
+            message,
             context: event.payload,
             source: event.source,
             isVerbose: false
-        });
+        };
+        this.eventBuffer.push(entry);
         if (this.eventBuffer.length > this.maxBufferSize) {
             this.eventBuffer.shift();
+        }
+        // Emit log event through node event system
+        if (this.rootNode) {
+            this.rootNode.emit('event:log', entry, { bubbles: false });
         }
         // Optionally, forward to EventLogUI or other sinks
         // Optionally, log to console for debugging
@@ -205,6 +225,10 @@ export class EventStack extends GameNodeObject {
         this.eventBuffer.push(entry);
         if (this.eventBuffer.length > this.maxBufferSize) {
             this.eventBuffer.shift();
+        }
+        // Emit log event through node event system
+        if (this.rootNode) {
+            this.rootNode.emit('event:log', entry, { bubbles: false });
         }
         // Optionally, output to console or notify listeners
     }
@@ -337,25 +361,6 @@ export class EventStack extends GameNodeObject {
             debugAvailable: DEBUG_CATEGORIES
         };
     }
-
-    /**
-     * Add a listener for new log entries (UI integration)
-     */
-    public addListener(listener: EventListener): void {
-        this.listeners.push(listener);
-    }
-
-    /**
-     * Remove a previously added log listener
-     */
-    public removeListener(listener: EventListener): void {
-        const idx = this.listeners.indexOf(listener);
-        if (idx !== -1) this.listeners.splice(idx, 1);
-    }
-
-    // --- Deprecated: Event bus features (do not use in new code) ---
-    // ...existing code (pushGameEvent, emit, subscribe, etc.)...
-    // Marked as deprecated and to be removed after migration.
 }
 
 // Type alias for backward compatibility with UI
@@ -365,44 +370,41 @@ export type EventLogEntry = EventEntry;
 // GLOBAL CONVENIENCE FUNCTIONS for Debug Category Management
 // =============================================================================
 
-/**
- * Quick functions for enabling debug categories during development
- * These can be called from anywhere in the codebase or browser console
- */
+// If you need to enable debug categories, call the relevant methods on your EventStack instance manually after initialization.
 
 // Enable specific debug categories
-export const enableRenderingDebug = () => eventStack.enableDebugCategory(EventCategory.RENDERING);
-export const enableSystemDebug = () => eventStack.enableDebugCategory(EventCategory.SYSTEM);
-export const enableUIDebug = () => eventStack.enableDebugCategory(EventCategory.UI);
-export const enableAttachmentDebug = () => eventStack.enableDebugCategory(EventCategory.ATTACHMENT);
+export const enableRenderingDebug = (eventStack: EventStack) => eventStack.enableDebugCategory(EventCategory.RENDERING);
+export const enableSystemDebug = (eventStack: EventStack) => eventStack.enableDebugCategory(EventCategory.SYSTEM);
+export const enableUIDebug = (eventStack: EventStack) => eventStack.enableDebugCategory(EventCategory.UI);
+export const enableAttachmentDebug = (eventStack: EventStack) => eventStack.enableDebugCategory(EventCategory.ATTACHMENT);
 
 // Disable specific debug categories
-export const disableRenderingDebug = () => eventStack.disableDebugCategory(EventCategory.RENDERING);
-export const disableSystemDebug = () => eventStack.disableDebugCategory(EventCategory.SYSTEM);
-export const disableUIDebug = () => eventStack.disableDebugCategory(EventCategory.UI);
-export const disableAttachmentDebug = () => eventStack.disableDebugCategory(EventCategory.ATTACHMENT);
+export const disableRenderingDebug = (eventStack: EventStack) => eventStack.disableDebugCategory(EventCategory.RENDERING);
+export const disableSystemDebug = (eventStack: EventStack) => eventStack.disableDebugCategory(EventCategory.SYSTEM);
+export const disableUIDebug = (eventStack: EventStack) => eventStack.disableDebugCategory(EventCategory.UI);
+export const disableAttachmentDebug = (eventStack: EventStack) => eventStack.disableDebugCategory(EventCategory.ATTACHMENT);
 
 // Bulk operations
-export const enableAllDebugCategories = () => eventStack.enableAllDebugCategories();
-export const resetToGameEventsOnly = () => eventStack.resetToDefaultCategories();
+export const enableAllDebugCategories = (eventStack: EventStack) => eventStack.enableAllDebugCategories();
+export const resetToGameEventsOnly = (eventStack: EventStack) => eventStack.resetToDefaultCategories();
 
 // Status checking
-export const getDebugCategoryStatus = () => eventStack.getCategoryStatus();
+export const getDebugCategoryStatus = (eventStack: EventStack) => eventStack.getCategoryStatus();
 
 // Quick debug category combinations for common development scenarios
-export const enableCombatDebug = () => {
+export const enableCombatDebug = (eventStack: EventStack) => {
     eventStack.enableDebugCategories([EventCategory.ATTACHMENT, EventCategory.SYSTEM]);
     eventStack.info(EventCategory.SYSTEM, 'combat_debug_enabled', 
         'Combat debug mode enabled - showing attachment and system events');
 };
 
-export const enableVisualDebug = () => {
+export const enableVisualDebug = (eventStack: EventStack) => {
     eventStack.enableDebugCategories([EventCategory.RENDERING, EventCategory.UI]);
     eventStack.info(EventCategory.SYSTEM, 'visual_debug_enabled', 
         'Visual debug mode enabled - showing rendering and UI events');
 };
 
-export const enableTrainDebug = () => {
+export const enableTrainDebug = (eventStack: EventStack) => {
     eventStack.enableDebugCategories([EventCategory.SYSTEM]);
     eventStack.info(EventCategory.SYSTEM, 'train_debug_enabled', 
         'Train debug mode enabled - showing system events for train operations');

@@ -47,4 +47,5 @@ export class GameNodeObject extends GameObject {
     removeEventListener(eventType: string, listener: import('../scene/SceneGraphEventSystem').SceneGraphEventListener, options?: import('../scene/SceneGraphEventSystem').EventListenerOptions): void {
         this.node.removeEventListener(eventType, listener, options);
     }
+    
 }

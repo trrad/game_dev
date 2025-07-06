@@ -65,6 +65,12 @@ export class GameObject {
      */
     addComponent(component: Component): void {
         this._components.set(component.type, component);
+        component.attachTo(this);
+        
+        // Call lifecycle methods if they exist
+        if ('onAttach' in component && typeof component.onAttach === 'function') {
+            component.onAttach();
+        }
     }
 
     /**

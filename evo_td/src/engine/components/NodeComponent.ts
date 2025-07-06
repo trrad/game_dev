@@ -181,10 +181,23 @@ export class NodeComponent extends Component<NodeComponentData> {
             
             Logger.log(LogCategory.SYSTEM, 
                 `Node ${this.instanceId} parented to ${parent.instanceId}`);
+            // Emit event for parented
+            this.emit('node:parented', {
+                category: 'system',
+                message: `Node ${this.instanceId} parented to ${parent.instanceId}`,
+                childId: this.instanceId,
+                parentId: parent.instanceId
+            });
         } else {
             this._node.parent = null;
             Logger.log(LogCategory.SYSTEM, 
                 `Node ${this.instanceId} unparented`);
+            // Emit event for unparented
+            this.emit('node:unparented', {
+                category: 'system',
+                message: `Node ${this.instanceId} unparented`,
+                childId: this.instanceId
+            });
         }
     }
     
@@ -194,6 +207,13 @@ export class NodeComponent extends Component<NodeComponentData> {
      */
     addChild(child: NodeComponent): void {
         child.setParent(this);
+        // Emit event for child added
+        this.emit('node:child_added', {
+            category: 'system',
+            message: `Child node ${child.instanceId} added to ${this.instanceId}`,
+            childId: child.instanceId,
+            parentId: this.instanceId
+        });
     }
     
     /**
@@ -209,6 +229,13 @@ export class NodeComponent extends Component<NodeComponentData> {
             
             Logger.log(LogCategory.SYSTEM, 
                 `Removed child node ${child.instanceId} from ${this.instanceId}`);
+            // Emit event for child removed
+            this.emit('node:child_removed', {
+                category: 'system',
+                message: `Child node ${child.instanceId} removed from ${this.instanceId}`,
+                childId: child.instanceId,
+                parentId: this.instanceId
+            });
         }
     }
     

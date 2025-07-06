@@ -7,254 +7,85 @@
  * This could be integrated in the future to centralize UI management.
  */
 
-import { CSSLoader } from "./CSSLoader";
-import { TimeControlsUI } from "./TimeControlsUI";
-import { EventLogUI } from "./EventLogUI";
-import { UIFactory } from "./UIFactory";
-import { UISystem } from "../systems/UISystem";
-import { TimeManager } from "../../engine/core/TimeManager";
-import { EventStack, EventCategory } from "../../engine/core/EventStack";
-import { Logger, LogCategory } from "../../engine/utils/Logger";
+import { GameNodeObject } from '../../engine/core/GameNodeObject';
+import { Scene } from '@babylonjs/core';
+import { UIFactory } from './UIFactory';
+import { Logger, LogCategory } from '../../engine/utils/Logger';
+import { EventLogUI } from './EventLogUI';
+import { CSSLoader } from './CSSLoader';
 
-export class UIManager {
-    private cssLoader: CSSLoader;
-    private timeControlsUI?: TimeControlsUI;
-    private eventLogUI?: EventLogUI;
+export class UIManager extends GameNodeObject {
     private uiFactory: UIFactory;
-    private uiSystem: UISystem;
-    private uiElements: HTMLElement[] = [];
+    private domRoot: HTMLElement;
+    private eventLogUI: EventLogUI | null = null;
+    private exitButton: HTMLElement | null = null;
+    // Add more UI element refs as needed
 
-    constructor() {
-        this.cssLoader = new CSSLoader();
-        this.uiSystem = new UISystem();
-        this.uiFactory = new UIFactory(this.uiSystem);
-    }
-
-    /**
-     * Initialize the UI Manager and load CSS
-     */
-    public async initialize(): Promise<void> {
-        try {
-            // Load all CSS files
-            await this.cssLoader.loadMultipleCSS([
-                'main.css',
-                'time-controls.css',
-                'event-log.css'
-            ]);
-            
-            Logger.log(LogCategory.UI, 'UI Manager initialized successfully');
-        } catch (error) {
-            Logger.log(LogCategory.ERROR, 'Failed to load UI CSS', { error });
-            throw error;
-        }
+    constructor(scene: Scene, parentNode?: any) {
+        super('ui-manager', scene, parentNode);
+        this.uiFactory = new UIFactory();
+        this.domRoot = document.createElement('div');
+        this.domRoot.id = 'ui-root';
+        this.domRoot.style.position = 'absolute';
+        this.domRoot.style.top = '0';
+        this.domRoot.style.left = '0';
+        this.domRoot.style.width = '100vw';
+        this.domRoot.style.height = '100vh';
+        this.domRoot.style.pointerEvents = 'none'; // UI children will override as needed
+        document.body.appendChild(this.domRoot);
     }
 
     /**
      * Create and setup all UI components
      */
-    public createUI(timeManager: TimeManager, eventStack: EventStack): void {
-        try {
-            // Create time controls
-            this.timeControlsUI = new TimeControlsUI(timeManager);
-            
-            // Create event log
-            this.eventLogUI = new EventLogUI(eventStack);
-            
-            // Create exit button using the UI factory
-            const exitButtonGameObject = this.uiFactory.createExitButton(
-                'exit-button',
-                'Exit App',
-                () => this.handleExitRequest(),
-                {
-                    position: 'top-right',
-                    style: {
-                        fontSize: '16px',
-                        fontWeight: 'bold',
-                        padding: '8px 16px',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.3)',
-                        zIndex: '1000'
-                    }
-                }
-            );
+    public async createUI(): Promise<void> {
+        // Dynamically load UI CSS (event-log and main)
+        // TODO: Integrate with future ResourceManager
+        await CSSLoader.getInstance().loadMultipleCSS([
+            'main.css',
+            'event-log.css'
+        ]);
 
-            // Add keyboard shortcuts
-            this.setupKeyboardShortcuts();
-            
-            // Log successful creation
-            eventStack.info(EventCategory.UI, 'ui_initialized', 'UI components created successfully', null, 'UIManager');
-            
-            Logger.log(LogCategory.UI, 'UI components created', { 
-                exitButton: 'exit-button',
-                timeControls: 'time-controls',
-                eventLog: 'event-log'
+        // Event Log UI (pure DOM, managed by UIManager)
+        this.eventLogUI = new EventLogUI();
+        this.domRoot.appendChild(this.eventLogUI.htmlElement);
+
+        // Example: Exit Button
+        this.exitButton = this.uiFactory.createExitButton(() => this.handleExitRequest(), {
+            style: { position: 'absolute', top: '10px', right: '10px', pointerEvents: 'auto' }
+        });
+        this.domRoot.appendChild(this.exitButton);
+
+        // Wire up DOM events to ECS events
+        if (this.exitButton) {
+            this.exitButton.addEventListener('click', () => {
+                this.node.emit('ui:exit', { source: 'exitButton' });
             });
-        } catch (error) {
-            Logger.log(LogCategory.ERROR, 'Failed to create UI components', { error });
-            throw error;
         }
     }
 
     /**
-     * Setup keyboard shortcuts
+     * Listen for ECS/node log events and update the event log UI
      */
-    private setupKeyboardShortcuts(): void {
-        window.addEventListener("keydown", (ev) => {
-            // Toggle event log with F1
-            if (ev.key === 'F1') {
-                ev.preventDefault();
-                this.toggleEventLog();
-            }
-            
-            // Time speed shortcuts (1-5 keys)
-            if (ev.key >= '1' && ev.key <= '5') {
-                const speedMap = { '1': 1, '2': 4, '3': 8, '4': 16, '5': 32 } as const;
-                const speed = speedMap[ev.key as keyof typeof speedMap];
-                if (speed && this.timeControlsUI) {
-                    // Access the private method through a public interface
-                    // We'll need to add a public method to TimeControlsUI
-                    this.logEvent(LogCategory.UI, `Keyboard shortcut: Set speed to ${speed}x`);
-                }
-            }
-            
-            // Pause with spacebar
-            if (ev.code === 'Space' && !ev.target || (ev.target as HTMLElement).tagName !== 'INPUT') {
-                ev.preventDefault();
-                this.logEvent(LogCategory.UI, 'Keyboard shortcut: Toggle pause (spacebar)');
+    public listenForLogEvents(rootNode: any): void {
+        if (!rootNode) return;
+        rootNode.addEventListener('event:log', (evt: any) => {
+            if (this.eventLogUI) {
+                this.eventLogUI.addLogEntry(evt.payload);
             }
         });
     }
 
     /**
-     * Handle exit request from UI
-     */
-    private handleExitRequest(): void {
-        this.logEvent(LogCategory.UI, 'Exit button clicked');
-        
-        // Emit a custom event that the main app can listen to
-        const exitEvent = new CustomEvent('app-exit-requested');
-        window.dispatchEvent(exitEvent);
-    }
-
-    /**
-     * Toggle event log visibility
-     */
-    public toggleEventLog(): void {
-        if (this.eventLogUI) {
-            this.eventLogUI.toggle();
-            this.logEvent(LogCategory.UI, 'Event log toggled via keyboard shortcut (F1)');
-        }
-    }
-
-    /**
-     * Log an event to the event log
-     */
-    public logEvent(category: LogCategory, message: string, payload?: any): void {
-        if (this.eventLogUI) {
-            this.eventLogUI.logEvent(category, message, payload);
-        }
-    }
-
-    /**
-     * Clear the event log
-     */
-    public clearEventLog(): void {
-        if (this.eventLogUI) {
-            this.eventLogUI.clear();
-        }
-    }
-
-    /**
-     * Show error message when WebGL is not supported
-     */
-    public showWebGLError(): void {
-        const errorDiv = document.createElement("div");
-        errorDiv.innerHTML = `
-            <h2>WebGL Not Supported</h2>
-            <p>Your browser does not support WebGL, which is required to run this application.</p>
-            <p>Please try:</p>
-            <ul>
-                <li>Using a modern browser (Chrome, Firefox, Safari, Edge)</li>
-                <li>Enabling hardware acceleration in your browser settings</li>
-                <li>Updating your graphics drivers</li>
-            </ul>
-        `;
-        errorDiv.className = 'error-message webgl-error';
-        document.body.appendChild(errorDiv);
-        
-        Logger.log(LogCategory.SYSTEM, "WebGL not supported - showing error message");
-    }
-
-    /**
-     * Show error message when engine initialization fails
-     */
-    public showEngineError(error: any): void {
-        const errorDiv = document.createElement("div");
-        errorDiv.innerHTML = `
-            <h2>Engine Initialization Failed</h2>
-            <p>Failed to initialize the 3D rendering engine.</p>
-            <p><strong>Error:</strong> ${error?.message || error}</p>
-            <p>Please try refreshing the page or check the browser console for more details.</p>
-        `;
-        errorDiv.className = 'error-message engine-error';
-        document.body.appendChild(errorDiv);
-        
-        Logger.log(LogCategory.SYSTEM, "Engine initialization failed:", error);
-    }
-
-    /**
-     * Show exit confirmation message
-     */
-    public showExitMessage(): void {
-        // Remove any existing UI components first
-        this.dispose();
-        
-        // Add a message to indicate app has been closed
-        const exitMessage = document.createElement("div");
-        exitMessage.textContent = "ECS App has been closed. Refresh the page to restart.";
-        exitMessage.className = 'exit-message';
-        
-        // Optionally: Create a restart button
-        const restartButton = document.createElement("button");
-        restartButton.textContent = "Restart App";
-        restartButton.className = 'restart-button';
-        restartButton.addEventListener("click", () => {
-            location.reload();
-        });
-        exitMessage.appendChild(restartButton);
-        
-        document.body.appendChild(exitMessage);
-    }
-
-    /**
-     * Dispose of all UI components
+     * Clean up all UI DOM elements
      */
     public dispose(): void {
-        try {
-            // Dispose of UI components
-            if (this.timeControlsUI) {
-                this.timeControlsUI.dispose();
-            }
-            
-            if (this.eventLogUI) {
-                this.eventLogUI.dispose();
-            }
-            
-            // Clean up UI System
-            this.uiSystem.dispose();
-            
-            // Remove any remaining DOM UI elements
-            this.uiElements.forEach(element => {
-                if (element.parentNode) {
-                    element.parentNode.removeChild(element);
-                }
-            });
-            
-            // Dispose CSS loader
-            this.cssLoader.dispose();
-            
-            Logger.log(LogCategory.UI, 'UI Manager disposed successfully');
-        } catch (error) {
-            Logger.log(LogCategory.ERROR, 'Error during UI disposal', { error });
+        if (this.domRoot.parentNode) {
+            this.domRoot.parentNode.removeChild(this.domRoot);
         }
+        if (this.eventLogUI) {
+            this.eventLogUI.dispose();
+        }
+        super.dispose();
     }
 }

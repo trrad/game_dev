@@ -77,9 +77,6 @@ class GameObject {
     serialize(): GameObjectData;
     deserialize(data: GameObjectData): void;
     
-    // Event delegation to node (for ergonomics)
-    emit(eventType: string, payload?: any): boolean;
-    addEventListener(eventType: string, listener: Function): void;
 }
 ```
 

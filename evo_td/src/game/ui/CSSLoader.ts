@@ -46,7 +46,7 @@ export class CSSLoader {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
         link.type = 'text/css';
-        link.href = `./src/ui/assets/${filename}`;
+        link.href = `./src/game/ui/assets/${filename}`;
         
         return new Promise((resolve, reject) => {
             link.onload = () => {
@@ -72,7 +72,7 @@ export class CSSLoader {
      * Remove a loaded CSS file
      */
     public unloadCSS(filename: string): void {
-        const links = document.querySelectorAll(`link[href="./src/ui/assets/${filename}"]`);
+        const links = document.querySelectorAll(`link[href="./src/game/ui/assets/${filename}"]`);
         links.forEach(link => link.remove());
         this.loadedStyles.delete(filename);
     }

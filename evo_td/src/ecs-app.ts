@@ -1,8 +1,13 @@
-// Minimal ECS App: Node/Event System Test
+// Minimal ECS App: Node/Event System Test with Movement
 import { SceneManager } from "./engine/scene/SceneManager";
 import { GameNodeObject } from "./engine/core/GameNodeObject";
 import { RenderComponent } from "./engine/components/RenderComponent";
-import { Scene, MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
+import { NodeComponent } from "./engine/components/NodeComponent";
+import { Scene, MeshBuilder, StandardMaterial, Color3, Vector3 } from "@babylonjs/core";
+
+import { EventStack, EventCategory } from "./engine/core/EventStack";
+import { EventLogUI } from "./game/ui/EventLogUI";
+import { UIManager } from "./game/ui/UIManager";
 
 function setupGameCanvasAndScene(id = "gameCanvas") {
     let canvas = document.getElementById(id) as HTMLCanvasElement | null;
@@ -21,90 +26,154 @@ function setupGameCanvasAndScene(id = "gameCanvas") {
     return { canvas, sceneManager, rootNode };
 }
 
-function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
-    // RenderComponent subclass for a colored sphere
-    class TestSphereRenderComponent extends RenderComponent {
-        private color: string;
-        constructor(scene: Scene, color: string = "#44aaff") {
-            super(scene, {});
-            this.color = color;
-        }
-        protected createVisual(): void {
-            this.mesh = MeshBuilder.CreateSphere("test_sphere", { diameter: 1 }, this.scene);
-            this.mesh.position.set(0, 0, 0);
-            // Parent the mesh to the ECS node's transform
-            this.mesh.parent = (this._gameObject as any).node.getTransformNode();
-            const mat = new StandardMaterial("test_sphere_mat", this.scene);
-            mat.diffuseColor = Color3.FromHexString(this.color);
-            this.mesh.material = mat;
-        }
-        protected updateVisual(): void {
-            // No-op for now
-        }
+// Improved RenderComponent that properly parents to NodeComponent
+class TestSphereRenderComponent extends RenderComponent {
+    private color: string;
+    
+    constructor(scene: Scene, color: string = "#44aaff") {
+        super(scene, {});
+        this.color = color;
     }
-
-    // Create test entities (GameNodeObject)
-    class TestEntity extends GameNodeObject {
-        constructor(name: string, scene: Scene, parentNode?: any, color?: string) {
-            super("test-entity", scene, parentNode);
-            // Ensure node is initialized before accessing its transform node
-            if (this.node && typeof this.node.getTransformNode === "function") {
-                this.node.getTransformNode().name = name;
-            } else { console.log('test entity node not available')}
-            const render = new TestSphereRenderComponent(scene, color);
-            this.addComponent(render);
+    
+    protected createVisual(): void {
+        this.mesh = MeshBuilder.CreateSphere("test_sphere", { diameter: 1 }, this.scene);
+        
+        // Parent mesh to NodeComponent's transform
+        const nodeComponent = this._gameObject?.getComponent<NodeComponent>('Node');
+        if (nodeComponent) {
+            this.mesh.parent = nodeComponent.getTransformNode();
         }
+        
+        const mat = new StandardMaterial("test_sphere_mat", this.scene);
+        mat.diffuseColor = Color3.FromHexString(this.color);
+        this.mesh.material = mat;
     }
-
-    const parent = new TestEntity("parent", sceneManager.scene, rootNode, "#44aaff"); // set color to rgb(38, 204, 80) which is a light blue
-    const child = new TestEntity("child", sceneManager.scene, parent.node, "#aaff44"); // set color to #aaff44 which is a light green
-    const grandchild = new TestEntity("grandchild", sceneManager.scene, child.node, "#ff44aa"); // set color to #ff44aa which is a light red
-
-    // Log node names and world positions
-    console.log("[Debug] Parent node:", parent.node.getTransformNode().name, parent.node.getWorldPosition());
-    console.log("[Debug] Child node:", child.node.getTransformNode().name, child.node.getWorldPosition());
-    console.log("[Debug] Grandchild node:", grandchild.node.getTransformNode().name, grandchild.node.getWorldPosition());
-
-    // Set positions
-    parent.node.setLocalPosition(0, 0, 0);
-    child.node.setLocalPosition(2, 0, 0);
-    grandchild.node.setLocalPosition(1, 1, 0);
-
-    // Log again after setting positions
-    console.log("[Debug] Parent node (after set):", parent.node.getTransformNode().name, parent.node.getWorldPosition());
-    console.log("[Debug] Child node (after set):", child.node.getTransformNode().name, child.node.getWorldPosition());
-    console.log("[Debug] Grandchild node (after set):", grandchild.node.getTransformNode().name, grandchild.node.getWorldPosition());
-
-    // Add event listeners at different levels
-    rootNode.addEventListener("test:event", (evt) => {
-        console.log("[Root] Event phase:", evt.phase, "type:", evt.type, "payload:", evt.payload);
-    }, { capture: true });
-
-    parent.node.addEventListener("test:event", (evt) => {
-        console.log("[Parent] Event phase:", evt.phase, "type:", evt.type, "payload:", evt.payload);
-    });
-
-    child.node.addEventListener("test:event", (evt) => {
-        console.log("[Child] Event phase:", evt.phase, "type:", evt.type, "payload:", evt.payload);
-    });
-
-    grandchild.node.addEventListener("test:event", (evt) => {
-        console.log("[Grandchild] Event phase:", evt.phase, "type:", evt.type, "payload:", evt.payload);
-    });
-
-    // Emit event from grandchild (should propagate up, log all phases)
-    setTimeout(() => {
-        grandchild.node.emit("test:event", { message: "Hello from grandchild!" });
-    }, 1000);
-
-    // Emit event from parent (should propagate up)
-    setTimeout(() => {
-        parent.node.emit("test:event", { message: "Hello from parent!" });
-    }, 2000);
+    
+    protected updateVisual(): void {
+        // No manual updates needed - hierarchy handles it
+    }
+    
+    protected updatePosition(): void {
+        // Override to prevent base class position updates
+    }
 }
 
-// Entry point for node/event system test
-window.addEventListener("DOMContentLoaded", () => {
+// Test entity with movement logic
+class TestEntity extends GameNodeObject {
+    constructor(name: string, scene: Scene, parentNode?: any, color?: string) {
+        super("test-entity", scene, parentNode);
+        if (this.node && typeof this.node.getTransformNode === "function") {
+            this.node.getTransformNode().name = name;
+        }
+        const render = new TestSphereRenderComponent(scene, color);
+        this.addComponent(render);
+    }
+}
+
+function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
+    // Create hierarchy
+    const parent = new TestEntity("parent", sceneManager.scene, rootNode, "#ff0000"); // Red
+    const child = new TestEntity("child", sceneManager.scene, parent.node, "#00ff00"); // Green
+    const grandchild = new TestEntity("grandchild", sceneManager.scene, child.node, "#0000ff"); // Blue
+    
+    // Set initial positions (child offset from parent, grandchild offset from child)
+    parent.node.setLocalPosition(0, 0, 0);
+    child.node.setLocalPosition(2, 0, 0);  // 2 units to the right
+    grandchild.node.setLocalPosition(0, 1, 0);  // 1 unit up
+    
+    // Movement parameters
+    const startPos = new Vector3(-5, 0, 0);
+    const endPos = new Vector3(5, 0, 0);
+    let movingToEnd = true;
+    let lerpTime = 0;
+    const moveSpeed = 0.2; // 20% per second
+    
+    // Set up event listeners
+    rootNode.addEventListener("destination:reached", (evt: any) => {
+        console.log("[Root] Captured destination reached event:", evt.payload);
+    }, { capture: true });
+    
+    parent.node.addEventListener("destination:reached", (evt: any) => {
+        console.log("[Parent] Received destination reached from child:", evt.payload);
+        // Parent could react to child reaching destination
+    });
+    
+    child.node.addEventListener("destination:reached", (evt: any) => {
+        console.log("[Child] Destination reached event (should not see during bubble)");
+    });
+    
+    // Animation loop
+    sceneManager.scene.registerBeforeRender(() => {
+        // Update lerp time
+        lerpTime += moveSpeed * 0.016; // ~60fps
+        
+        // Check if reached destination
+        if (lerpTime >= 1.0) {
+            lerpTime = 1.0;
+            
+            // Emit event from child when parent reaches destination
+            child.node.emit("destination:reached", {
+                category: EventCategory.SYSTEM,
+                message: `Child node reached destination (${movingToEnd ? "end" : "start"})`,
+                source: "child",
+                parentPosition: parent.node.getWorldPosition(),
+                destination: movingToEnd ? "end" : "start",
+                timestamp: Date.now()
+            });
+            
+            // Reverse direction
+            lerpTime = 0;
+            movingToEnd = !movingToEnd;
+        }
+        
+        // Calculate parent position
+        const currentPos = movingToEnd ? 
+            Vector3.Lerp(startPos, endPos, lerpTime) : 
+            Vector3.Lerp(endPos, startPos, lerpTime);
+        
+        // Move parent (children follow automatically)
+        parent.node.setLocalPosition(currentPos.x, currentPos.y, currentPos.z);
+        
+        // Optional: Add some rotation to make it more interesting
+        parent.node.setLocalRotation(0, lerpTime * Math.PI * 2, 0);
+        
+        // Optional: Make grandchild orbit around child
+        const orbitAngle = Date.now() * 0.002;
+        grandchild.node.setLocalPosition(
+            Math.cos(orbitAngle) * 1.5,
+            1,
+            Math.sin(orbitAngle) * 1.5
+        );
+    });
+    
+    // Debug info
+    console.log("Scene initialized:");
+    console.log("- Parent (red sphere) moves between x=-5 and x=5");
+    console.log("- Child (green sphere) is offset 2 units right from parent");
+    console.log("- Grandchild (blue sphere) orbits around child");
+    console.log("- Child emits 'destination:reached' event when parent reaches endpoints");
+}
+
+// Entry point
+(async () => {
     const { canvas, sceneManager, rootNode } = setupGameCanvasAndScene();
+
+    // Debug: Log the scene object before creating EventStack
+    console.log('sceneManager.scene:', sceneManager.scene);
+
+    // Set up EventStack and subscribe to root node
+    const eventStack = new EventStack(sceneManager.scene);
+    eventStack.subscribeToSceneRoot(rootNode);
+
+    // Set up UIManager as a child of root node
+    const uiManager = new UIManager(sceneManager.scene, rootNode);
+    await uiManager.createUI();
+    uiManager.listenForLogEvents(rootNode);
+
+    // Make UI accessible from console for debugging (optional)
+    (window as any).uiManager = uiManager;
+    (window as any).eventStack = eventStack;
+
+    // Populate test ECS entities
     populateTestEntities(sceneManager, rootNode);
-});
+})();
