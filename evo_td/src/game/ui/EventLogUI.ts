@@ -1,27 +1,18 @@
 /**
- * EventLogUI (Event Log User Interface)
- *
- * ROLE:
- *   - Pure display and user-interaction component for the event log.
- *   - Subscribes to EventStack for log updates; does NOT listen to the scene graph directly.
- *   - Does not manage or transform log state; all log normalization, filtering, and buffering is handled by EventStack.
- *   - Provides UI for filtering, toggling, and exporting logs, but does not mutate the underlying log buffer.
- *
- * ARCHITECTURE PATTERN:
- *   - EventStack is the middleware logger/observer: it listens to the root node of the scene graph and provides a normalized log stream.
- *   - EventLogUI subscribes to EventStack for log updates and displays them, applying only UI-level filtering (e.g., category, collapsed state).
- *   - This separation ensures the UI remains simple, testable, and decoupled from the event system and log state management.
- *
- *   - Do NOT have EventLogUI listen to the scene graph or emit log events directly; always go through EventStack.
- *
- *   - If you need to add a new log type or filter, update EventStack, not EventLogUI.
- *
- * See EventStack.ts for more details on the event logging architecture.
- */
-
-/**
- * Event Log UI Component (ECS NodeObject)
- * Provides a toggleable event/console log window for game events, as an ECS node.
+ * EventLogUI.ts
+ * 
+ * ROLE: Pure display and user-interaction component for the event log
+ * RESPONSIBILITIES:
+ * - Renders event log entries as HTML DOM elements
+ * - Provides UI controls for filtering, toggling, and interaction
+ * - Handles UI-level state (collapsed, auto-scroll, visible categories)
+ * - Does NOT manage log data or event listening (delegates to UIManager)
+ * 
+ * INTERFACE:
+ * - addLogEntry(entry): Add a single log entry to the display
+ * - toggle(): Show/hide the event log panel
+ * - clear(): Clear all displayed entries
+ * - setMaxEntries(max): Set display limit for entries
  */
 
 import { EventStack, EventLogEntry, EventCategory } from "../../engine/core/EventStack";
@@ -37,7 +28,8 @@ export class EventLogUI {
     private autoScroll: boolean = true;
     private maxEntries: number = 100;
     private showAllEvents: boolean = false;
-    private visibleCategories: Set<string> = new Set(['TRAIN', 'ENEMY', 'ECONOMY', 'ERROR']);
+    // UPDATED: Include SYSTEM in default visible categories
+    private visibleCategories: Set<string> = new Set(['TRAIN', 'ENEMY', 'ECONOMY', 'ERROR', 'SYSTEM']);
     private filterButton: HTMLButtonElement;
     private toggleButton: HTMLButtonElement;
     public readonly htmlElement: HTMLElement;

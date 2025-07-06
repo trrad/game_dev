@@ -1,26 +1,21 @@
 /**
- * EventStack (Scene Graph Logger)
- *
- * ROLE (2025+):
- *   - EventStack is a scene graph event logger/observer, NOT an event bus.
- *   - It extends GameNodeObject and subscribes to the root node of the scene graph.
- *   - It logs all node-based events it receives (to buffer, UI, file, or console as needed).
- *   - It maintains backward compatibility for Logger-style direct log calls (info, error, etc.),
- *     but all new event logging should flow through the node event system.
- *   - It does NOT re-implement event emission or subscription; it uses node event system methods.
- *
- * ARCHITECTURE PATTERN:
- *   - EventStack is the only component that listens to the root node for all events.
- *   - It provides a normalized log stream to UI and other subscribers via addListener/removeListener.
- *   - UI components (e.g., EventLogUI) should subscribe to EventStack for log updates, NOT to the scene graph directly.
- *   - This ensures log state is centralized, normalized, and decoupled from UI logic.
- *
- *   - Do NOT use EventStack as a general event bus or pass it as a logger to other systems.
- *   - Always emit events on nodes and let EventStack observe and log them.
- *
- *   - If you need to add a new log type or filter, update EventStack, not the UI.
- *
- * See EventLogUI.ts for the intended UI integration pattern.
+ * EventStack.ts
+ * 
+ * ROLE: Scene graph event logger and observer (middleware between game events and UI)
+ * RESPONSIBILITIES:
+ * - Extends GameNodeObject to participate in scene graph as an observer
+ * - Subscribes to ALL scene graph events via wildcard listener on root node
+ * - Transforms raw scene events into normalized log entries
+ * - Maintains event buffer for export/debugging functionality
+ * - Emits standardized 'event:log' events for UI consumption
+ * - Provides category filtering and log management
+ * 
+ * INTERFACE:
+ * - subscribeToSceneRoot(rootNode): Attach wildcard listener to scene root
+ * - handleSceneEvent(event): Process and normalize incoming scene events
+ * - info/warn/error/debug(): Legacy logger compatibility methods
+ * - exportLogs(): Generate downloadable log export
+ * - Category management: enableDebugCategory, resetToDefaultCategories, etc.
  */
 
 import { GameNodeObject } from './GameNodeObject';
@@ -45,7 +40,7 @@ export enum EventCategory {
 }
 
 /**
- * Categories that are enabled by default (game events + errors)
+ * Categories that are enabled by default (game events + errors + system)
  */
 export const DEFAULT_ENABLED_CATEGORIES: EventCategory[] = [
     EventCategory.GAME,
@@ -54,6 +49,7 @@ export const DEFAULT_ENABLED_CATEGORIES: EventCategory[] = [
     EventCategory.COMBAT,
     EventCategory.ECONOMY,
     EventCategory.STATION,
+    EventCategory.SYSTEM,  // Include system events by default for development
     EventCategory.ERROR
 ];
 
@@ -63,7 +59,6 @@ export const DEFAULT_ENABLED_CATEGORIES: EventCategory[] = [
 export const DEBUG_CATEGORIES: EventCategory[] = [
     EventCategory.RENDERING,
     EventCategory.ATTACHMENT,
-    EventCategory.SYSTEM,
     EventCategory.UI
 ];
 
@@ -141,7 +136,9 @@ export class EventStack extends GameNodeObject {
      */
     subscribeToSceneRoot(rootNode: any) {
         this.rootNode = rootNode;
+        // Use wildcard listener to capture ALL scene events
         rootNode.addEventListener('*', this.handleSceneEvent, { capture: true });
+        console.log('[EventStack] Subscribed to scene root with wildcard listener');
     }
 
     /**
@@ -149,6 +146,8 @@ export class EventStack extends GameNodeObject {
      * @param event The SceneGraphEvent
      */
     handleSceneEvent = (event: any) => {
+        console.log('[EventStack] Handling scene event:', event.type, event);
+        
         // Try to use the event's category, fallback to SYSTEM
         const category = event.category || event.payload?.category || EventCategory.SYSTEM;
         // Try to use a meaningful message
@@ -171,17 +170,22 @@ export class EventStack extends GameNodeObject {
             source: event.source,
             isVerbose: false
         };
+        
+        // Check if this event should be logged
+        if (!this.shouldLogEvent(category, LogLevel.INFO, false)) {
+            return;
+        }
+        
         this.eventBuffer.push(entry);
         if (this.eventBuffer.length > this.maxBufferSize) {
             this.eventBuffer.shift();
         }
+        
         // Emit log event through node event system
         if (this.rootNode) {
+            console.log('[EventStack] Emitting event:log:', entry);
             this.rootNode.emit('event:log', entry, { bubbles: false });
         }
-        // Optionally, forward to EventLogUI or other sinks
-        // Optionally, log to console for debugging
-        // console.log('[EventStack] Scene event:', event.type, event);
     };
 
     // --- Legacy Logger compatibility (for now) ---

@@ -1,48 +1,21 @@
-/**
- * SceneNodeComponent - Manages hierarchical relationships in the scene graph
- * Provides a bridge between our ECS and Babylon.js scene graph
- */
+// src/engine/components/NodeComponent.ts - Clean Reactive Version
 
 import { Component } from './Component';
 import { TransformNode, Vector3, Matrix, Quaternion, Scene } from '@babylonjs/core';
-import { Logger, LogCategory } from '../utils/Logger';
-import { GameObject } from '../core/GameObject';
-import { 
-    SceneGraphEventSystem, 
-    SceneEvents, 
-    SceneGraphEvent, 
-    SceneGraphEventListener, 
-    EventListenerOptions,
-    EventOptions 
-} from '../scene/SceneGraphEventSystem';
+import { VectorProperty } from './ReactivePropertyComponent';
 
-/**
- * SceneNodeComponent data interface for serialization
- */
-/**
- * Represents the data structure for a node component in the engine.
- * 
- * @property position - Optional 3D position of the node, defined by x, y, and z coordinates.
- * @property rotation - Optional 3D rotation of the node, defined by x, y, and z angles.
- * @property scale - Optional 3D scale of the node, defined by x, y, and z factors.
- * @property parentId - Optional identifier of the parent node, used for serialization purposes. Can be a string or null.
- */
 export interface NodeComponentData {
-    position?: { x: number, y: number, z: number };
-    rotation?: { x: number, y: number, z: number };
-    scale?: { x: number, y: number, z: number };
-    parentId?: string | null; // For serialization only
+    position: { x: number, y: number, z: number };
+    rotation: { x: number, y: number, z: number };
+    scale: { x: number, y: number, z: number };
+    parentId?: string | null;
 }
 
 /**
- * NodeComponent manages hierarchical relationships between entities
- * using Babylon.js TransformNodes as the underlying implementation.
+ * NodeComponent with ReactiveProperty integration
+ * Provides reactive transform properties that other systems can observe
  * 
- * This is the core building block of our scene graph, providing:
- * 1. Parent-child relationships between entities
- * 2. Hierarchical transformation inheritance
- * 3. Local and world space coordinate conversions
- * 4. Access to underlying Babylon.js TransformNode for rendering
+ * No events, no complex propagation - just clean reactive transforms
  */
 export class NodeComponent extends Component<NodeComponentData> {
     public readonly type = 'Node';
@@ -52,21 +25,46 @@ export class NodeComponent extends Component<NodeComponentData> {
     private _parent: NodeComponent | null = null;
     private _scene: Scene;
     
-    /**
-     * Create a new SceneNodeComponent
-     * @param scene Babylon.js scene
-     * @param parent Optional parent scene node component
-     */
+    // Reactive Properties for transform data using VectorProperty
+    public readonly position: VectorProperty;
+    public readonly rotation: VectorProperty;
+    public readonly scale: VectorProperty;
+    
+    // World space reactive properties (computed)
+    public readonly worldPosition: VectorProperty;
+    public readonly worldRotation: VectorProperty;
+    
     constructor(scene: Scene, parent?: NodeComponent) {
         super();
         
         this._scene = scene;
         
-        // Create the transform node with a unique name
+        // Create the transform node
         const nodeName = `node_${this.instanceId}`;
         this._node = new TransformNode(nodeName, scene);
         
-        Logger.log(LogCategory.SYSTEM, `Created NodeComponent with node ${nodeName}`);
+        // Initialize reactive properties using direct constructors
+        this.position = new VectorProperty('position', Vector3.Zero());
+        this.rotation = new VectorProperty('rotation', Vector3.Zero());
+        this.scale = new VectorProperty('scale', Vector3.One());
+        this.worldPosition = new VectorProperty('worldPosition', Vector3.Zero());
+        this.worldRotation = new VectorProperty('worldRotation', Vector3.Zero());
+        
+        // Set up reactive sync: VectorProperty -> Babylon.js TransformNode
+        this.position.onChange((event) => {
+            this._node.position.copyFrom(event.to);
+            this._updateWorldTransforms();
+        });
+        
+        this.rotation.onChange((event) => {
+            this._node.rotation.copyFrom(event.to);
+            this._updateWorldTransforms();
+        });
+        
+        this.scale.onChange((event) => {
+            this._node.scaling.copyFrom(event.to);
+            this._updateWorldTransforms();
+        });
         
         // Set parent if provided
         if (parent) {
@@ -74,99 +72,89 @@ export class NodeComponent extends Component<NodeComponentData> {
         }
     }
     
+    // ============================================================
+    // Transform API - Now operates through VectorProperty
+    // ============================================================
+    
     /**
-     * Called when this component is attached to a GameObject
+     * Set local position (triggers reactive updates)
      */
-    attachTo(gameObject: GameObject): void {
-        super.attachTo(gameObject);
-        
-        if (this._gameObject) {
-            // Update node name to include GameObject ID for better debugging
-            this._node.name = `node_${this._gameObject.id}`;
-            
-            Logger.log(LogCategory.SYSTEM, 
-                `NodeComponent attached to ${this._gameObject.id}`);
-        }
+    setLocalPosition(x: number, y: number, z: number): void {
+        this.position.update(new Vector3(x, y, z), 'setLocalPosition');
+    }
+    
+    setLocalPositionFromVector(position: Vector3): void {
+        this.position.update(position.clone(), 'setLocalPositionFromVector');
+    }
+    
+    getLocalPosition(): Vector3 {
+        return this.position.getValue().clone();
     }
     
     /**
-     * Clean up resources when component is disposed
+     * Set local rotation (triggers reactive updates)
      */
-    dispose(): void {
-        // Remove from parent if exists
-        if (this._parent) {
-            this._parent.removeChild(this);
-        }
-        
-        // Remove all children (they'll reparent to null/scene root)
-        while (this._children.length > 0) {
-            this.removeChild(this._children[0]);
-        }
-        
-        // Dispose Babylon.js node
-        if (this._node) {
-            this._node.dispose();
-        }
-        
-        Logger.log(LogCategory.SYSTEM, 
-            `NodeComponent ${this.instanceId} disposed`);
-            
-        super.dispose();
+    setLocalRotation(x: number, y: number, z: number): void {
+        this.rotation.update(new Vector3(x, y, z), 'setLocalRotation');
+    }
+    
+    setLocalRotationFromVector(rotation: Vector3): void {
+        this.rotation.update(rotation.clone(), 'setLocalRotationFromVector');
+    }
+    
+    getLocalRotation(): Vector3 {
+        return this.rotation.getValue().clone();
     }
     
     /**
-     * Serialize this component's state
+     * Set local scale (triggers reactive updates)
      */
-    serialize(): NodeComponentData {
-        return {
-            position: {
-                x: this._node.position.x,
-                y: this._node.position.y,
-                z: this._node.position.z
-            },
-            rotation: {
-                x: this._node.rotation.x,
-                y: this._node.rotation.y,
-                z: this._node.rotation.z
-            },
-            scale: {
-                x: this._node.scaling.x,
-                y: this._node.scaling.y,
-                z: this._node.scaling.z
-            },
-            parentId: this._parent ? this._parent.instanceId : null
-        };
+    setLocalScale(x: number, y: number, z: number): void {
+        this.scale.update(new Vector3(x, y, z), 'setLocalScale');
+    }
+    
+    setUniformLocalScale(scale: number): void {
+        this.scale.update(new Vector3(scale, scale, scale), 'setUniformLocalScale');
+    }
+    
+    getLocalScale(): Vector3 {
+        return this.scale.getValue().clone();
     }
     
     /**
-     * Deserialize this component's state
-     * @param data The serialized data
+     * Get world position (from reactive property)
      */
-    deserialize(data: NodeComponentData): void {
-        if (data.position) {
-            this._node.position.set(data.position.x, data.position.y, data.position.z);
-        }
-        
-        if (data.rotation) {
-            this._node.rotation.set(data.rotation.x, data.rotation.y, data.rotation.z);
-        }
-        
-        if (data.scale) {
-            this._node.scaling.set(data.scale.x, data.scale.y, data.scale.z);
-        }
-        
-        // Note: Parent relationships must be resolved after all components are loaded
-        // This is typically handled by a deserialization manager
+    getWorldPosition(): Vector3 {
+        return this.worldPosition.getValue().clone();
     }
     
-    //=== HIERARCHY METHODS ===//
+    /**
+     * Get world rotation (from reactive property) 
+     */
+    getWorldRotation(): Vector3 {
+        return this.worldRotation.getValue().clone();
+    }
     
     /**
-     * Set the parent of this node
-     * @param parent The parent node or null to attach to scene root
+     * Update world transform reactive properties
      */
+    private _updateWorldTransforms(): void {
+        // Update world position
+        const worldPos = this._node.getAbsolutePosition();
+        this.worldPosition.update(worldPos.clone(), 'transform_update');
+        
+        // Update world rotation
+        const worldQuat = this._node.absoluteRotationQuaternion;
+        const worldRot = worldQuat.toEulerAngles();
+        this.worldRotation.update(worldRot, 'transform_update');
+    }
+    
+    // ============================================================
+    // Hierarchy Management (Clean - no events)
+    // ============================================================
+    
     setParent(parent: NodeComponent | null): void {
-        // Remove from current parent if exists
+        // Remove from current parent
         if (this._parent) {
             this._parent.removeChild(this);
         }
@@ -174,111 +162,37 @@ export class NodeComponent extends Component<NodeComponentData> {
         // Set new parent
         this._parent = parent;
         
-        // Update Babylon.js node parent
         if (parent) {
             this._node.parent = parent.getTransformNode();
             parent._children.push(this);
-            
-            Logger.log(LogCategory.SYSTEM, 
-                `Node ${this.instanceId} parented to ${parent.instanceId}`);
-            // Emit event for parented
-            this.emit('node:parented', {
-                category: 'system',
-                message: `Node ${this.instanceId} parented to ${parent.instanceId}`,
-                childId: this.instanceId,
-                parentId: parent.instanceId
-            });
         } else {
             this._node.parent = null;
-            Logger.log(LogCategory.SYSTEM, 
-                `Node ${this.instanceId} unparented`);
-            // Emit event for unparented
-            this.emit('node:unparented', {
-                category: 'system',
-                message: `Node ${this.instanceId} unparented`,
-                childId: this.instanceId
-            });
         }
+        
+        // Update world transforms due to hierarchy change
+        this._updateWorldTransforms();
     }
     
-    /**
-     * Add a child node to this node
-     * @param child The child node to add
-     */
     addChild(child: NodeComponent): void {
         child.setParent(this);
-        // Emit event for child added
-        this.emit('node:child_added', {
-            category: 'system',
-            message: `Child node ${child.instanceId} added to ${this.instanceId}`,
-            childId: child.instanceId,
-            parentId: this.instanceId
-        });
     }
     
-    /**
-     * Remove a child node from this node
-     * @param child The child node to remove
-     */
     removeChild(child: NodeComponent): void {
         const index = this._children.indexOf(child);
         if (index !== -1) {
             this._children.splice(index, 1);
             child._parent = null;
             child._node.parent = null;
-            
-            Logger.log(LogCategory.SYSTEM, 
-                `Removed child node ${child.instanceId} from ${this.instanceId}`);
-            // Emit event for child removed
-            this.emit('node:child_removed', {
-                category: 'system',
-                message: `Child node ${child.instanceId} removed from ${this.instanceId}`,
-                childId: child.instanceId,
-                parentId: this.instanceId
-            });
+            child._updateWorldTransforms();
         }
     }
     
-    /**
-     * Get all child nodes
-     */
     getChildren(): NodeComponent[] {
         return [...this._children];
     }
     
-    /**
-     * Get all descendants (children, grandchildren, etc.)
-     */
-    getAllDescendants(): NodeComponent[] {
-        let descendants: NodeComponent[] = [];
-        
-        for (const child of this._children) {
-            descendants.push(child);
-            descendants = descendants.concat(child.getAllDescendants());
-        }
-        
-        return descendants;
-    }
-    
-    /**
-     * Get the parent node
-     */
     getParent(): NodeComponent | null {
         return this._parent;
-    }
-    
-    /**
-     * Find if this node is an ancestor of another node
-     */
-    isAncestorOf(node: NodeComponent): boolean {
-        let parent = node.getParent();
-        while (parent) {
-            if (parent === this) {
-                return true;
-            }
-            parent = parent.getParent();
-        }
-        return false;
     }
     
     /**
@@ -288,296 +202,128 @@ export class NodeComponent extends Component<NodeComponentData> {
         return this._node;
     }
     
-    /**
-     * Get the attached GameObject
-     */
-    get gameObject(): GameObject | undefined {
-        return this._gameObject;
-    }
-    
-    //=== TRANSFORM METHODS ===//
+    // ============================================================
+    // Movement Utilities Using VectorProperty APIs
+    // ============================================================
     
     /**
-     * Set local position (relative to parent)
-     */
-    setLocalPosition(x: number, y: number, z: number): void {
-        this._node.position.set(x, y, z);
-    }
-    
-    /**
-     * Set local position from Vector3
-     */
-    setLocalPositionFromVector(position: Vector3): void {
-        this._node.position.copyFrom(position);
-    }
-    
-    /**
-     * Get local position
-     */
-    getLocalPosition(): Vector3 {
-        return this._node.position.clone();
-    }
-    
-    /**
-     * Set local rotation (Euler angles in radians)
-     */
-    setLocalRotation(x: number, y: number, z: number): void {
-        this._node.rotation.set(x, y, z);
-    }
-    
-    /**
-     * Set local rotation from Vector3 (Euler angles in radians)
-     */
-    setLocalRotationFromVector(rotation: Vector3): void {
-        this._node.rotation.copyFrom(rotation);
-    }
-    
-    /**
-     * Get local rotation (Euler angles in radians)
-     */
-    getLocalRotation(): Vector3 {
-        return this._node.rotation.clone();
-    }
-    
-    /**
-     * Set local scale
-     */
-    setLocalScale(x: number, y: number, z: number): void {
-        this._node.scaling.set(x, y, z);
-    }
-    
-    /**
-     * Set uniform local scale (same in all directions)
-     */
-    setUniformLocalScale(scale: number): void {
-        this._node.scaling.setAll(scale);
-    }
-    
-    /**
-     * Get local scale
-     */
-    getLocalScale(): Vector3 {
-        return this._node.scaling.clone();
-    }
-    
-    /**
-     * Get world position
-     */
-    getWorldPosition(): Vector3 {
-        return this._node.getAbsolutePosition();
-    }
-    
-    /**
-     * Set world position (regardless of parent)
-     */
-    setWorldPosition(x: number, y: number, z: number): void {
-        const pos = new Vector3(x, y, z);
-        const worldToLocal = this._getWorldToLocalMatrix();
-        const localPos = Vector3.TransformCoordinates(pos, worldToLocal);
-        this._node.position.copyFrom(localPos);
-    }
-    
-    /**
-     * Get world rotation as Quaternion
-     */
-    getWorldRotationQuaternion(): Quaternion {
-        // Clone the quaternion since Babylon doesn't have a copyTo method
-        return this._node.absoluteRotationQuaternion.clone();
-    }
-    
-    /**
-     * Get world rotation as Euler angles
-     */
-    getWorldRotation(): Vector3 {
-        const quat = this.getWorldRotationQuaternion();
-        return quat.toEulerAngles();
-    }
-    
-    /**
-     * Get world matrix
-     */
-    getWorldMatrix(): Matrix {
-        return this._node.getWorldMatrix();
-    }
-    
-    /**
-     * Get forward direction in world space
-     */
-    getWorldForward(): Vector3 {
-        const matrix = this._node.getWorldMatrix();
-        const forward = new Vector3(0, 0, 1);
-        return Vector3.TransformNormal(forward, matrix).normalize();
-    }
-    
-    /**
-     * Get up direction in world space
-     */
-    getWorldUp(): Vector3 {
-        const matrix = this._node.getWorldMatrix();
-        const up = new Vector3(0, 1, 0);
-        return Vector3.TransformNormal(up, matrix).normalize();
-    }
-    
-    /**
-     * Get right direction in world space
-     */
-    getWorldRight(): Vector3 {
-        const matrix = this._node.getWorldMatrix();
-        const right = new Vector3(1, 0, 0);
-        return Vector3.TransformNormal(right, matrix).normalize();
-    }
-    
-    /**
-     * Look at a world position
-     * @param targetPosition The position to look at
-     */
-    lookAt(targetPosition: Vector3): void {
-        // Correct usage of lookAt with proper parameters
-        this._node.lookAt(targetPosition);
-    }
-    
-    /**
-     * Translate in local space
+     * Translate in local space using VectorProperty API
      */
     translate(x: number, y: number, z: number): void {
-        const offset = new Vector3(x, y, z);
-        this._node.position.addInPlace(offset);
+        this.position.translate(x, y, z, 'translate');
+    }
+    
+    translateByVector(offset: Vector3): void {
+        this.position.translateByVector(offset, 'translateByVector');
     }
     
     /**
-     * Rotate in local space (Euler angles in radians)
+     * Rotate in local space
      */
     rotate(x: number, y: number, z: number): void {
-        this._node.rotation.addInPlace(new Vector3(x, y, z));
+        const current = this.rotation.getValue();
+        const offset = new Vector3(x, y, z);
+        this.rotation.update(current.add(offset), 'rotate');
     }
     
     /**
-     * Helper method to get world to local transform matrix
+     * Scale using VectorProperty API
      */
-    private _getWorldToLocalMatrix(): Matrix {
-        const worldMatrix = this._node.getWorldMatrix();
-        const worldToLocal = Matrix.Invert(worldMatrix);
-        return worldToLocal;
+    scaleUniform(factor: number): void {
+        this.scale.scale(factor, 'scaleUniform');
+    }
+    
+    scaleByVector(scaleVector: Vector3): void {
+        this.scale.scaleByVector(scaleVector, 'scaleByVector');
     }
     
     /**
-     * Sync with a PositionComponent (transition helper)
+     * Look at a target position
      */
-    syncWithPositionComponent(): boolean {
-        // This helper is useful during transition period
-        if (!this._gameObject) return false;
+    lookAt(targetPosition: Vector3): void {
+        // Calculate look-at rotation
+        const currentPos = this.getWorldPosition();
+        const direction = targetPosition.subtract(currentPos).normalize();
         
-        const posComp = this._gameObject.getComponent('position');
-        if (!posComp) return false;
-        
-        // Use type assertion for access
-        const pos = (posComp as any).getPosition();
-        const rot = (posComp as any).getRotation();
-        
-        if (pos && rot) {
-            this.setLocalPositionFromVector(pos);
-            this.setLocalRotationFromVector(rot);
-            return true;
-        }
-        
-        return false;
+        // Convert direction to Euler angles
+        const lookRotation = this._directionToEuler(direction);
+        this.rotation.update(lookRotation, 'lookAt');
+    }
+    
+    private _directionToEuler(direction: Vector3): Vector3 {
+        // Simple look-at calculation (can be enhanced)
+        const yaw = Math.atan2(direction.x, direction.z);
+        const pitch = Math.asin(-direction.y);
+        return new Vector3(pitch, yaw, 0);
     }
     
     // ============================================================
-    // Scene Graph Event System Integration
+    // Component Lifecycle
     // ============================================================
     
-    /**
-     * Add event listener to this scene node
-     */
-    addEventListener(
-        eventType: string, 
-        listener: SceneGraphEventListener, 
-        options?: EventListenerOptions
-    ): void {
-        SceneEvents.addEventListener(this, eventType, listener, options);
-    }
-    
-    /**
-     * Remove event listener from this scene node
-     */
-    removeEventListener(
-        eventType: string, 
-        listener: SceneGraphEventListener, 
-        options?: EventListenerOptions
-    ): void {
-        SceneEvents.removeEventListener(this, eventType, listener, options);
-    }
-    
-    /**
-     * Dispatch an event on this scene node
-     */
-    dispatchEvent(event: SceneGraphEvent): boolean {
-        return SceneEvents.dispatchEvent(event);
-    }
-    
-    /**
-     * Emit an event on this scene node
-     */
-    emit(eventType: string, payload?: any, options?: EventOptions): boolean {
-        return SceneEvents.emitToNode(eventType, payload, this, options);
-    }
-    
-    /**
-     * Emit event to parent node only
-     */
-    emitToParent(eventType: string, payload?: any): boolean {
-        if (!this._parent) return false;
-        return SceneEvents.emitToNode(eventType, payload, this._parent, { bubbles: false });
-    }
-    
-    /**
-     * Emit event to all children
-     */
-    emitToChildren(eventType: string, payload?: any, recursive: boolean = false): void {
-        for (const child of this._children) {
-            SceneEvents.emitToNode(eventType, payload, child, { bubbles: false });
-            
-            if (recursive) {
-                child.emitToChildren(eventType, payload, true);
-            }
+    dispose(): void {
+        // Remove from parent
+        if (this._parent) {
+            this._parent.removeChild(this);
         }
-    }
-    
-    /**
-     * Emit event to all sibling nodes
-     */
-    emitToSiblings(eventType: string, payload?: any): void {
-        if (!this._parent) return;
         
-        for (const sibling of this._parent._children) {
-            if (sibling !== this) {
-                SceneEvents.emitToNode(eventType, payload, sibling, { bubbles: false });
-            }
+        // Remove all children
+        while (this._children.length > 0) {
+            this.removeChild(this._children[0]);
         }
+        
+        // Dispose reactive properties
+        this.position.dispose();
+        this.rotation.dispose();
+        this.scale.dispose();
+        this.worldPosition.dispose();
+        this.worldRotation.dispose();
+        
+        // Dispose Babylon.js node
+        if (this._node) {
+            this._node.dispose();
+        }
+        
+        super.dispose();
     }
     
-    /**
-     * Emit event to all nodes within radius (spatial event)
-     */
-    emitToRadius(
-        eventType: string, 
-        payload: any, 
-        radius: number, 
-        filter?: (node: NodeComponent) => boolean
-    ): void {
-        const center = this.getWorldPosition();
-        SceneEvents.emitToRadius(eventType, payload, center, radius, filter);
+    // ============================================================
+    // Serialization
+    // ============================================================
+    
+    serialize(): NodeComponentData {
+        const pos = this.position.getValue();
+        const rot = this.rotation.getValue();
+        const scale = this.scale.getValue();
+        
+        return {
+            position: { x: pos.x, y: pos.y, z: pos.z },
+            rotation: { x: rot.x, y: rot.y, z: rot.z },
+            scale: { x: scale.x, y: scale.y, z: scale.z },
+            parentId: this._parent ? this._parent.instanceId : null
+        };
     }
     
-    /**
-     * Get all scene nodes within radius of this node
-     */
-    getNodesInRadius(
-        radius: number, 
-        filter?: (node: NodeComponent) => boolean
-    ): NodeComponent[] {
-        const center = this.getWorldPosition();
-        return SceneEvents.getNodesInRadius(center, radius, filter);
+    deserialize(data: NodeComponentData): void {
+        if (data.position) {
+            this.position.update(
+                new Vector3(data.position.x, data.position.y, data.position.z),
+                'deserialize'
+            );
+        }
+        
+        if (data.rotation) {
+            this.rotation.update(
+                new Vector3(data.rotation.x, data.rotation.y, data.rotation.z),
+                'deserialize'
+            );
+        }
+        
+        if (data.scale) {
+            this.scale.update(
+                new Vector3(data.scale.x, data.scale.y, data.scale.z),
+                'deserialize'
+            );
+        }
     }
 }

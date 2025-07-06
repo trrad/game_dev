@@ -1,10 +1,19 @@
 /**
- * UI Manager
- * Coordinates all UI components and manages CSS loading
+ * UIManager.ts
  * 
- * NOTE: This UIManager is fully implemented but not currently used in the main ECS app.
- * The main app (ecs-app.ts) creates UI components directly instead of using this manager.
- * This could be integrated in the future to centralize UI management.
+ * ROLE: Scene graph-integrated UI coordination and event bridging
+ * RESPONSIBILITIES:
+ * - Manages all game UI components as a scene graph participant
+ * - Bridges between DOM events (user input) and scene graph events
+ * - Listens for scene graph events and updates UI state accordingly
+ * - Creates and coordinates UI components (EventLogUI, buttons, etc.)
+ * - Handles UI lifecycle (creation, updates, disposal)
+ * 
+ * INTERFACE:
+ * - createUI(): Initialize all UI components and set up event listeners
+ * - listenForLogEvents(rootNode): Set up event log display pipeline
+ * - DOM Event → node.emit(): Convert user interactions to scene graph events
+ * - Scene Graph Event → UI Update: React to game state changes
  */
 
 import { GameNodeObject } from '../../engine/core/GameNodeObject';
@@ -71,8 +80,20 @@ export class UIManager extends GameNodeObject {
         if (!rootNode) return;
         rootNode.addEventListener('event:log', (evt: any) => {
             if (this.eventLogUI) {
+                // DEBUG: Log that we're receiving events
+                console.log('[UIManager] Received event:log:', evt.payload);
                 this.eventLogUI.addLogEntry(evt.payload);
             }
+        });
+    }
+
+    /**
+     * Handle exit button interaction by emitting scene graph event
+     */
+    private handleExitRequest(): void {
+        this.node.emit('ui:exit_requested', {
+            timestamp: Date.now(),
+            source: 'exit_button'
         });
     }
 

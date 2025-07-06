@@ -1,6 +1,18 @@
 /**
- * UI Factory for creating common UI elements
- * Provides a convenient API for creating DOM elements with consistent styling
+ * UIFactory.ts
+ * 
+ * ROLE: Factory for creating standardized DOM UI elements with consistent styling
+ * RESPONSIBILITIES:
+ * - Creates styled HTML elements (buttons, panels, sliders, labels)
+ * - Applies consistent design system and styling across all UI components
+ * - Provides convenience methods for common UI patterns (error messages, exit dialogs)
+ * - Abstracts DOM element creation with configurable options
+ * 
+ * INTERFACE:
+ * - createPanel(options): Create styled container divs with positioning
+ * - createButton/createExitButton/createLogsButton(): Create styled interactive buttons
+ * - createLabel/createSlider(): Create form elements with consistent styling
+ * - createErrorMessage/createExitMessage(): Create specialized modal dialogs
  */
 
 const DefaultStyles = {

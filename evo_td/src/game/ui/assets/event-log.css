@@ -15,9 +15,10 @@
     border: 2px solid #555;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
     font-family: 'Segoe UI', 'Tahoma', sans-serif;
-    z-index: 1000;
+    z-index: 9999; /* INCREASED: Higher than canvas */
     display: flex;
     flex-direction: column;
+    pointer-events: auto; /* ADDED: Ensure pointer events work */
 }
 
 .event-log-header {
@@ -30,10 +31,12 @@
     align-items: center;
     font-size: 14px;
     font-weight: bold;
+    pointer-events: auto; /* ADDED: Ensure header is interactive */
 }
 
 .event-log-title {
     color: #4a9eff;
+    pointer-events: auto; /* ADDED */
 }
 
 .event-log-toggle {
@@ -44,6 +47,7 @@
     font-size: 14px;
     padding: 2px 6px;
     border-radius: 3px;
+    pointer-events: auto; /* ADDED: Ensure buttons work */
 }
 
 .event-log-toggle:hover {
@@ -56,9 +60,10 @@
     padding: 10px;
     max-height: 360px;
     min-height: 120px;
+    pointer-events: auto; /* ADDED: Ensure content is scrollable */
 }
 
-.event-log-content.collapsed {
+.event-log-content-collapsed {
     display: none;
 }
 
@@ -67,6 +72,7 @@
     font-size: 13px;
     line-height: 1.4;
     word-wrap: break-word;
+    pointer-events: auto; /* ADDED */
 }
 
 .event-log-entry .timestamp {
@@ -118,6 +124,12 @@
     color: #666;
     border-top: 1px solid #333;
     text-align: center;
+    pointer-events: auto; /* ADDED: Ensure footer is clickable */
+    cursor: pointer; /* ADDED: Show it's clickable */
+}
+
+.event-log-footer:hover {
+    background: rgba(255, 255, 255, 0.05); /* ADDED: Hover feedback */
 }
 
 /* Scrollbar styling */
