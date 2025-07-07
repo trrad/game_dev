@@ -56,14 +56,14 @@ export class ReactiveProperty<T> extends Component<ReactivePropertyData<T>> {
     getPreviousValue(): T { return this.previousValue; }
 
     // Full Babylon.js Observable API exposure
-    get hasObservers(): boolean { return this.changeObservable.hasObservers; }
-    get hasThresholdObservers(): boolean { return this.thresholdObservable.hasObservers; }
+    get hasObservers(): boolean { return this.changeObservable.hasObservers(); }
+    get hasThresholdObservers(): boolean { return this.thresholdObservable.hasObservers(); }
 
     addThreshold(value: T, eventType: string, direction: 'above' | 'below' | 'equal' = 'equal'): void {
         this.thresholds.push({ value, eventType, direction });
     }
 
-    update(newValue: T, source: string = 'unknown'): boolean {
+    updateValue(newValue: T, source: string = 'unknown'): boolean {
         const hasChanged = !this.equalityFn(this.currentValue, newValue);
         
         if (hasChanged) {
@@ -87,34 +87,39 @@ export class ReactiveProperty<T> extends Component<ReactivePropertyData<T>> {
         return hasChanged;
     }
 
+    // Add a public set method for compatibility with subclasses and usages
+    public set(newValue: T, source: string = 'unknown'): boolean {
+        return this.updateValue(newValue, source);
+    }
+
     // Full Observable API delegation
-    add(callback: (event: StateChangeEvent<T>) => void, mask?: number, insertFirst?: boolean, scope?: any): Observer<StateChangeEvent<T>> {
+    addObserver(callback: (event: StateChangeEvent<T>) => void, mask?: number, insertFirst?: boolean, scope?: any): Observer<StateChangeEvent<T>> {
         return this.changeObservable.add(callback, mask, insertFirst, scope);
     }
 
-    addOnce(callback: (event: StateChangeEvent<T>) => void): Observer<StateChangeEvent<T>> {
+    addObserverOnce(callback: (event: StateChangeEvent<T>) => void): Observer<StateChangeEvent<T>> {
         return this.changeObservable.addOnce(callback);
     }
 
-    remove(observer: Observer<StateChangeEvent<T>>): boolean {
+    removeObserver(observer: Observer<StateChangeEvent<T>>): boolean {
         return this.changeObservable.remove(observer);
     }
 
-    removeCallback(callback: (event: StateChangeEvent<T>) => void, scope?: any): boolean {
+    removeObserverCallback(callback: (event: StateChangeEvent<T>) => void, scope?: any): boolean {
         return this.changeObservable.removeCallback(callback, scope);
     }
 
-    clear(): void {
+    clearObserver(): void {
         this.changeObservable.clear();
     }
 
-    clone(): Observable<StateChangeEvent<T>> {
+    cloneObserver(): Observable<StateChangeEvent<T>> {
         return this.changeObservable.clone();
     }
 
     // Convenience methods
     onChange(callback: (event: StateChangeEvent<T>) => void): Observer<StateChangeEvent<T>> {
-        return this.add(callback);
+        return this.changeObservable.add(callback);
     }
 
     onThreshold(callback: (event: { eventType: string; value: T; direction: string }) => void): Observer<{ eventType: string; value: T; direction: string }> {
@@ -182,22 +187,22 @@ export class ReactiveProperty<T> extends Component<ReactivePropertyData<T>> {
 // ============================================================
 
 export class BooleanProperty extends ReactiveProperty<boolean> {
-    public readonly type = 'booleanProperty';
+    public readonly type = 'reactiveProperty';
     
     constructor(propertyName: string, initialValue: boolean = false) {
         super(propertyName, initialValue);
     }
 
     toggle(source: string = 'toggle'): boolean {
-        return this.update(!this.currentValue, source);
+        return this.set(!this.currentValue, source);
     }
 
     setTrue(source: string = 'setTrue'): boolean {
-        return this.currentValue ? false : this.update(true, source);
+        return this.currentValue ? false : this.set(true, source);
     }
 
     setFalse(source: string = 'setFalse'): boolean {
-        return !this.currentValue ? false : this.update(false, source);
+        return !this.currentValue ? false : this.set(false, source);
     }
 
     // Additional boolean-specific methods
@@ -206,12 +211,12 @@ export class BooleanProperty extends ReactiveProperty<boolean> {
     
     // Conditional updates
     setIf(condition: boolean, value: boolean, source: string = 'setIf'): boolean {
-        return condition ? this.update(value, source) : false;
+        return condition ? this.set(value, source) : false;
     }
 }
 
 export class NumericProperty extends ReactiveProperty<number> {
-    public readonly type = 'numericProperty';
+    public readonly type = 'reactiveProperty';
     private min?: number;
     private max?: number;
     
@@ -226,51 +231,51 @@ export class NumericProperty extends ReactiveProperty<number> {
         this.max = max;
     }
     
-    update(newValue: number, source: string = 'unknown'): boolean {
+    set(newValue: number, source: string = 'unknown'): boolean {
         if (this.min !== undefined) newValue = Math.max(this.min, newValue);
         if (this.max !== undefined) newValue = Math.min(this.max, newValue);
-        return super.update(newValue, source);
+        return super.set(newValue, source);
     }
 
     // Mathematical operations
-    add(amount: number, source: string = 'add'): boolean {
-        return this.update(this.currentValue + amount, source);
+    addValue(amount: number, source: string = 'add'): boolean {
+        return this.set(this.currentValue + amount, source);
     }
 
-    subtract(amount: number, source: string = 'subtract'): boolean {
-        return this.update(this.currentValue - amount, source);
+    subtractValue(amount: number, source: string = 'subtract'): boolean {
+        return this.set(this.currentValue - amount, source);
     }
 
     multiply(factor: number, source: string = 'multiply'): boolean {
-        return this.update(this.currentValue * factor, source);
+        return this.set(this.currentValue * factor, source);
     }
 
     divide(divisor: number, source: string = 'divide'): boolean {
         if (divisor === 0) return false;
-        return this.update(this.currentValue / divisor, source);
+        return this.set(this.currentValue / divisor, source);
     }
 
     // Increment/decrement
     increment(source: string = 'increment'): boolean {
-        return this.add(1, source);
+        return this.addValue(1, source);
     }
 
     decrement(source: string = 'decrement'): boolean {
-        return this.subtract(1, source);
+        return this.subtractValue(1, source);
     }
 
     // Boundary operations
     clamp(min: number, max: number, source: string = 'clamp'): boolean {
         const clamped = Math.max(min, Math.min(max, this.currentValue));
-        return this.update(clamped, source);
+        return this.set(clamped, source);
     }
 
     setToMin(source: string = 'setToMin'): boolean {
-        return this.min !== undefined ? this.update(this.min, source) : false;
+        return this.min !== undefined ? this.set(this.min, source) : false;
     }
 
     setToMax(source: string = 'setToMax'): boolean {
-        return this.max !== undefined ? this.update(this.max, source) : false;
+        return this.max !== undefined ? this.set(this.max, source) : false;
     }
 
     // Utility methods
@@ -282,7 +287,7 @@ export class NumericProperty extends ReactiveProperty<number> {
     setPercentage(percentage: number, source: string = 'setPercentage'): boolean {
         if (this.min === undefined || this.max === undefined) return false;
         const value = this.min + (this.max - this.min) * Math.max(0, Math.min(1, percentage));
-        return this.update(value, source);
+        return this.set(value, source);
     }
 
     isAtMin(): boolean { return this.min !== undefined && this.currentValue === this.min; }
@@ -295,7 +300,7 @@ export class NumericProperty extends ReactiveProperty<number> {
 
 // NEW: EnumProperty for strongly-typed enum values
 export class EnumProperty<T extends string> extends ReactiveProperty<T> {
-    public readonly type = 'enumProperty';
+    public readonly type = 'reactiveProperty';
     private validValues: Set<T>;
     
     constructor(
@@ -311,17 +316,17 @@ export class EnumProperty<T extends string> extends ReactiveProperty<T> {
         }
     }
     
-    update(newValue: T, source: string = 'unknown'): boolean {
+    set(newValue: T, source: string = 'unknown'): boolean {
         if (!this.validValues.has(newValue)) {
             console.warn(`Invalid enum value: ${newValue} for property ${this.propertyName}. Valid values: ${Array.from(this.validValues).join(', ')}`);
             return false;
         }
-        return super.update(newValue, source);
+        return super.set(newValue, source);
     }
 
     // Enum-specific methods
     setTo(value: T, source: string = 'setTo'): boolean {
-        return this.update(value, source);
+        return this.set(value, source);
     }
 
     isValue(value: T): boolean {
@@ -341,20 +346,20 @@ export class EnumProperty<T extends string> extends ReactiveProperty<T> {
         const values = Array.from(this.validValues);
         const currentIndex = values.indexOf(this.currentValue);
         const nextIndex = (currentIndex + 1) % values.length;
-        return this.update(values[nextIndex], source);
+        return this.set(values[nextIndex], source);
     }
 
     previous(source: string = 'previous'): boolean {
         const values = Array.from(this.validValues);
         const currentIndex = values.indexOf(this.currentValue);
         const prevIndex = currentIndex === 0 ? values.length - 1 : currentIndex - 1;
-        return this.update(values[prevIndex], source);
+        return this.set(values[prevIndex], source);
     }
 }
 
 // NEW: VectorProperty for Vector3 operations
 export class VectorProperty extends ReactiveProperty<Vector3> {
-    public readonly type = 'vectorProperty';
+    public readonly type = 'reactiveProperty';
     
     constructor(propertyName: string, initialValue: Vector3 = Vector3.Zero()) {
         super(propertyName, initialValue.clone(), (a, b) => a.equals(b));
@@ -363,43 +368,43 @@ export class VectorProperty extends ReactiveProperty<Vector3> {
     // Vector operations
     translate(x: number, y: number, z: number, source: string = 'translate'): boolean {
         const newValue = this.currentValue.add(new Vector3(x, y, z));
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     translateByVector(offset: Vector3, source: string = 'translateByVector'): boolean {
         const newValue = this.currentValue.add(offset);
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     scale(factor: number, source: string = 'scale'): boolean {
         const newValue = this.currentValue.scale(factor);
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     scaleByVector(scale: Vector3, source: string = 'scaleByVector'): boolean {
         const newValue = this.currentValue.multiply(scale);
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     normalize(source: string = 'normalize'): boolean {
         const newValue = this.currentValue.normalize();
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     // Component-wise operations
     setX(x: number, source: string = 'setX'): boolean {
         const newValue = new Vector3(x, this.currentValue.y, this.currentValue.z);
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     setY(y: number, source: string = 'setY'): boolean {
         const newValue = new Vector3(this.currentValue.x, y, this.currentValue.z);
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     setZ(z: number, source: string = 'setZ'): boolean {
         const newValue = new Vector3(this.currentValue.x, this.currentValue.y, z);
-        return this.update(newValue, source);
+        return this.set(newValue, source);
     }
 
     // Utility methods
@@ -412,7 +417,7 @@ export class VectorProperty extends ReactiveProperty<Vector3> {
 }
 
 export class CollectionProperty<T> extends ReactiveProperty<Map<string, T>> {
-    public readonly type = 'collectionProperty';
+    public readonly type = 'reactiveProperty';
     
     // Additional observables for granular collection events
     public readonly itemAddedObservable: Observable<{ key: string; value: T; source: string }>;
@@ -433,45 +438,34 @@ export class CollectionProperty<T> extends ReactiveProperty<Map<string, T>> {
         const newMap = new Map(this.currentValue);
         const wasAdded = !newMap.has(key);
         newMap.set(key, value);
-        
-        const changed = this.update(newMap, source);
-        
+        const changed = this.set(newMap, source);
         if (changed && wasAdded) {
             this.itemAddedObservable.notifyObservers({ key, value, source });
         }
-        
         return changed;
     }
 
     removeItem(key: string, source: string = 'removeItem'): boolean {
         const oldValue = this.currentValue.get(key);
         if (oldValue === undefined) return false;
-        
         const newMap = new Map(this.currentValue);
         newMap.delete(key);
-        
-        const changed = this.update(newMap, source);
-        
+        const changed = this.set(newMap, source);
         if (changed) {
             this.itemRemovedObservable.notifyObservers({ key, value: oldValue, source });
         }
-        
         return changed;
     }
 
     updateItem(key: string, value: T, source: string = 'updateItem'): boolean {
         const oldValue = this.currentValue.get(key);
         if (oldValue === undefined) return false;
-        
         const newMap = new Map(this.currentValue);
         newMap.set(key, value);
-        
-        const changed = this.update(newMap, source);
-        
+        const changed = this.set(newMap, source);
         if (changed) {
             this.itemUpdatedObservable.notifyObservers({ key, oldValue, newValue: value, source });
         }
-        
         return changed;
     }
 
@@ -484,7 +478,7 @@ export class CollectionProperty<T> extends ReactiveProperty<Map<string, T>> {
     isEmpty(): boolean { return this.currentValue.size === 0; }
 
     clear(source: string = 'clear'): boolean {
-        return this.update(new Map<string, T>(), source);
+        return this.set(new Map<string, T>(), source);
     }
 
     dispose(): void {

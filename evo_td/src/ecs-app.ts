@@ -4,7 +4,6 @@ import { SceneManager } from "./engine/scene/SceneManager";
 import { GameNodeObject } from "./engine/core/GameNodeObject";
 import { RenderComponent } from "./engine/components/RenderComponent";
 import { NodeComponent } from "./engine/components/NodeComponent";
-import { RadiusComponent } from "./engine/components/RadiusComponent";
 import { 
     ReactivePropertiesComponent,
     BooleanProperty,
@@ -35,10 +34,9 @@ function setupGameCanvasAndScene(id = "gameCanvas") {
 
 // Enhanced RenderComponent with reactive visual feedback
 class ReactiveTestSphereRenderComponent extends RenderComponent {
-    private color: string;
-    private material?: StandardMaterial;
-    private baseColor: Color3;
-    
+    protected color: string;
+    protected baseColor: Color3;
+
     constructor(scene: Scene, color: string = "#44aaff") {
         super(scene, {});
         this.color = color;
@@ -145,10 +143,6 @@ class ReactiveTestEntity extends GameNodeObject {
         // Add render component
         const render = new ReactiveTestSphereRenderComponent(scene, color);
         this.addComponent(render);
-        
-        // Add collision radius for spatial tracking
-        const radius = new RadiusComponent(1.5, 'collision');
-        this.addComponent(radius);
         
         // ✅ DEMONSTRATION: Create all specialized property types using direct constructors
         

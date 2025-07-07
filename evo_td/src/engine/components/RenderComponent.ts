@@ -3,7 +3,7 @@
  * Handles common rendering concerns and provides event-driven updates
  */
 
-import { Scene, AbstractMesh, Material, Vector3 } from "@babylonjs/core";
+import { Scene, AbstractMesh, Material, Vector3, StandardMaterial } from "@babylonjs/core";
 import { Component } from "./Component";
 import { PositionComponent } from "./PositionComponent";
 import { HealthComponent } from "./HealthComponent";
@@ -47,7 +47,7 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     
     protected scene: Scene;
     protected mesh?: AbstractMesh;
-    protected material?: Material;
+    protected material?: StandardMaterial;
     protected config: RenderConfig;
     
     // Event subscription cleanup functions
@@ -71,21 +71,6 @@ export abstract class RenderComponent extends Component<RenderConfig> {
      * Sets up event subscriptions for position and health changes
      */
     onAttach(): void {
-        // Subscribe to position changes from sibling PositionComponent
-        const positionComponent = this._gameObject?.getComponent<PositionComponent>('position');
-        if (positionComponent) {
-            this.unsubscribePosition = this.subscribeToSibling('position_changed', 
-                (event) => this.onPositionChanged(event.payload)
-            );
-        }
-        
-        // Subscribe to health changes for visual damage effects
-        const healthComponent = this._gameObject?.getComponent<HealthComponent>('health');
-        if (healthComponent) {
-            this.unsubscribeHealth = this.subscribeToSibling('health_changed',
-                (event) => this.onHealthChanged(event.payload)
-            );
-        }
         
         // Create initial visual representation
         this.createVisual();
