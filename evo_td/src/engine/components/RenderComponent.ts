@@ -94,7 +94,6 @@ export abstract class RenderComponent extends Component<RenderConfig> {
      */
     attachTo(gameObject: GameObject): void {
         super.attachTo(gameObject);
-        this.onAttach();
     }
 
     /**

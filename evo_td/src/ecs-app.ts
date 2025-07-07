@@ -1,4 +1,4 @@
-// src/ecs-app.ts - Updated Test Scene with New ReactiveProperty System
+// src/ecs-app.ts - Updated Test Scene with Babylon.js Timer Fix
 
 import { SceneManager } from "./engine/scene/SceneManager";
 import { GameNodeObject } from "./engine/core/GameNodeObject";
@@ -14,6 +14,7 @@ import {
 } from "./engine/components/ReactivePropertyComponent";
 import { ObservableFactory } from "./engine/scene/ObservableFactory";
 import { Scene, MeshBuilder, StandardMaterial, Color3, Vector3 } from "@babylonjs/core";
+import { setAndStartTimer } from "@babylonjs/core/Misc/timer";
 
 function setupGameCanvasAndScene(id = "gameCanvas") {
     let canvas = document.getElementById(id) as HTMLCanvasElement | null;
@@ -412,21 +413,21 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
     const child = new ReactiveTestEntity("Companion", sceneManager.scene, parent.node, "#50c878"); // Green  
     const grandchild = new ReactiveTestEntity("Pet", sceneManager.scene, child.node, "#ff6b6b");    // Red
     
-    // Set initial positions using VectorProperty API - FIXED: changed from .update() to .set()
+    // Set initial positions using VectorProperty API
     parent.position.set(new Vector3(0, 0, 0), 'initial_setup');
     child.position.set(new Vector3(2, 0, 0), 'initial_setup');  
     grandchild.position.set(new Vector3(0, 1, 0), 'initial_setup');
     
     // ✅ DEMONSTRATION: Enhanced spatial tracking with new ObservableFactory
     
-    // 1. Distance tracking between entities
+    // 1. Distance tracking between entities - DISABLED DEBUG
     const distanceTracker = ObservableFactory.createDistanceTracker(
         child, 
         grandchild, 
         3.0, 
         sceneManager.scene, 
         'near_pet',
-        { debugMode: false, updateFrequency: 20 }
+        { debugMode: false, updateFrequency: 10 } // Reduced frequency and disabled debug
     );
     
     // React to proximity changes
@@ -440,89 +441,125 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
         }
     });
     
-    // 2. COMMENTED OUT: Collision tracking (no RadiusComponent implemented yet)
-    /*
-    const collisionTracker = ObservableFactory.createCollisionTracker(
-        parent,
-        sceneManager.scene,
-        'has_collision',
-        { debugMode: true, updateFrequency: 30 }
-    );
-    
-    // React to collisions
-    collisionTracker.observable.add((data) => {
-        if (data.changed && data.hasCollision) {
-            console.log(`💥 Hero collision detected with ${data.collisionCount} objects`);
-            parent.takeDamage(5);
-        }
-    });
-    */
-    
-    // 3. Movement progress tracking for parent
+    // 3. Movement progress tracking for parent - DISABLED DEBUG
     const pathPoints = [new Vector3(-5, 0, 0), new Vector3(5, 0, 0)];
     const movementTracker = ObservableFactory.createMovementProgressTracker(
         parent,
         pathPoints,
         sceneManager.scene,
-        { debugMode: false }
+        { debugMode: false } // Disabled debug
     );
     
-    // ✅ DEMONSTRATION: Complex movement animation with reactive properties
+    // ✅ FIXED: Movement animation using Babylon.js render-loop synchronized timers
     let movingToEnd = true;
     let lerpTime = 0;
+    let lastFrameTime = performance.now();
     const moveSpeed = 0.25; // 25% per second
+    const maxDeltaTime = 1/30; // Cap delta time to prevent jumps
     
-    sceneManager.scene.registerBeforeRender(() => {
-        // Update lerp time
-        const deltaTime = sceneManager.scene.getEngine().getDeltaTime() / 1000;
-        lerpTime += moveSpeed * deltaTime;
-        
-        // Check if reached destination
-        if (lerpTime >= 1.0) {
-            lerpTime = 1.0;
-            // Update movement progress (triggers destination reached)
-            movementTracker.updateProgress(1.0);
-            
-            // Reverse direction after brief pause
-            setTimeout(() => {
-                lerpTime = 0;
-                movingToEnd = !movingToEnd;
-                parent.speed.setToMax('direction_change'); // Set to max speed when changing direction
-            }, 1500);
-        } else {
-            // Update progress during movement
-            movementTracker.updateProgress(lerpTime);
+    // SIMPLIFIED: No need for complex pause state with Babylon.js timers
+    let isChangingDirection = false; // Simple flag to prevent multiple timer starts
+    
+    // Store the observer to prevent duplicate registration
+    let animationObserver: any = null;
+    
+    const startAnimation = () => {
+        // Clean up any existing observer
+        if (animationObserver) {
+            sceneManager.scene.unregisterBeforeRender(animationObserver);
         }
         
-        // Calculate and apply parent position using VectorProperty - FIXED: changed from .update() to .set()
-        const startPos = new Vector3(-5, 0, 0);
-        const endPos = new Vector3(5, 0, 0);
-        const currentPos = movingToEnd ? 
-            Vector3.Lerp(startPos, endPos, lerpTime) : 
-            Vector3.Lerp(endPos, startPos, lerpTime);
+        // Register single animation loop
+        animationObserver = () => {
+            const currentTime = performance.now();
+            let deltaTime = (currentTime - lastFrameTime) / 1000;
+            lastFrameTime = currentTime;
+            
+            // Clamp delta time to prevent large jumps
+            deltaTime = Math.min(deltaTime, maxDeltaTime);
+            
+            // Continue animation if not changing direction
+            if (!isChangingDirection && deltaTime > 0 && deltaTime < maxDeltaTime) {
+                lerpTime += moveSpeed * deltaTime;
+                
+                // Check if reached destination
+                if (lerpTime >= 1.0) {
+                    lerpTime = 1.0;
+                    movementTracker.updateProgress(1.0);
+                    
+                    // CRITICAL FIX: Use Babylon.js timer instead of setTimeout
+                    if (!isChangingDirection) {
+                        isChangingDirection = true;
+                        
+                        console.log(`🏁 ${movingToEnd ? 'Hero reached end' : 'Hero reached start'}, starting direction change timer`);
+                        
+                        // Babylon.js render-loop synchronized timer
+                        // ...
+
+                        setAndStartTimer({
+                            timeout: 1500,
+                            contextObservable: sceneManager.scene.onBeforeRenderObservable,
+                            onEnded: () => {
+                                // This runs INSIDE the render loop, properly synchronized
+                                lerpTime = 0;
+                                movingToEnd = !movingToEnd;
+                                parent.speed.setToMax('direction_change');
+                                isChangingDirection = false;
+                                lastFrameTime = performance.now();
+                                console.log(`🔄 Hero direction changed, now moving ${movingToEnd ? 'to end' : 'to start'}`);
+                            },
+                            onTick: (data: any) => {
+                                // Optional: Could show progress indicator
+                                // console.log(`Direction change progress: ${(data.completeRate * 100).toFixed(1)}%`);
+                            }
+                        });
+                    }
+                } else {
+                    movementTracker.updateProgress(lerpTime);
+                }
+            }
+            
+            // Calculate position (continues even during direction change pause)
+            const startPos = new Vector3(-5, 0, 0);
+            const endPos = new Vector3(5, 0, 0);
+            const currentPos = movingToEnd ? 
+                Vector3.Lerp(startPos, endPos, lerpTime) : 
+                Vector3.Lerp(endPos, startPos, lerpTime);
+            
+            parent.position.set(currentPos, 'movement_animation');
+            
+            // Add rotation
+            parent.rotation.setY(lerpTime * Math.PI * 2, 'movement_animation');
+            
+            // Update parent speed based on movement
+            const currentSpeed = lerpTime < 0.1 || lerpTime > 0.9 ? 2 : 8;
+            parent.speed.set(currentSpeed, 'movement_speed');
+            
+            // Continue other animations
+            const orbitAngle = Date.now() * 0.001;
+            const orbitPos = new Vector3(
+                Math.cos(orbitAngle) * 1.5,
+                1,
+                Math.sin(orbitAngle) * 1.5
+            );
+            grandchild.position.set(orbitPos, 'orbit_animation');
+        };
         
-        parent.position.set(currentPos, 'movement_animation');
-        
-        // Add rotation using VectorProperty API
-        parent.rotation.setY(lerpTime * Math.PI * 2, 'movement_animation');
-        
-        // Make grandchild orbit around child using VectorProperty - FIXED: changed from .update() to .set()
-        const orbitAngle = Date.now() * 0.002;
-        const orbitPos = new Vector3(
-            Math.cos(orbitAngle) * 1.5,
-            1,
-            Math.sin(orbitAngle) * 1.5
-        );
-        grandchild.position.set(orbitPos, 'orbit_animation');
-        
-        // Update parent speed based on movement - FIXED: changed from .update() to .set()
-        const currentSpeed = lerpTime < 0.1 || lerpTime > 0.9 ? 2 : 8; // Slow at ends, fast in middle
-        parent.speed.set(currentSpeed, 'movement_speed');
+        sceneManager.scene.registerBeforeRender(animationObserver);
+    };
+    
+    // Start animation
+    startAnimation();
+    
+    // Handle tab visibility changes (still needed for delta time reset)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            lastFrameTime = performance.now();
+            console.log('🔄 Tab became visible, reset animation timing');
+        }
     });
     
-    // ✅ DEMONSTRATION: Console helpers for testing
-    
-    // Add global helpers for testing
+    // ✅ Enhanced console helpers with Babylon.js timer debugging
     (window as any).testEntities = { parent, child, grandchild };
     (window as any).testReactiveSystem = {
         // Test damage/healing
@@ -548,20 +585,64 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
         giveHeroItem: () => parent.addRandomItem(),
         clearHeroInventory: () => parent.inventory.clear('manual_test'),
         
+        // Enhanced animation state with Babylon.js timer info
+        getAnimationState: () => ({
+            lerpTime,
+            movingToEnd,
+            isChangingDirection,
+            frameTime: performance.now() - lastFrameTime,
+            usingBabylonTimers: true // Indicator that we're using proper timers
+        }),
+        
+        resetAnimation: () => {
+            lerpTime = 0;
+            movingToEnd = true;
+            isChangingDirection = false;
+            lastFrameTime = performance.now();
+            console.log('🔄 Animation reset - using Babylon.js timers');
+        },
+        
+        pauseAnimation: () => {
+            if (animationObserver) {
+                sceneManager.scene.unregisterBeforeRender(animationObserver);
+                animationObserver = null;
+                console.log('⏸️ Animation paused (Babylon.js timer will auto-cleanup)');
+            }
+        },
+        
+        resumeAnimation: () => {
+            if (!animationObserver) {
+                startAnimation();
+                console.log('▶️ Animation resumed with Babylon.js timer synchronization');
+            }
+        },
+        
+        forceDirectionChange: () => {
+            if (!isChangingDirection) {
+                lerpTime = 1.0; // Force to end
+                console.log('⏭️ Forced direction change trigger');
+            } else {
+                console.log('⚠️ Direction change already in progress');
+            }
+        },
+        
         // Get performance stats
         getObservableStats: () => ObservableFactory.getPerformanceStats()
     };
     
     // Store cleanup functions globally for testing
     (window as any).cleanup = () => {
+        if (animationObserver) {
+            sceneManager.scene.unregisterBeforeRender(animationObserver);
+            animationObserver = null;
+        }
         distanceTracker.cleanup();
-        // collisionTracker.cleanup(); // Commented out since collision tracker is disabled
         movementTracker.cleanup();
         ObservableFactory.cleanupAllTrackers();
-        console.log("🧹 Cleaned up all trackers");
+        console.log("🧹 Cleaned up all trackers and animations (Babylon.js timers auto-cleanup on scene disposal)");
     };
     
-    // Log performance stats periodically
+    // Log performance stats periodically (REDUCED FREQUENCY)
     setInterval(() => {
         const stats = ObservableFactory.getPerformanceStats();
         console.log('📊 ObservableFactory Performance:', stats);
@@ -572,7 +653,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
             companion: child.getPropertySummary(), 
             pet: grandchild.getPropertySummary()
         });
-    }, 10000);
+    }, 15000); // Increased from 10000 to 15000
     
     console.log(`
 🎯 ReactiveProperty Test Scene Initialized!
@@ -584,6 +665,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
 - Automatic threshold events and reactions
 - Performance-optimized spatial tracking
 - Rich reactive behaviors without old event system
+- Babylon.js render-loop synchronized timers
 
 🎮 Console Commands Available:
 - testReactiveSystem.damageHero(25)     // Test damage system
@@ -594,6 +676,11 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
 - testReactiveSystem.moveHero(1, 0, 0)  // Test VectorProperty translate
 - testReactiveSystem.scaleHero(1.5)     // Test VectorProperty scaling
 - testReactiveSystem.giveHeroItem()     // Test collection add
+- testReactiveSystem.resetAnimation()   // Reset movement animation
+- testReactiveSystem.pauseAnimation()   // Pause movement
+- testReactiveSystem.resumeAnimation()  // Resume movement
+- testReactiveSystem.forceDirectionChange() // Force direction change
+- testReactiveSystem.getAnimationState() // Check animation state
 - cleanup()                             // Clean up all observers
 
 🔍 Watch the console for automatic reactive behaviors!
