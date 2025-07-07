@@ -100,7 +100,7 @@ export class ObservableFactory {
                     
                     // Only update if distance changed significantly (hysteresis)
                     const withinThreshold = distance <= threshold;
-                    const changed = property.update(withinThreshold, `distance_check:${trackerId}`);
+                    const changed = property.set(withinThreshold, `distance_check:${trackerId}`);
                     
                     // Update performance metrics
                     this.performanceMetrics.frameCalculations++;
@@ -193,7 +193,7 @@ export class ObservableFactory {
                 const hasCollision = collisions.length > 0;
                 
                 // Update property and get change status
-                const changed = property.update(hasCollision, `collision_check:${trackerId}`);
+                const changed = property.set(hasCollision, `collision_check:${trackerId}`);
                 
                 // Update performance metrics
                 this.performanceMetrics.frameCalculations++;
@@ -265,7 +265,7 @@ export class ObservableFactory {
         // Monitor progress changes and automatically update destination property
         const progressObserver = progressProperty.onChange((event) => {
             const atDestination = event.to >= 1.0;
-            const destinationChanged = destinationProperty.update(atDestination, 'progress_complete');
+            const destinationChanged = destinationProperty.set(atDestination, 'progress_complete');
             
             // Emit combined state
             progressObservable.notifyObservers({ 
@@ -282,7 +282,7 @@ export class ObservableFactory {
         return {
             updateProgress: (progress: number) => {
                 if (finalConfig.enabled) {
-                    progressProperty.update(Math.max(0, Math.min(1, progress)), 'movement_system');
+                    progressProperty.set(Math.max(0, Math.min(1, progress)), 'movement_system');
                 }
             },
             cleanup: () => {
@@ -365,7 +365,7 @@ export class ObservableFactory {
                 proximityStates.forEach((withinRange, rangeName) => {
                     const property = rangeProperties.get(rangeName);
                     if (property) {
-                        const changed = property.update(withinRange, `proximity_check:${trackerId}`);
+                        const changed = property.set(withinRange, `proximity_check:${trackerId}`);
                         anyChanged = anyChanged || changed;
                     }
                 });
@@ -561,7 +561,7 @@ export function connectObservableToReactiveProperty<T, S>(
 ): Observer<T> {
     return observable.add((value: T) => {
         const transformedValue = transform(value);
-        reactiveProperty.update(transformedValue, source);
+        reactiveProperty.set(transformedValue, source);
     });
 }
 
@@ -576,13 +576,13 @@ export function syncReactiveProperties<T>(
 ): () => void {
     const observer1 = property1.onChange(event => {
         if (event.source !== source2) {
-            property2.update(event.to, source1);
+            property2.set(event.to, source1);
         }
     });
     
     const observer2 = property2.onChange(event => {
         if (event.source !== source1) {
-            property1.update(event.to, source2);
+            property1.set(event.to, source2);
         }
     });
     

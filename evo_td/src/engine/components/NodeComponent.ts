@@ -80,11 +80,11 @@ export class NodeComponent extends Component<NodeComponentData> {
      * Set local position (triggers reactive updates)
      */
     setLocalPosition(x: number, y: number, z: number): void {
-        this.position.update(new Vector3(x, y, z), 'setLocalPosition');
+        this.position.set(new Vector3(x, y, z), 'setLocalPosition');
     }
     
     setLocalPositionFromVector(position: Vector3): void {
-        this.position.update(position.clone(), 'setLocalPositionFromVector');
+        this.position.set(position.clone(), 'setLocalPositionFromVector');
     }
     
     getLocalPosition(): Vector3 {
@@ -95,11 +95,11 @@ export class NodeComponent extends Component<NodeComponentData> {
      * Set local rotation (triggers reactive updates)
      */
     setLocalRotation(x: number, y: number, z: number): void {
-        this.rotation.update(new Vector3(x, y, z), 'setLocalRotation');
+        this.rotation.set(new Vector3(x, y, z), 'setLocalRotation');
     }
     
     setLocalRotationFromVector(rotation: Vector3): void {
-        this.rotation.update(rotation.clone(), 'setLocalRotationFromVector');
+        this.rotation.set(rotation.clone(), 'setLocalRotationFromVector');
     }
     
     getLocalRotation(): Vector3 {
@@ -110,11 +110,11 @@ export class NodeComponent extends Component<NodeComponentData> {
      * Set local scale (triggers reactive updates)
      */
     setLocalScale(x: number, y: number, z: number): void {
-        this.scale.update(new Vector3(x, y, z), 'setLocalScale');
+        this.scale.set(new Vector3(x, y, z), 'setLocalScale');
     }
     
     setUniformLocalScale(scale: number): void {
-        this.scale.update(new Vector3(scale, scale, scale), 'setUniformLocalScale');
+        this.scale.set(new Vector3(scale, scale, scale), 'setUniformLocalScale');
     }
     
     getLocalScale(): Vector3 {
@@ -141,12 +141,12 @@ export class NodeComponent extends Component<NodeComponentData> {
     private _updateWorldTransforms(): void {
         // Update world position
         const worldPos = this._node.getAbsolutePosition();
-        this.worldPosition.update(worldPos.clone(), 'transform_update');
+        this.worldPosition.set(worldPos.clone(), 'transform_update');
         
         // Update world rotation
         const worldQuat = this._node.absoluteRotationQuaternion;
         const worldRot = worldQuat.toEulerAngles();
-        this.worldRotation.update(worldRot, 'transform_update');
+        this.worldRotation.set(worldRot, 'transform_update');
     }
     
     // ============================================================
@@ -223,7 +223,7 @@ export class NodeComponent extends Component<NodeComponentData> {
     rotate(x: number, y: number, z: number): void {
         const current = this.rotation.getValue();
         const offset = new Vector3(x, y, z);
-        this.rotation.update(current.add(offset), 'rotate');
+        this.rotation.set(current.add(offset), 'rotate');
     }
     
     /**
@@ -247,7 +247,7 @@ export class NodeComponent extends Component<NodeComponentData> {
         
         // Convert direction to Euler angles
         const lookRotation = this._directionToEuler(direction);
-        this.rotation.update(lookRotation, 'lookAt');
+        this.rotation.set(lookRotation, 'lookAt');
     }
     
     private _directionToEuler(direction: Vector3): Vector3 {
@@ -306,21 +306,21 @@ export class NodeComponent extends Component<NodeComponentData> {
     
     deserialize(data: NodeComponentData): void {
         if (data.position) {
-            this.position.update(
+            this.position.set(
                 new Vector3(data.position.x, data.position.y, data.position.z),
                 'deserialize'
             );
         }
         
         if (data.rotation) {
-            this.rotation.update(
+            this.rotation.set(
                 new Vector3(data.rotation.x, data.rotation.y, data.rotation.z),
                 'deserialize'
             );
         }
         
         if (data.scale) {
-            this.scale.update(
+            this.scale.set(
                 new Vector3(data.scale.x, data.scale.y, data.scale.z),
                 'deserialize'
             );

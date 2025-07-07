@@ -34,11 +34,15 @@ function setupGameCanvasAndScene(id = "gameCanvas") {
 
 // Enhanced RenderComponent with reactive visual feedback
 class ReactiveTestSphereRenderComponent extends RenderComponent {
-    protected color: string;
-    protected baseColor: Color3;
+    private color: string;
+    private baseColor: Color3;
 
     constructor(scene: Scene, color: string = "#44aaff") {
-        super(scene, {});
+        super(scene, {
+            updateStrategy: 'hybrid',    // Use hybrid strategy  
+            autoParentToNode: true,      // Let RenderComponent handle parenting
+            visible: true
+        });
         this.color = color;
         this.baseColor = Color3.FromHexString(color);
     }
@@ -46,15 +50,17 @@ class ReactiveTestSphereRenderComponent extends RenderComponent {
     protected createVisual(): void {
         this.mesh = MeshBuilder.CreateSphere("test_sphere", { diameter: 1 }, this.scene);
         
-        // Parent mesh to NodeComponent's transform
-        const nodeComponent = this._gameObject?.getComponent<NodeComponent>('Node');
-        if (nodeComponent) {
-            this.mesh.parent = nodeComponent.getTransformNode();
-        }
-        
+        // Create material
         this.material = new StandardMaterial("test_sphere_mat", this.scene);
         this.material.diffuseColor = this.baseColor;
         this.mesh.material = this.material;
+        
+        // RenderComponent will handle parenting automatically via autoParentToNode: true
+        // No manual parenting needed
+    }
+    
+    protected updateVisual(): void {
+        // Custom visual updates can go here if needed
     }
     
     // React to health changes with color
@@ -103,14 +109,6 @@ class ReactiveTestSphereRenderComponent extends RenderComponent {
                 this.material.diffuseColor = originalColor;
             }
         }, duration);
-    }
-    
-    protected updateVisual(): void {
-        // Visual updates handled by reactive property observers
-    }
-    
-    protected updatePosition(): void {
-        // Position handled by reactive NodeComponent
     }
 }
 
@@ -300,7 +298,7 @@ class ReactiveTestEntity extends GameNodeObject {
         // Periodic health regeneration
         setInterval(() => {
             if (this.isAlive.isTrue() && this.health.getValue() < this.health.getMax()!) {
-                this.health.add(2, 'regeneration');
+                this.health.addValue(2, 'regeneration');
             }
         }, 2000);
         
@@ -338,10 +336,10 @@ class ReactiveTestEntity extends GameNodeObject {
         const actualDamage = amount - damageReduction;
         
         // Apply damage to health
-        this.health.subtract(actualDamage, 'damage_taken');
+        this.health.subtractValue(actualDamage, 'damage_taken');
         
         // Damage armor slightly
-        this.armor.subtract(Math.ceil(amount * 0.1), 'wear');
+        this.armor.subtractValue(Math.ceil(amount * 0.1), 'wear');
         
         // Enter combat if not already
         if (this.combatState.isValue('peaceful')) {
@@ -350,7 +348,7 @@ class ReactiveTestEntity extends GameNodeObject {
     }
     
     heal(amount: number): void {
-        this.health.add(amount, 'healing');
+        this.health.addValue(amount, 'healing');
         
         // Flash green when healed
         const render = this.getComponent<ReactiveTestSphereRenderComponent>('render');
@@ -358,7 +356,7 @@ class ReactiveTestEntity extends GameNodeObject {
     }
     
     repairArmor(amount: number): void {
-        this.armor.add(amount, 'repair');
+        this.armor.addValue(amount, 'repair');
     }
     
     addRandomItem(): void {
@@ -414,10 +412,10 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
     const child = new ReactiveTestEntity("Companion", sceneManager.scene, parent.node, "#50c878"); // Green  
     const grandchild = new ReactiveTestEntity("Pet", sceneManager.scene, child.node, "#ff6b6b");    // Red
     
-    // Set initial positions using VectorProperty API
-    parent.position.update(new Vector3(0, 0, 0), 'initial_setup');
-    child.position.update(new Vector3(2, 0, 0), 'initial_setup');  
-    grandchild.position.update(new Vector3(0, 1, 0), 'initial_setup');
+    // Set initial positions using VectorProperty API - FIXED: changed from .update() to .set()
+    parent.position.set(new Vector3(0, 0, 0), 'initial_setup');
+    child.position.set(new Vector3(2, 0, 0), 'initial_setup');  
+    grandchild.position.set(new Vector3(0, 1, 0), 'initial_setup');
     
     // ✅ DEMONSTRATION: Enhanced spatial tracking with new ObservableFactory
     
@@ -428,7 +426,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
         3.0, 
         sceneManager.scene, 
         'near_pet',
-        { debugMode: true, updateFrequency: 20 }
+        { debugMode: false, updateFrequency: 20 }
     );
     
     // React to proximity changes
@@ -442,7 +440,8 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
         }
     });
     
-    // 2. Collision tracking for parent
+    // 2. COMMENTED OUT: Collision tracking (no RadiusComponent implemented yet)
+    /*
     const collisionTracker = ObservableFactory.createCollisionTracker(
         parent,
         sceneManager.scene,
@@ -457,6 +456,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
             parent.takeDamage(5);
         }
     });
+    */
     
     // 3. Movement progress tracking for parent
     const pathPoints = [new Vector3(-5, 0, 0), new Vector3(5, 0, 0)];
@@ -464,7 +464,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
         parent,
         pathPoints,
         sceneManager.scene,
-        { debugMode: true }
+        { debugMode: false }
     );
     
     // ✅ DEMONSTRATION: Complex movement animation with reactive properties
@@ -494,30 +494,30 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
             movementTracker.updateProgress(lerpTime);
         }
         
-        // Calculate and apply parent position using VectorProperty
+        // Calculate and apply parent position using VectorProperty - FIXED: changed from .update() to .set()
         const startPos = new Vector3(-5, 0, 0);
         const endPos = new Vector3(5, 0, 0);
         const currentPos = movingToEnd ? 
             Vector3.Lerp(startPos, endPos, lerpTime) : 
             Vector3.Lerp(endPos, startPos, lerpTime);
         
-        parent.position.update(currentPos, 'movement_animation');
+        parent.position.set(currentPos, 'movement_animation');
         
         // Add rotation using VectorProperty API
         parent.rotation.setY(lerpTime * Math.PI * 2, 'movement_animation');
         
-        // Make grandchild orbit around child using VectorProperty translate
+        // Make grandchild orbit around child using VectorProperty - FIXED: changed from .update() to .set()
         const orbitAngle = Date.now() * 0.002;
         const orbitPos = new Vector3(
             Math.cos(orbitAngle) * 1.5,
             1,
             Math.sin(orbitAngle) * 1.5
         );
-        grandchild.position.update(orbitPos, 'orbit_animation');
+        grandchild.position.set(orbitPos, 'orbit_animation');
         
-        // Update parent speed based on movement
+        // Update parent speed based on movement - FIXED: changed from .update() to .set()
         const currentSpeed = lerpTime < 0.1 || lerpTime > 0.9 ? 2 : 8; // Slow at ends, fast in middle
-        parent.speed.update(currentSpeed, 'movement_speed');
+        parent.speed.set(currentSpeed, 'movement_speed');
     });
     
     // ✅ DEMONSTRATION: Console helpers for testing
@@ -555,7 +555,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
     // Store cleanup functions globally for testing
     (window as any).cleanup = () => {
         distanceTracker.cleanup();
-        collisionTracker.cleanup();
+        // collisionTracker.cleanup(); // Commented out since collision tracker is disabled
         movementTracker.cleanup();
         ObservableFactory.cleanupAllTrackers();
         console.log("🧹 Cleaned up all trackers");
