@@ -1,10 +1,5 @@
-export interface NetworkMessage {
-    type: 'property_update' | 'input';
-    entityId: string;
-    data: any;
-    timestamp: number;
-    senderId?: string;
-}
+import { NetworkReactiveEntity } from './NetworkReactiveEntity';
+import { NetworkRole, NetworkMessage } from './NetworkTypes';
 
 export class SimpleNetworkManager {
     private entities: Map<string, NetworkReactiveEntity> = new Map();

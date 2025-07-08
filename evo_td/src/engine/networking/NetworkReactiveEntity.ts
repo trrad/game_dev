@@ -1,7 +1,7 @@
 import { GameNodeObject } from '../core/GameNodeObject';
 import { ReactivePropertiesComponent, ReactiveProperty } from '../components/ReactivePropertyComponent';
-import { NetworkRole, PropertySchema, EntitySchema, NetworkSnapshot } from './NetworkTypes';
 import { Scene } from '@babylonjs/core';
+import { NetworkRole, PropertySchema, EntitySchema, NetworkSnapshot } from './NetworkTypes';
 
 /**
  * FIXED: Generic network-enabled reactive entity with proper patterns
