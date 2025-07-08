@@ -22,7 +22,6 @@ export interface ReactivePropertyData<T> {
 
 /**
  * Base ReactiveProperty - Observable-based reactive state management
- * Exposes full Babylon.js Observable API for maximum flexibility
  */
 export class ReactiveProperty<T> extends Component<ReactivePropertyData<T>> {
     public readonly type = 'reactiveProperty';
@@ -90,31 +89,6 @@ export class ReactiveProperty<T> extends Component<ReactivePropertyData<T>> {
     // Add a public set method for compatibility with subclasses and usages
     public set(newValue: T, source: string = 'unknown'): boolean {
         return this.updateValue(newValue, source);
-    }
-
-    // Full Observable API delegation
-    addObserver(callback: (event: StateChangeEvent<T>) => void, mask?: number, insertFirst?: boolean, scope?: any): Observer<StateChangeEvent<T>> {
-        return this.changeObservable.add(callback, mask, insertFirst, scope);
-    }
-
-    addObserverOnce(callback: (event: StateChangeEvent<T>) => void): Observer<StateChangeEvent<T>> {
-        return this.changeObservable.addOnce(callback);
-    }
-
-    removeObserver(observer: Observer<StateChangeEvent<T>>): boolean {
-        return this.changeObservable.remove(observer);
-    }
-
-    removeObserverCallback(callback: (event: StateChangeEvent<T>) => void, scope?: any): boolean {
-        return this.changeObservable.removeCallback(callback, scope);
-    }
-
-    clearObserver(): void {
-        this.changeObservable.clear();
-    }
-
-    cloneObserver(): Observable<StateChangeEvent<T>> {
-        return this.changeObservable.clone();
     }
 
     // Convenience methods
