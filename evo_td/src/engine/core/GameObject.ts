@@ -224,54 +224,6 @@ export class GameObject {
     }
 
     /**
-     * Get a snapshot of current state for delta compression
-     */
-    getNetworkSnapshot(): NetworkSnapshot {
-        const snapshot: NetworkSnapshot = {
-            id: this.id,
-            timestamp: Date.now(),
-            position: null,
-            health: null,
-            state: null
-        };
-        
-        // Include commonly updated components for efficient networking
-        const positionComp = this.getComponent('position') || this.getComponent('sceneNode');
-        if (positionComp) {
-            snapshot.position = positionComp.serialize();
-        }
-        
-        const healthComp = this.getComponent('health');
-        if (healthComp) {
-            snapshot.health = healthComp.serialize();
-        }
-        
-        // Entity-specific state (can be overridden by subclasses)
-        snapshot.state = this.getEntityState();
-        
-        return snapshot;
-    }
-
-    /**
-     * Apply a network snapshot (delta update)
-     */
-    applyNetworkSnapshot(snapshot: NetworkSnapshot): void {
-        if (snapshot.position) {
-            const positionComp = this.getComponent('position') || this.getComponent('sceneNode');
-            positionComp?.deserialize(snapshot.position);
-        }
-        
-        if (snapshot.health) {
-            const healthComp = this.getComponent('health');
-            healthComp?.deserialize(snapshot.health);
-        }
-        
-        if (snapshot.state) {
-            this.setEntityState(snapshot.state);
-        }
-    }
-
-    /**
      * Get entity-specific state data (override in subclasses)
      */
     protected getEntityState(): any {
