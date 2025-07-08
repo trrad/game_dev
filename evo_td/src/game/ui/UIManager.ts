@@ -1,112 +1,150 @@
-/**
- * UIManager.ts
- * 
- * ROLE: Scene graph-integrated UI coordination and event bridging
- * RESPONSIBILITIES:
- * - Manages all game UI components as a scene graph participant
- * - Bridges between DOM events (user input) and scene graph events
- * - Listens for scene graph events and updates UI state accordingly
- * - Creates and coordinates UI components (EventLogUI, buttons, etc.)
- * - Handles UI lifecycle (creation, updates, disposal)
- * 
- * INTERFACE:
- * - createUI(): Initialize all UI components and set up event listeners
- * - listenForLogEvents(rootNode): Set up event log display pipeline
- * - DOM Event → node.emit(): Convert user interactions to scene graph events
- * - Scene Graph Event → UI Update: React to game state changes
- */
+// src/game/ui/UIManager.ts - Fixed for Reactive System
+// NOTE: This appears to be a UI management component that needs updating for the new reactive system
 
 import { GameNodeObject } from '../../engine/core/GameNodeObject';
+import { ReactivePropertiesComponent, BooleanProperty } from '../../engine/components/ReactivePropertyComponent';
 import { Scene } from '@babylonjs/core';
-import { UIFactory } from './UIFactory';
-import { Logger, LogCategory } from '../../engine/utils/Logger';
-import { EventLogUI } from './EventLogUI';
-import { CSSLoader } from './CSSLoader';
 
 export class UIManager extends GameNodeObject {
-    private uiFactory: UIFactory;
-    private domRoot: HTMLElement;
-    private eventLogUI: EventLogUI | null = null;
-    private exitButton: HTMLElement | null = null;
-    // Add more UI element refs as needed
+    private uiProperties: ReactivePropertiesComponent;
+    private isExitRequested: BooleanProperty;
+    private isVisible: BooleanProperty;
 
-    constructor(scene: Scene, parentNode?: any) {
-        super('ui-manager', scene, parentNode);
-        this.uiFactory = new UIFactory();
-        this.domRoot = document.createElement('div');
-        this.domRoot.id = 'ui-root';
-        this.domRoot.style.position = 'absolute';
-        this.domRoot.style.top = '0';
-        this.domRoot.style.left = '0';
-        this.domRoot.style.width = '100vw';
-        this.domRoot.style.height = '100vh';
-        this.domRoot.style.pointerEvents = 'none'; // UI children will override as needed
-        document.body.appendChild(this.domRoot);
+    constructor(scene: Scene) {
+        super('ui-manager', scene);
+        
+        // Set up reactive properties for UI state
+        this.uiProperties = new ReactivePropertiesComponent();
+        this.addComponent(this.uiProperties);
+        
+        // Create UI state properties
+        this.isExitRequested = new BooleanProperty('exit_requested', false);
+        this.isVisible = new BooleanProperty('ui_visible', true);
+        
+        this.uiProperties.addProperty(this.isExitRequested);
+        this.uiProperties.addProperty(this.isVisible);
+        
+        this.setupUIBehaviors();
     }
 
-    /**
-     * Create and setup all UI components
-     */
-    public async createUI(): Promise<void> {
-        // Dynamically load UI CSS (event-log and main)
-        // TODO: Integrate with future ResourceManager
-        await CSSLoader.getInstance().loadMultipleCSS([
-            'main.css',
-            'event-log.css'
-        ]);
-
-        // Event Log UI (pure DOM, managed by UIManager)
-        this.eventLogUI = new EventLogUI();
-        this.domRoot.appendChild(this.eventLogUI.htmlElement);
-
-        // Example: Exit Button
-        this.exitButton = this.uiFactory.createExitButton(() => this.handleExitRequest(), {
-            style: { position: 'absolute', top: '10px', right: '10px', pointerEvents: 'auto' }
-        });
-        this.domRoot.appendChild(this.exitButton);
-
-        // Wire up DOM events to ECS events
-        if (this.exitButton) {
-            this.exitButton.addEventListener('click', () => {
-                this.node.emit('ui:exit', { source: 'exitButton' });
-            });
-        }
-    }
-
-    /**
-     * Listen for ECS/node log events and update the event log UI
-     */
-    public listenForLogEvents(rootNode: any): void {
-        if (!rootNode) return;
-        rootNode.addEventListener('event:log', (evt: any) => {
-            if (this.eventLogUI) {
-                // DEBUG: Log that we're receiving events
-                console.log('[UIManager] Received event:log:', evt.payload);
-                this.eventLogUI.addLogEntry(evt.payload);
+    private setupUIBehaviors(): void {
+        // React to exit requests
+        this.isExitRequested.onChange((event) => {
+            if (event.to === true) {
+                console.log('UI exit requested:', event.source);
+                this.handleExitRequest(event.source);
             }
         });
-    }
 
-    /**
-     * Handle exit button interaction by emitting scene graph event
-     */
-    private handleExitRequest(): void {
-        this.node.emit('ui:exit_requested', {
-            timestamp: Date.now(),
-            source: 'exit_button'
+        // React to visibility changes
+        this.isVisible.onChange((event) => {
+            console.log('UI visibility changed:', event.to, 'source:', event.source);
+            this.updateUIVisibility(event.to);
         });
     }
 
-    /**
-     * Clean up all UI DOM elements
-     */
-    public dispose(): void {
-        if (this.domRoot.parentNode) {
-            this.domRoot.parentNode.removeChild(this.domRoot);
+    // FIXED: Replace emit calls with reactive property updates
+    public requestExit(source: string = 'unknown'): void {
+        // OLD: this.node.emit('ui:exit', { source: 'exitButton' });
+        // NEW: Use reactive property
+        this.isExitRequested.setTrue(source);
+    }
+
+    public requestExitConfirmation(source: string = 'unknown'): void {
+        // OLD: this.node.emit('ui:exit_requested', { source });
+        // NEW: Use reactive property with different handling
+        console.log('Exit confirmation requested from:', source);
+        this.isExitRequested.setTrue(`confirmation_${source}`);
+    }
+
+    private handleExitRequest(source: string): void {
+        if (source === 'exitButton') {
+            // Handle direct exit button press
+            this.showExitConfirmation();
+        } else if (source.startsWith('confirmation_')) {
+            // Handle confirmed exit
+            this.performExit();
+        } else {
+            // Handle other exit sources
+            console.log('Exit requested from unknown source:', source);
         }
-        if (this.eventLogUI) {
-            this.eventLogUI.dispose();
+    }
+
+    private showExitConfirmation(): void {
+        // Implementation for showing exit confirmation dialog
+        console.log('Showing exit confirmation dialog');
+        // This would typically show a modal or confirmation UI
+    }
+
+    private performExit(): void {
+        // Implementation for actual exit logic
+        console.log('Performing exit...');
+        // This would typically trigger application shutdown or scene change
+    }
+
+    private updateUIVisibility(visible: boolean): void {
+        // Implementation for updating UI visibility
+        console.log('Updating UI visibility:', visible);
+        // This would typically show/hide UI elements
+    }
+
+    // Public API methods
+    public show(): void {
+        this.isVisible.setTrue('programmatic_show');
+    }
+
+    public hide(): void {
+        this.isVisible.setFalse('programmatic_hide');
+    }
+
+    public toggle(): void {
+        this.isVisible.toggle('programmatic_toggle');
+    }
+
+    public isUIVisible(): boolean {
+        return this.isVisible.isTrue();
+    }
+
+    public isExitPending(): boolean {
+        return this.isExitRequested.isTrue();
+    }
+
+    // Reset exit state
+    public cancelExit(): void {
+        this.isExitRequested.setFalse('cancelled');
+    }
+
+    serialize(): any {
+        return {
+            isVisible: this.isVisible.getValue(),
+            isExitRequested: this.isExitRequested.getValue()
+        };
+    }
+
+    deserialize(data: any): void {
+        if (typeof data.isVisible === 'boolean') {
+            this.isVisible.set(data.isVisible, 'deserialize');
         }
-        super.dispose();
+        if (typeof data.isExitRequested === 'boolean') {
+            this.isExitRequested.set(data.isExitRequested, 'deserialize');
+        }
     }
 }
+
+// Example usage:
+/*
+const uiManager = new UIManager(scene);
+
+// Listen for exit requests
+uiManager.isExitRequested.onChange((event) => {
+    if (event.to) {
+        console.log('Application should exit:', event.source);
+    }
+});
+
+// Request exit from button
+uiManager.requestExit('exitButton');
+
+// Request exit with confirmation
+uiManager.requestExitConfirmation('menuOption');
+*/

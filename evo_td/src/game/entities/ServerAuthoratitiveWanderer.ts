@@ -1,4 +1,6 @@
-import { NetworkReactiveEntity, NetworkRole } from '../../engine/networking/NetworkReactiveEntity';
+// FIXED: Import NetworkRole from correct location (NetworkTypes, not NetworkReactiveEntity)
+import { NetworkReactiveEntity } from '../../engine/networking/NetworkReactiveEntity';
+import { NetworkRole } from '../../engine/networking/NetworkTypes';
 import { ConfigurableTimers } from '../../engine/utils/ConfigurableTimers';
 import { Vector3, Scene } from '@babylonjs/core';
 import { GAME_ENTITY_SCHEMAS } from '../schemas/EntitySchemas';
@@ -103,6 +105,7 @@ export class ServerAuthoritativeWanderer extends NetworkReactiveEntity {
         console.log(`🚶 ${this.getNetworkId()} started wandering`);
         
         if (this.scene) {
+            // FIXED: Use createRepeatingTimer instead of non-existent method
             this.timerCleanup = ConfigurableTimers.createRepeatingTimer(this.scene, 16, () => {
                 const wanderState = this.getEnumProperty('wanderState');
                 const isAlive = this.getBooleanProperty('isAlive');

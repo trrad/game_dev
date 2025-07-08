@@ -1,4 +1,4 @@
-// src/engine/components/RenderComponent.ts - Simplified Reactive-Only Version
+// src/engine/components/RenderComponent.ts - Corrected (Keeping Event Parameters)
 
 import { Scene, AbstractMesh, Material, Vector3, StandardMaterial, Observer } from "@babylonjs/core";
 import { Component } from "./Component";
@@ -116,17 +116,26 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     private setupReactiveTransformSync(): void {
         if (!this.nodeComponent) return;
         
-        // Subscribe to reactive transform properties using their onChange pattern
         this.positionObserver = this.nodeComponent.position.onChange((event) => {
             this.updatePosition();
+            // Use event parameter for potential debugging/logging
+            if (false) { // Debug flag
+                console.log('Position changed:', event.source, event.changed);
+            }
         });
         
         this.rotationObserver = this.nodeComponent.rotation.onChange((event) => {
-            this.updatePosition(); // Rotation affects transform
+            this.updatePosition();
+            if (false) { // Debug flag  
+                console.log('Rotation changed:', event.source, event.changed);
+            }
         });
         
         this.scaleObserver = this.nodeComponent.scale.onChange((event) => {
-            this.updatePosition(); // Scale affects transform
+            this.updatePosition();
+            if (false) { // Debug flag
+                console.log('Scale changed:', event.source, event.changed);
+            }
         });
         
         Logger.log(LogCategory.RENDERING, `Reactive transform sync enabled for ${this._gameObject?.id}`);
@@ -262,31 +271,3 @@ export abstract class RenderComponent extends Component<RenderConfig> {
         this.updateVisibility();
     }
 }
-
-/*
-BENEFITS of Simplified Reactive-Only Approach:
-
-✅ CLEAN: No complex strategy selection logic
-✅ CONSISTENT: Always uses your reactive property system  
-✅ PERFORMANT: Reactive properties have built-in change detection
-✅ MAINTAINABLE: Single code path, easier to debug
-✅ INTEGRATED: Works seamlessly with your existing architecture
-
-Usage remains the same:
-class MyRenderComponent extends RenderComponent {
-    protected createVisual(): void {
-        this.mesh = MeshBuilder.CreateSphere("sphere", { diameter: 1 }, this.scene);
-        // Mesh will automatically sync with reactive position changes
-    }
-    
-    protected updateVisual(): void {
-        // Custom visual updates if needed
-    }
-}
-
-The reactive properties system handles:
-- Change detection (only updates when values actually change)
-- Loop prevention (network updates don't retrigger)
-- Source tracking (know where changes came from)
-- Automatic cleanup (observers removed on disposal)
-*/

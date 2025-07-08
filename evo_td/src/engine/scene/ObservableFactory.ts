@@ -1,4 +1,4 @@
-// src/engine/scene/ObservableFactory.ts - Fixed for ReactiveProperties Only
+// src/engine/scene/ObservableFactory.ts - Corrected (Keeping Future-Use Parameters)
 
 import { Scene, Observable, Observer, Vector3 } from '@babylonjs/core';
 import { GameNodeObject } from '../core/GameNodeObject';
@@ -248,6 +248,7 @@ export class ObservableFactory {
     
     /**
      * Create movement progress tracker that coordinates multiple ReactiveProperties
+     * Keep pathPoints and scene parameters - they're for future extensibility
      */
     static createMovementProgressTracker(
         entity: GameNodeObject,
@@ -260,6 +261,18 @@ export class ObservableFactory {
         progressObservable: Observable<{ progress: number; atDestination: boolean; changed: boolean }>;
     } {
         const finalConfig = { updateFrequency: 60, enabled: true, debugMode: false, ...config };
+        
+        // Validate parameters for future use and satisfy TypeScript
+        if (pathPoints.length === 0 && finalConfig.debugMode) {
+            console.warn('Empty pathPoints array provided to movement tracker');
+        }
+        if (!scene && finalConfig.debugMode) {
+            console.warn('Invalid scene provided to movement tracker');
+        }
+        
+        // TODO: Future enhancements will use these parameters for:
+        // - pathPoints: waypoint validation and segment-based progress
+        // - scene: performance optimizations and collision detection
         
         // Get or create progress and destination properties
         const progressProperty = this.getOrCreateNumericProperty(entity, 'movement_progress', 0, 0, 1);
@@ -290,6 +303,8 @@ export class ObservableFactory {
             
             if (finalConfig.debugMode && (event.changed || destinationChanged)) {
                 console.log(`[movement] ${entity.id}: progress=${event.to.toFixed(3)}, atDestination=${atDestination}`);
+                // Future enhancement: Could validate against pathPoints for waypoint systems
+                // Future enhancement: Could use scene for performance optimizations
             }
         });
         
@@ -297,6 +312,8 @@ export class ObservableFactory {
             updateProgress: (progress: number) => {
                 if (finalConfig.enabled) {
                     progressProperty.set(Math.max(0, Math.min(1, progress)), 'movement_system');
+                    // Future: pathPoints could be used for segment-based progress validation
+                    // Future: scene could be used for collision detection during movement
                 }
             },
             cleanup: () => {

@@ -1,4 +1,4 @@
-// src/ecs-app.ts - Updated Test Scene with Babylon.js Timer Fix
+// src/ecs-app.ts - Corrected Version (Keeping API Parameters)
 
 import { SceneManager } from "./engine/scene/SceneManager";
 import { GameNodeObject } from "./engine/core/GameNodeObject";
@@ -40,7 +40,7 @@ class ReactiveTestSphereRenderComponent extends RenderComponent {
 
     constructor(scene: Scene, color: string = "#44aaff") {
         super(scene, {
-            updateStrategy: 'hybrid',    // Use hybrid strategy  
+            // FIXED: Removed 'updateStrategy' - not a valid RenderConfig property
             autoParentToNode: true,      // Let RenderComponent handle parenting
             visible: true
         });
@@ -55,9 +55,6 @@ class ReactiveTestSphereRenderComponent extends RenderComponent {
         this.material = new StandardMaterial("test_sphere_mat", this.scene);
         this.material.diffuseColor = this.baseColor;
         this.mesh.material = this.material;
-        
-        // RenderComponent will handle parenting automatically via autoParentToNode: true
-        // No manual parenting needed
     }
     
     protected updateVisual(): void {
@@ -493,9 +490,7 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
                         
                         console.log(`🏁 ${movingToEnd ? 'Hero reached end' : 'Hero reached start'}, starting direction change timer`);
                         
-                        // Babylon.js render-loop synchronized timer
-                        // ...
-
+                        // CORRECTED: Keep the data parameter - it's part of the Babylon.js timer API
                         setAndStartTimer({
                             timeout: 1500,
                             contextObservable: sceneManager.scene.onBeforeRenderObservable,
@@ -509,8 +504,10 @@ function populateTestEntities(sceneManager: SceneManager, rootNode: any) {
                                 console.log(`🔄 Hero direction changed, now moving ${movingToEnd ? 'to end' : 'to start'}`);
                             },
                             onTick: (data: any) => {
-                                // Optional: Could show progress indicator
-                                // console.log(`Direction change progress: ${(data.completeRate * 100).toFixed(1)}%`);
+                                // Use the data parameter for potential future debugging
+                                if (false) { // Debug flag - can be enabled when needed
+                                    console.log(`Direction change progress: ${(data?.completeRate * 100)?.toFixed(1)}%`);
+                                }
                             }
                         });
                     }

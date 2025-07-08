@@ -1,6 +1,10 @@
 import { NetworkReactiveEntity } from '../../engine/networking/NetworkReactiveEntity';
 import { NetworkRole } from '../../engine/networking/NetworkTypes';
-import { GAME_ENTITY_SCHEMAS } from '../game/schemas/EntitySchemas';
+// FIXED: Correct import path for EntitySchemas
+import { GAME_ENTITY_SCHEMAS } from '../schemas/EntitySchemas';
+// FIXED: Import missing Babylon.js types and ConfigurableTimers
+import { Vector3, Scene } from '@babylonjs/core';
+import { ConfigurableTimers } from '../../engine/utils/ConfigurableTimers';
 
 export class PredictiveTarget extends NetworkReactiveEntity {
     private movementTimerCleanup?: () => void;

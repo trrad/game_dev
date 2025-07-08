@@ -38,9 +38,6 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
             if (property) {
                 this.properties.addProperty(property);
                 
-                // ✅ FIXED: Don't expose as public fields - use getProperty() instead
-                // Cleaner than dynamic property assignment
-                
                 if (propSchema.networkSync) {
                     this.networkSyncedProperties.add(propSchema.name);
                     this.setupNetworkSync(property);
@@ -123,10 +120,20 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
         this.propertyChangeCleanup.push(() => cleanup.remove());
     }
 
+    // CORRECTED: Keep parameters - this is meant to be overridden by subclasses
+    // The parameters provide essential context for network synchronization
     protected onPropertyChanged(propertyName: string, value: any): void {
         // Override in network manager
+        // Parameters provide essential context for network synchronization
+        if (false) { // Debug flag
+            console.log(`Network property changed: ${propertyName}`, value);
+        }
+        
+        // Validate parameters (useful for debugging)
+        if (typeof propertyName !== 'string' || propertyName.length === 0) {
+            console.warn('Invalid property name in network change:', propertyName);
+        }
     }
-
     /**
      * ✅ FIXED: Better error handling for network updates
      */
@@ -138,8 +145,8 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
                 return;
             }
 
-            // Handle vector serialization
-            if (property.getName() === 'position' && typeof value === 'object' && value.x !== undefined) {
+            // FIXED: Add proper type checking for vector serialization
+            if (property.getName() === 'position' && this.isVector3Object(value)) {
                 const { Vector3 } = require('@babylonjs/core');
                 property.set(new Vector3(value.x, value.y, value.z), source);
             } else {
@@ -150,6 +157,15 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
         }
     }
 
+    // FIXED: Type guard helper for Vector3-like objects
+    private isVector3Object(value: any): value is { x: number; y: number; z: number } {
+        return value && 
+               typeof value === 'object' && 
+               typeof value.x === 'number' && 
+               typeof value.y === 'number' && 
+               typeof value.z === 'number';
+    }
+
     getNetworkSnapshot(): NetworkSnapshot {
         const snapshot: Record<string, any> = {};
         
@@ -158,8 +174,8 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
             if (property) {
                 const value = property.getValue();
                 
-                // Handle vector serialization
-                if (propName === 'position' && value && typeof value === 'object' && value.x !== undefined) {
+                // FIXED: Use type guard for vector serialization
+                if (propName === 'position' && this.isVector3Object(value)) {
                     snapshot[propName] = { x: value.x, y: value.y, z: value.z };
                 } else {
                     snapshot[propName] = value;

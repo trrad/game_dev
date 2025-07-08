@@ -1,9 +1,19 @@
-import { io, Socket } from 'socket.io-client';
-import { SimpleNetworkManager } from '../../engine/networking/SimpleNetworkManager';
-import { NetworkMessage } from '../../engine/networking/NetworkTypes';
+// FINAL FIX: Most compatible Socket.IO client approach
+import { SimpleNetworkManager } from './SimpleNetworkManager';
+import { NetworkMessage } from './NetworkTypes';
+
+// Use require for socket.io-client to avoid import issues
+const io = require('socket.io-client');
+
+// Generic socket type to avoid import conflicts
+interface SocketInterface {
+    on(event: string, callback: Function): void;
+    emit(event: string, data?: any): void;
+    disconnect(): void;
+}
 
 export class SocketClient {
-    private socket: Socket;
+    private socket: SocketInterface;
     private networkManager: SimpleNetworkManager;
     private connected = false;
 

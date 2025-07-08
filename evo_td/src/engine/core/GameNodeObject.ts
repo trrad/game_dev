@@ -1,4 +1,4 @@
-// src/engine/core/GameNodeObject.ts - Reactive Version
+// src/engine/core/GameNodeObject.ts - Fixed TypeScript Errors
 
 import { GameObject } from './GameObject';
 import { NodeComponent } from '../components/NodeComponent';
@@ -30,6 +30,10 @@ export class GameNodeObject extends GameObject {
         super(type, scene);
         this.node = new NodeComponent(scene!, parentNode || null);
         this.addComponent(this.node);
+        
+        // FIXED: Establish bidirectional reference between NodeComponent and GameNodeObject
+        // This is needed for hierarchy navigation
+        (this.node as any)._gameObject = this;
     }
 
     /**
@@ -174,7 +178,8 @@ export class GameNodeObject extends GameObject {
 
     rotateByVector(rotation: Vector3): void {
         const current = this.rotation.getValue();
-        this.rotation.update(current.add(rotation), 'rotateByVector');
+        // FIXED: Use 'set' method instead of non-existent 'update' method
+        this.rotation.set(current.add(rotation), 'rotateByVector');
     }
 
     /**
@@ -275,8 +280,9 @@ export class GameNodeObject extends GameObject {
      */
     getParent(): GameNodeObject | null {
         const parentNode = this.node.getParent();
-        if (parentNode && parentNode.gameObject instanceof GameNodeObject) {
-            return parentNode.gameObject;
+        // FIXED: Access the _gameObject property we established in constructor
+        if (parentNode && (parentNode as any)._gameObject instanceof GameNodeObject) {
+            return (parentNode as any)._gameObject;
         }
         return null;
     }
@@ -286,7 +292,7 @@ export class GameNodeObject extends GameObject {
      */
     getChildren(): GameNodeObject[] {
         return this.node.getChildren()
-            .map(childNode => childNode.gameObject)
+            .map(childNode => (childNode as any)._gameObject)
             .filter((obj): obj is GameNodeObject => obj instanceof GameNodeObject);
     }
 

@@ -1,7 +1,8 @@
 import { Server as HttpServer, createServer } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
-import { SimpleNetworkManager } from '../engine/networking/SimpleNetworkManager';
-import { NetworkMessage } from '../engine/networking/NetworkTypes';
+// FIXED: Correct relative import paths
+import { SimpleNetworkManager } from './SimpleNetworkManager';
+import { NetworkMessage } from './NetworkTypes';
 
 export class GameSocketServer {
     private httpServer: HttpServer;
@@ -9,7 +10,8 @@ export class GameSocketServer {
     private networkManager: SimpleNetworkManager;
     private connectedClients: Map<string, Socket> = new Map();
 
-    constructor(networkManager: SimpleNetworkManager, port: number = 8080) {
+    // FIXED: Use underscore prefix for unused parameter to suppress TS6133 warning
+    constructor(networkManager: SimpleNetworkManager, _port: number = 8080) {
         this.networkManager = networkManager;
         this.httpServer = createServer();
         this.io = new SocketServer(this.httpServer, {

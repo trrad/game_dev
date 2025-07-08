@@ -1,4 +1,5 @@
-import { EntitySchema } from '../../engine/networking/NetworkReactiveEntity';
+// FIXED: Import EntitySchema from correct location (NetworkTypes, not NetworkReactiveEntity)
+import { EntitySchema } from '../../engine/networking/NetworkTypes';
 
 export const GAME_ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     wanderer: {

@@ -1,4 +1,6 @@
 import { Scene } from '@babylonjs/core';
+// FIXED: Import missing types from TickFrequency.ts
+import { TickFrequencyConfig, DEFAULT_TICK_FREQUENCIES } from '../core/TickFrequency';
 
 export type TickFrequencyType = keyof TickFrequencyConfig;
 
@@ -61,6 +63,61 @@ export class ConfigurableTimers {
         }
 
         return cleanup;
+    }
+
+    /**
+     * Create a one-shot timer (fires once after delay)
+     */
+    static createOneShotTimer(
+        scene: Scene,
+        delayMs: number,
+        callback: () => void
+    ): () => void {
+        let isActive = true;
+        const startTime = performance.now();
+
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            if (!isActive) return;
+
+            const currentTime = performance.now();
+            if (currentTime - startTime >= delayMs) {
+                callback();
+                isActive = false;
+                scene.onBeforeRenderObservable.remove(observer);
+            }
+        });
+
+        return () => {
+            isActive = false;
+            scene.onBeforeRenderObservable.remove(observer);
+        };
+    }
+
+    /**
+     * Create a repeating timer (fires repeatedly at interval)
+     */
+    static createRepeatingTimer(
+        scene: Scene,
+        intervalMs: number,
+        callback: () => void
+    ): () => void {
+        let isActive = true;
+        let lastCallTime = 0;
+
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            if (!isActive) return;
+
+            const currentTime = performance.now();
+            if (currentTime - lastCallTime >= intervalMs) {
+                callback();
+                lastCallTime = currentTime;
+            }
+        });
+
+        return () => {
+            isActive = false;
+            scene.onBeforeRenderObservable.remove(observer);
+        };
     }
 
     /**
