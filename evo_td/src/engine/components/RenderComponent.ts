@@ -1,57 +1,26 @@
-/**
- * Updated RenderComponent - Foundation for all visual representation components
- * Now integrates with NodeComponent and GameNodeObject architecture
- * Supports both direct TransformNode access (performance) and reactive property observation (maintainability)
- */
+// src/engine/components/RenderComponent.ts - Simplified Reactive-Only Version
 
 import { Scene, AbstractMesh, Material, Vector3, StandardMaterial, Observer } from "@babylonjs/core";
 import { Component } from "./Component";
 import { NodeComponent } from "./NodeComponent";
-import { ReactivePropertiesComponent } from "./ReactivePropertyComponent";
 import { GameObject } from "../core/GameObject";
 import { GameNodeObject } from "../core/GameNodeObject";
 import { Logger, LogCategory } from "../utils/Logger";
 
 /**
- * Asset reference for future asset loading system
- */
-export interface AssetReference {
-    id: string;
-    type: 'mesh' | 'material' | 'texture';
-    path?: string;
-    fallback?: () => AbstractMesh | Material; // Procedural fallback
-}
-
-/**
- * Level of Detail configuration
- */
-export interface LODConfig {
-    distances: number[]; // Distance thresholds for LOD levels
-    meshes?: AssetReference[]; // Different mesh assets per LOD
-    enabled: boolean;
-}
-
-/**
- * Render component update strategy
- */
-export type RenderUpdateStrategy = 'direct' | 'reactive' | 'hybrid';
-
-/**
- * Base configuration for all render components
+ * Simplified render component configuration
  */
 export interface RenderConfig {
     visible?: boolean;
-    assetId?: string; // Primary asset reference
-    lod?: LODConfig; // LOD configuration
     yOffset?: number; // Vertical offset from logical position
-    updateStrategy?: RenderUpdateStrategy; // How to handle transform updates
     autoParentToNode?: boolean; // Whether to automatically parent mesh to NodeComponent
 }
 
 /**
- * Abstract base class for all render components
- * Handles position synchronization, visibility, and common rendering concerns
- * Now works with NodeComponent and GameNodeObject architecture
+ * Simplified RenderComponent - Reactive transform sync only
+ * 
+ * Always uses reactive property observation for transform updates.
+ * Clean, simple, and integrates perfectly with your reactive system.
  */
 export abstract class RenderComponent extends Component<RenderConfig> {
     public readonly type = 'render';
@@ -63,16 +32,12 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     
     // Node component reference for transform operations
     protected nodeComponent?: NodeComponent;
-    private isAttached = false; // Guard against duplicate attachment
+    private isAttached = false;
     
     // Reactive property observers for cleanup
     private positionObserver?: Observer<any>;
     private rotationObserver?: Observer<any>;
     private scaleObserver?: Observer<any>;
-    
-    // Direct update tracking for performance mode
-    private lastDirectUpdateTime = 0;
-    private directUpdateInterval = 16; // ~60fps for direct updates
 
     constructor(scene: Scene, config: RenderConfig = {}) {
         super();
@@ -80,27 +45,25 @@ export abstract class RenderComponent extends Component<RenderConfig> {
         this.config = {
             visible: true,
             yOffset: 0,
-            updateStrategy: 'hybrid', // Default to hybrid approach
             autoParentToNode: true,
             ...config
         };
         
-        Logger.log(LogCategory.RENDERING, `${this.constructor.name} created with strategy: ${this.config.updateStrategy}`);
+        Logger.log(LogCategory.RENDERING, `${this.constructor.name} created with reactive transforms`);
     }
 
     /**
      * Called when component is attached to a GameObject
-     * Follows existing component lifecycle patterns
      */
     attachTo(gameObject: GameObject): void {
         super.attachTo(gameObject);
+        this.onAttach();
     }
 
     /**
-     * Component attachment lifecycle - matches existing RenderComponent pattern
+     * Component attachment lifecycle
      */
     private onAttach(): void {
-       // Guard against duplicate attachment
         if (this.isAttached) {
             Logger.warn(LogCategory.RENDERING, 
                 `RenderComponent already attached to ${this._gameObject?.id}`);
@@ -124,8 +87,8 @@ export abstract class RenderComponent extends Component<RenderConfig> {
         // Create initial visual representation
         this.createVisual();
         
-        // Set up transform synchronization based on strategy
-        this.setupTransformSync();
+        // Set up reactive transform synchronization
+        this.setupReactiveTransformSync();
         
         // Apply initial state
         this.updatePosition();
@@ -134,31 +97,7 @@ export abstract class RenderComponent extends Component<RenderConfig> {
         this.isAttached = true;
         
         Logger.log(LogCategory.RENDERING, 
-            `${this.constructor.name} attached to ${this._gameObject.id} with NodeComponent`);
-    }
-
-    /**
-     * Called when component is detached from a GameObject
-     * Follows existing component lifecycle patterns
-     */
-    dispose(): void {
-        this.onDetach();
-        super.dispose();
-    }
-
-    /**
-     * Component detachment lifecycle - matches existing RenderComponent pattern
-     */
-    private onDetach(): void {
-        // Clean up reactive observers
-        this.cleanupObservers();
-        
-        // Dispose of visual resources
-        this.disposeVisualResources();
-
-        this.isAttached = false;
-        
-        Logger.log(LogCategory.RENDERING, `${this.constructor.name} disposed`);
+            `${this.constructor.name} attached to ${this._gameObject.id} with reactive transforms`);
     }
 
     /**
@@ -172,55 +111,7 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     protected abstract updateVisual(): void;
 
     /**
-     * Set up transform synchronization based on the configured strategy
-     */
-    private setupTransformSync(): void {
-        if (!this.nodeComponent) return;
-        
-        switch (this.config.updateStrategy) {
-            case 'direct':
-                this.setupDirectTransformSync();
-                break;
-            case 'reactive':
-                this.setupReactiveTransformSync();
-                break;
-            case 'hybrid':
-                this.setupHybridTransformSync();
-                break;
-            default:
-                Logger.warn(LogCategory.RENDERING, 
-                    `Unknown update strategy: ${this.config.updateStrategy}, using hybrid`);
-                this.setupHybridTransformSync();
-        }
-    }
-
-    /**
-     * Direct transform sync - Best performance, polls TransformNode directly
-     * Use for performance-critical rendering with many objects
-     * Matches ObservableFactory performance patterns
-     */
-    private setupDirectTransformSync(): void {
-        if (!this.nodeComponent) return;
-        
-        // Use Babylon.js onBeforeRenderObservable for frame-based updates
-        // Follows same pattern as ObservableFactory spatial tracking
-        const observer = this.scene.onBeforeRenderObservable.add(() => {
-            const currentTime = performance.now();
-            if (currentTime - this.lastDirectUpdateTime >= this.directUpdateInterval) {
-                this.updatePositionDirect();
-                this.lastDirectUpdateTime = currentTime;
-            }
-        });
-        
-        // Store observer for cleanup
-        this.positionObserver = observer;
-        
-        Logger.log(LogCategory.RENDERING, `Direct transform sync enabled for ${this._gameObject?.id}`);
-    }
-
-    /**
-     * Reactive transform sync - Uses reactive properties, better for debugging
-     * Use when you need to react to specific transform changes
+     * Set up reactive transform synchronization using your reactive properties
      */
     private setupReactiveTransformSync(): void {
         if (!this.nodeComponent) return;
@@ -242,81 +133,7 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     }
 
     /**
-     * Hybrid transform sync - Reactive for non-frequent changes, direct for frequent updates
-     * Best balance of performance and maintainability
-     */
-    private setupHybridTransformSync(): void {
-        if (!this.nodeComponent) return;
-        
-        let hasFrequentUpdates = false;
-        let updateCount = 0;
-        let lastResetTime = performance.now();
-        
-        // Monitor update frequency to switch modes - follows existing performance patterns
-        const checkUpdateFrequency = () => {
-            const currentTime = performance.now();
-            if (currentTime - lastResetTime > 1000) { // Check every second
-                hasFrequentUpdates = updateCount > 30; // More than 30 updates/sec = frequent
-                updateCount = 0;
-                lastResetTime = currentTime;
-            }
-        };
-        
-        // Reactive observers that can detect frequent updates
-        this.positionObserver = this.nodeComponent.position.onChange((event) => {
-            updateCount++;
-            checkUpdateFrequency();
-            
-            if (!hasFrequentUpdates) {
-                this.updatePosition();
-            }
-        });
-        
-        // Direct update loop for frequent changes - matches ObservableFactory pattern
-        const directObserver = this.scene.onBeforeRenderObservable.add(() => {
-            if (hasFrequentUpdates) {
-                const currentTime = performance.now();
-                if (currentTime - this.lastDirectUpdateTime >= this.directUpdateInterval) {
-                    this.updatePositionDirect();
-                    this.lastDirectUpdateTime = currentTime;
-                }
-            }
-        });
-        
-        // Store both observers for cleanup
-        this.rotationObserver = directObserver;
-        
-        Logger.log(LogCategory.RENDERING, `Hybrid transform sync enabled for ${this._gameObject?.id}`);
-    }
-
-    /**
-     * Update mesh position using direct TransformNode access (performance mode)
-     */
-    protected updatePositionDirect(): void {
-        if (!this.mesh || !this.nodeComponent) return;
-        
-        // Get transform directly from Babylon.js TransformNode (fastest)
-        const transformNode = this.nodeComponent.getTransformNode();
-        const worldMatrix = transformNode.getWorldMatrix();
-        
-        // Apply world matrix directly to mesh
-        if (this.config.autoParentToNode) {
-            // Mesh is parented to transform node, no manual sync needed
-            return;
-        }
-        
-        // Manual position sync with Y offset
-        const position = transformNode.getAbsolutePosition();
-        if (this.config.yOffset) {
-            position.y += this.config.yOffset;
-        }
-        
-        this.mesh.position = position;
-        this.mesh.rotationQuaternion = transformNode.absoluteRotationQuaternion?.clone() || null;
-    }
-
-    /**
-     * Update mesh position using reactive properties (maintainability mode)
+     * Update mesh position using reactive properties
      */
     protected updatePosition(): void {
         if (!this.mesh || !this.nodeComponent) return;
@@ -353,7 +170,7 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     }
 
     /**
-     * Update visibility based on configuration and game state
+     * Update visibility based on configuration
      */
     protected updateVisibility(): void {
         if (this.mesh) {
@@ -367,23 +184,6 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     setVisible(visible: boolean): void {
         this.config.visible = visible;
         this.updateVisibility();
-    }
-
-    /**
-     * Change update strategy at runtime
-     */
-    setUpdateStrategy(strategy: RenderUpdateStrategy): void {
-        if (strategy === this.config.updateStrategy) return;
-        
-        // Clean up current observers
-        this.cleanupObservers();
-        
-        // Update config and setup new strategy
-        this.config.updateStrategy = strategy;
-        this.setupTransformSync();
-        
-        Logger.log(LogCategory.RENDERING, 
-            `Updated render strategy to ${strategy} for ${this._gameObject?.id}`);
     }
 
     /**
@@ -401,7 +201,7 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     }
 
     /**
-     * Clean up all reactive observers
+     * Clean up reactive observers
      */
     private cleanupObservers(): void {
         if (this.positionObserver) {
@@ -436,6 +236,18 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     }
 
     /**
+     * Component disposal lifecycle
+     */
+    dispose(): void {
+        this.cleanupObservers();
+        this.disposeVisualResources();
+        this.isAttached = false;
+        
+        Logger.log(LogCategory.RENDERING, `${this.constructor.name} disposed`);
+        super.dispose();
+    }
+
+    /**
      * Serialize component data
      */
     serialize(): RenderConfig {
@@ -448,25 +260,33 @@ export abstract class RenderComponent extends Component<RenderConfig> {
     deserialize(data: RenderConfig): void {
         this.config = { ...this.config, ...data };
         this.updateVisibility();
-        
-        // Re-setup transform sync if strategy changed
-        if (data.updateStrategy && data.updateStrategy !== this.config.updateStrategy) {
-            this.setUpdateStrategy(data.updateStrategy);
-        }
-    }
-
-    // TODO: Future LOD system integration
-    protected updateLOD(_cameraDistance: number): void {
-        // if (this.config.lod?.enabled) {
-        //     const lodLevel = this.calculateLODLevel(cameraDistance);
-        //     this.switchToLOD(lodLevel);
-        // }
-    }
-
-    // TODO: Future asset system integration
-    protected loadAsset(_assetId: string): Promise<AbstractMesh> {
-        // return AssetManager.loadMesh(assetId)
-        //     .catch(() => this.createFallbackMesh());
-        throw new Error("Asset system not yet implemented");
     }
 }
+
+/*
+BENEFITS of Simplified Reactive-Only Approach:
+
+✅ CLEAN: No complex strategy selection logic
+✅ CONSISTENT: Always uses your reactive property system  
+✅ PERFORMANT: Reactive properties have built-in change detection
+✅ MAINTAINABLE: Single code path, easier to debug
+✅ INTEGRATED: Works seamlessly with your existing architecture
+
+Usage remains the same:
+class MyRenderComponent extends RenderComponent {
+    protected createVisual(): void {
+        this.mesh = MeshBuilder.CreateSphere("sphere", { diameter: 1 }, this.scene);
+        // Mesh will automatically sync with reactive position changes
+    }
+    
+    protected updateVisual(): void {
+        // Custom visual updates if needed
+    }
+}
+
+The reactive properties system handles:
+- Change detection (only updates when values actually change)
+- Loop prevention (network updates don't retrigger)
+- Source tracking (know where changes came from)
+- Automatic cleanup (observers removed on disposal)
+*/

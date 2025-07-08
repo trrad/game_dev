@@ -1,29 +1,7 @@
 import { GameNodeObject } from '../core/GameNodeObject';
 import { ReactivePropertiesComponent, ReactiveProperty } from '../components/ReactivePropertyComponent';
+import { NetworkRole, PropertySchema, EntitySchema, NetworkSnapshot } from './NetworkTypes';
 import { Scene } from '@babylonjs/core';
-
-export interface NetworkRole {
-    isServer: boolean;
-    isClient: boolean;
-    ownedByThisClient?: boolean;
-}
-
-export interface PropertySchema {
-    name: string;
-    type: 'boolean' | 'number' | 'enum' | 'vector' | 'collection';
-    defaultValue: any;
-    networkSync: boolean;
-    constraints?: {
-        min?: number;
-        max?: number;
-        validValues?: string[];
-    };
-}
-
-export interface EntitySchema {
-    entityType: string;
-    properties: PropertySchema[];
-}
 
 /**
  * FIXED: Generic network-enabled reactive entity with proper patterns

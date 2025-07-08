@@ -1,9 +1,7 @@
-// src/engine/scene/ObservableFactory.ts
+// src/engine/scene/ObservableFactory.ts - Fixed for ReactiveProperties Only
 
 import { Scene, Observable, Observer, Vector3 } from '@babylonjs/core';
 import { GameNodeObject } from '../core/GameNodeObject';
-import { NodeComponent } from '../components/NodeComponent';
-import { RadiusComponent } from '../components/RadiusComponent';
 import { 
     ReactiveProperty, 
     BooleanProperty, 
@@ -27,14 +25,8 @@ export interface TrackerConfig {
 
 /**
  * ObservableFactory creates frame-based spatial tracking systems that automatically
- * update ReactiveProperty components. Focuses on spatial calculations and automatic
- * state synchronization rather than creating individual properties.
- * 
- * Responsibilities:
- * - Frame-based spatial calculations (distance, collision, proximity)
- * - Automatic ReactiveProperty updates based on spatial conditions
- * - Performance-optimized Observable usage for game loops
- * - Cleanup and memory management for spatial trackers
+ * update ReactiveProperty components. Uses your existing reactive properties for
+ * all spatial data - no separate components needed.
  */
 export class ObservableFactory {
     private static activeTrackers: Map<string, SpatialTracker> = new Map();
@@ -79,7 +71,6 @@ export class ObservableFactory {
         // Frame-based distance calculation with performance optimization
         const updateInterval = 1000 / finalConfig.updateFrequency;
         let lastUpdateTime = 0;
-        let lastDistance = Infinity;
         
         const observer = scene.onBeforeRenderObservable.add(() => {
             if (!finalConfig.enabled) return;
@@ -89,36 +80,30 @@ export class ObservableFactory {
             lastUpdateTime = currentTime;
             
             try {
-                const sourceNode = source.getNodeComponent();
-                const targetNode = target.getNodeComponent();
+                // Use your existing reactive position properties
+                const sourcePos = source.worldPosition.getValue();
+                const targetPos = target.worldPosition.getValue();
                 
-                if (sourceNode && targetNode) {
-                    const distance = Vector3.Distance(
-                        sourceNode.getWorldPosition(),
-                        targetNode.getWorldPosition()
-                    );
-                    
-                    // Only update if distance changed significantly (hysteresis)
-                    const withinThreshold = distance <= threshold;
-                    const changed = property.set(withinThreshold, `distance_check:${trackerId}`);
-                    
-                    // Update performance metrics
-                    this.performanceMetrics.frameCalculations++;
-                    
-                    // Emit to observable with full context
-                    observable.notifyObservers({ 
-                        distance, 
-                        withinThreshold, 
-                        changed,
-                        sourceId: source.id,
-                        targetId: target.id
-                    });
-                    
-                    if (finalConfig.debugMode && changed) {
-                        console.log(`[${trackerId}] Distance ${source.id} -> ${target.id}: ${distance.toFixed(2)} (threshold: ${threshold})`);
-                    }
-                    
-                    lastDistance = distance;
+                const distance = Vector3.Distance(sourcePos, targetPos);
+                const withinThreshold = distance <= threshold;
+                
+                // Update the reactive property (with loop prevention built in)
+                const changed = property.set(withinThreshold, `distance_check:${trackerId}`);
+                
+                // Update performance metrics
+                this.performanceMetrics.frameCalculations++;
+                
+                // Emit to observable with full context
+                observable.notifyObservers({ 
+                    distance, 
+                    withinThreshold, 
+                    changed,
+                    sourceId: source.id,
+                    targetId: target.id
+                });
+                
+                if (finalConfig.debugMode && changed) {
+                    console.log(`[${trackerId}] Distance ${source.id} -> ${target.id}: ${distance.toFixed(2)} (threshold: ${threshold})`);
                 }
             } catch (error) {
                 console.error(`Error in distance tracker ${trackerId}:`, error);
@@ -148,10 +133,11 @@ export class ObservableFactory {
     }
     
     /**
-     * Create collision tracker using RadiusComponent that updates a BooleanProperty
+     * Create collision tracker using entity radius reactive properties
      */
     static createCollisionTracker(
         source: GameNodeObject,
+        targets: GameNodeObject[],
         scene: Scene,
         propertyName: string = 'has_collision',
         config: TrackerConfig = {}
@@ -159,15 +145,11 @@ export class ObservableFactory {
         const trackerId = `collision_${++this.trackerIdCounter}`;
         const finalConfig = { updateFrequency: 60, enabled: true, debugMode: false, ...config };
         
-        const sourceRadius = source.getComponent<RadiusComponent>('radius');
-        if (!sourceRadius) {
-            console.warn(`Source entity ${source.id} must have RadiusComponent for collision tracking`);
-            return this.createNullTracker(trackerId);
-        }
-        
         let property = this.getOrCreateBooleanProperty(source, propertyName, false);
-        if (!property) {
-            console.error(`Failed to create collision tracker: could not access property ${propertyName} on ${source.id}`);
+        let collisionsProperty = this.getOrCreateCollectionProperty(source, 'current_collisions');
+        
+        if (!property || !collisionsProperty) {
+            console.error(`Failed to create collision tracker for ${source.id}`);
             return this.createNullTracker(trackerId);
         }
 
@@ -175,7 +157,7 @@ export class ObservableFactory {
             hasCollision: boolean; 
             collisionCount: number; 
             changed: boolean;
-            collisions: RadiusComponent[];
+            collisions: string[];
         }>();
         
         const updateInterval = 1000 / finalConfig.updateFrequency;
@@ -189,11 +171,34 @@ export class ObservableFactory {
             lastUpdateTime = currentTime;
             
             try {
-                const collisions = sourceRadius.findCollisions();
+                const sourcePos = source.worldPosition.getValue();
+                const sourceRadius = this.getEntityRadius(source);
+                const collisions: string[] = [];
+                
+                // Check collisions with targets using their reactive properties
+                targets.forEach(target => {
+                    if (target === source) return;
+                    
+                    const targetPos = target.worldPosition.getValue();
+                    const targetRadius = this.getEntityRadius(target);
+                    const distance = Vector3.Distance(sourcePos, targetPos);
+                    
+                    if (distance <= (sourceRadius + targetRadius)) {
+                        collisions.push(target.id);
+                    }
+                });
+                
                 const hasCollision = collisions.length > 0;
                 
-                // Update property and get change status
-                const changed = property.set(hasCollision, `collision_check:${trackerId}`);
+                // Update reactive properties
+                const hasCollisionChanged = property.set(hasCollision, `collision_check:${trackerId}`);
+                
+                // Update collisions collection
+                const newCollisions = new Map<string, string>();
+                collisions.forEach(id => newCollisions.set(id, id));
+                const collisionsChanged = collisionsProperty.set(newCollisions, `collision_update:${trackerId}`);
+                
+                const changed = hasCollisionChanged || collisionsChanged;
                 
                 // Update performance metrics
                 this.performanceMetrics.frameCalculations++;
@@ -230,6 +235,15 @@ export class ObservableFactory {
         this.activeTrackers.set(trackerId, spatialTracker);
         this.performanceMetrics.trackerCount++;
         return spatialTracker;
+    }
+    
+    /**
+     * Get entity radius from reactive properties (defaults to 1.0)
+     */
+    private static getEntityRadius(entity: GameNodeObject): number {
+        const properties = entity.getComponent<ReactivePropertiesComponent>('reactiveProperties');
+        const radiusProperty = properties?.getNumericProperty('radius');
+        return radiusProperty?.getValue() || 1.0;
     }
     
     /**
@@ -293,138 +307,23 @@ export class ObservableFactory {
         };
     }
     
-    /**
-     * Create multi-target proximity tracker that updates multiple BooleanProperties
-     */
-    static createProximityTracker(
-        source: GameNodeObject,
-        targets: GameNodeObject[],
-        ranges: { name: string; distance: number }[],
-        scene: Scene,
-        config: TrackerConfig = {}
-    ): SpatialTracker {
-        const trackerId = `proximity_${++this.trackerIdCounter}`;
-        const finalConfig = { updateFrequency: 20, enabled: true, debugMode: false, ...config };
-        
-        // Create properties for each range
-        const rangeProperties = new Map<string, BooleanProperty>();
-        ranges.forEach(range => {
-            const property = this.getOrCreateBooleanProperty(source, `proximity_${range.name}`, false);
-            if (property) {
-                rangeProperties.set(range.name, property);
-            }
-        });
-        
-        const observable = new Observable<{ 
-            proximityStates: Map<string, boolean>; 
-            closestTarget?: { id: string; distance: number };
-            anyChanged: boolean;
-        }>();
-        
-        const updateInterval = 1000 / finalConfig.updateFrequency;
-        let lastUpdateTime = 0;
-        
-        const observer = scene.onBeforeRenderObservable.add(() => {
-            if (!finalConfig.enabled) return;
-            
-            const currentTime = performance.now();
-            if (currentTime - lastUpdateTime < updateInterval) return;
-            lastUpdateTime = currentTime;
-            
-            try {
-                const sourceNode = source.getNodeComponent();
-                if (!sourceNode) return;
-                
-                const sourcePos = sourceNode.getWorldPosition();
-                const proximityStates = new Map<string, boolean>();
-                let closestTarget: { id: string; distance: number } | undefined;
-                let minDistance = Infinity;
-                
-                // Check each target against all ranges
-                targets.forEach(target => {
-                    const targetNode = target.getNodeComponent();
-                    if (!targetNode) return;
-                    
-                    const distance = Vector3.Distance(sourcePos, targetNode.getWorldPosition());
-                    
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        closestTarget = { id: target.id, distance };
-                    }
-                    
-                    // Update range states
-                    ranges.forEach(range => {
-                        const withinRange = distance <= range.distance;
-                        const currentState = proximityStates.get(range.name) || false;
-                        proximityStates.set(range.name, currentState || withinRange);
-                    });
-                });
-                
-                // Update properties and track changes
-                let anyChanged = false;
-                proximityStates.forEach((withinRange, rangeName) => {
-                    const property = rangeProperties.get(rangeName);
-                    if (property) {
-                        const changed = property.set(withinRange, `proximity_check:${trackerId}`);
-                        anyChanged = anyChanged || changed;
-                    }
-                });
-                
-                // Update performance metrics
-                this.performanceMetrics.frameCalculations++;
-                
-                // Emit to observable
-                observable.notifyObservers({ proximityStates, closestTarget, anyChanged });
-                
-                if (finalConfig.debugMode && anyChanged) {
-                    console.log(`[${trackerId}] Proximity ${source.id}: ${Array.from(proximityStates.entries())}`);
-                }
-            } catch (error) {
-                console.error(`Error in proximity tracker ${trackerId}:`, error);
-            }
-        });
-        
-        const spatialTracker: SpatialTracker = {
-            observable,
-            isActive: true,
-            trackerId,
-            cleanup: () => {
-                spatialTracker.isActive = false;
-                scene.onBeforeRenderObservable.remove(observer);
-                observable.clear();
-                this.activeTrackers.delete(trackerId);
-                this.performanceMetrics.trackerCount--;
-            }
-        };
-        
-        this.activeTrackers.set(trackerId, spatialTracker);
-        this.performanceMetrics.trackerCount++;
-        return spatialTracker;
-    }
-    
     // ============================================================
-    // ReactivePropertiesComponent Integration Helpers
+    // ReactivePropertiesComponent Integration Helpers (UNCHANGED)
     // ============================================================
     
-    /**
-     * Get or create a BooleanProperty using ReactivePropertiesComponent
-     */
     private static getOrCreateBooleanProperty(
         entity: GameNodeObject,
         name: string,
         defaultValue: boolean
     ): BooleanProperty | null {
-        // Get or create the unified properties component
         let properties = entity.getComponent<ReactivePropertiesComponent>('reactiveProperties');
         if (!properties) {
             properties = new ReactivePropertiesComponent();
             entity.addComponent(properties);
         }
         
-        // Try to get existing boolean property
         let property = properties.getBooleanProperty(name);
         if (!property) {
-            // Create new property and add to component
             property = new BooleanProperty(name, defaultValue);
             properties.addProperty(property);
         }
@@ -432,9 +331,6 @@ export class ObservableFactory {
         return property;
     }
     
-    /**
-     * Get or create a NumericProperty using ReactivePropertiesComponent
-     */
     private static getOrCreateNumericProperty(
         entity: GameNodeObject,
         name: string,
@@ -442,17 +338,14 @@ export class ObservableFactory {
         min?: number,
         max?: number
     ): NumericProperty | null {
-        // Get or create the unified properties component
         let properties = entity.getComponent<ReactivePropertiesComponent>('reactiveProperties');
         if (!properties) {
             properties = new ReactivePropertiesComponent();
             entity.addComponent(properties);
         }
         
-        // Try to get existing numeric property
         let property = properties.getNumericProperty(name);
         if (!property) {
-            // Create new property and add to component
             property = new NumericProperty(name, defaultValue, min, max);
             properties.addProperty(property);
         }
@@ -460,17 +353,25 @@ export class ObservableFactory {
         return property;
     }
     
-    /**
-     * Get any reactive property by name using ReactivePropertiesComponent
-     */
-    private static getReactiveProperty<T>(entity: GameNodeObject, name: string): ReactiveProperty<T> | null {
-        const properties = entity.getComponent<ReactivePropertiesComponent>('reactiveProperties');
-        return properties?.getProperty<T>(name) || null;
+    private static getOrCreateCollectionProperty<T>(
+        entity: GameNodeObject,
+        name: string
+    ): CollectionProperty<T> | null {
+        let properties = entity.getComponent<ReactivePropertiesComponent>('reactiveProperties');
+        if (!properties) {
+            properties = new ReactivePropertiesComponent();
+            entity.addComponent(properties);
+        }
+        
+        let property = properties.getCollectionProperty<T>(name);
+        if (!property) {
+            property = new CollectionProperty<T>(name);
+            properties.addProperty(property);
+        }
+        
+        return property;
     }
     
-    /**
-     * Create a null tracker for error cases
-     */
     private static createNullTracker(trackerId: string): SpatialTracker {
         return {
             observable: new Observable(),
@@ -481,12 +382,9 @@ export class ObservableFactory {
     }
     
     // ============================================================
-    // Management and Utilities
+    // Management and Utilities (UNCHANGED)
     // ============================================================
     
-    /**
-     * Clean up all active trackers (for shutdown)
-     */
     static cleanupAllTrackers(): void {
         const trackerIds = Array.from(this.activeTrackers.keys());
         trackerIds.forEach(id => {
@@ -500,9 +398,6 @@ export class ObservableFactory {
         this.performanceMetrics.trackerCount = 0;
     }
     
-    /**
-     * Get performance statistics about spatial tracking
-     */
     static getPerformanceStats(): {
         activeTrackers: number;
         frameCalculations: number;
@@ -513,14 +408,11 @@ export class ObservableFactory {
         return {
             activeTrackers: activeCount,
             frameCalculations: this.performanceMetrics.frameCalculations,
-            averageCalculationsPerFrame: activeCount > 0 ? this.performanceMetrics.frameCalculations / 60 : 0, // Rough estimate
-            memoryUsage: this.activeTrackers.size * 1024 // Rough estimate in bytes
+            averageCalculationsPerFrame: activeCount > 0 ? this.performanceMetrics.frameCalculations / 60 : 0,
+            memoryUsage: this.activeTrackers.size * 1024
         };
     }
     
-    /**
-     * Get detailed tracker information for debugging
-     */
     static getTrackerStats(): { 
         active: number; 
         trackers: Array<{ id: string; isActive: boolean; type: string }> 
@@ -528,7 +420,7 @@ export class ObservableFactory {
         const trackers = Array.from(this.activeTrackers.entries()).map(([id, tracker]) => ({
             id,
             isActive: tracker.isActive,
-            type: id.split('_')[0] // Extract type from ID
+            type: id.split('_')[0]
         }));
         
         return {
@@ -536,91 +428,4 @@ export class ObservableFactory {
             trackers
         };
     }
-    
-    /**
-     * Enable/disable all trackers for performance testing
-     */
-    static setGlobalTrackingEnabled(enabled: boolean): void {
-        // This would require storing config references, but provides concept
-        console.log(`Global tracking ${enabled ? 'enabled' : 'disabled'}`);
-    }
-}
-
-// ============================================================
-// Advanced Observable Utilities (Based on Research)
-// ============================================================
-
-/**
- * Connect any Babylon.js Observable to a ReactiveProperty component
- */
-export function connectObservableToReactiveProperty<T, S>(
-    observable: Observable<T>,
-    reactiveProperty: ReactiveProperty<S>,
-    transform: (value: T) => S,
-    source: string = 'observable_connection'
-): Observer<T> {
-    return observable.add((value: T) => {
-        const transformedValue = transform(value);
-        reactiveProperty.set(transformedValue, source);
-    });
-}
-
-/**
- * Create a bi-directional sync between two ReactiveProperties
- */
-export function syncReactiveProperties<T>(
-    property1: ReactiveProperty<T>,
-    property2: ReactiveProperty<T>,
-    source1: string = 'sync_from_1',
-    source2: string = 'sync_from_2'
-): () => void {
-    const observer1 = property1.onChange(event => {
-        if (event.source !== source2) {
-            property2.set(event.to, source1);
-        }
-    });
-    
-    const observer2 = property2.onChange(event => {
-        if (event.source !== source1) {
-            property1.set(event.to, source2);
-        }
-    });
-    
-    return () => {
-        observer1.remove();
-        observer2.remove();
-    };
-}
-
-/**
- * Combine multiple ReactiveProperty observables into a single observable
- */
-export function combineReactiveProperties<T extends Record<string, any>>(
-    properties: { [K in keyof T]: ReactiveProperty<T[K]> },
-    combineFunction?: (values: T) => any
-): Observable<T | any> {
-    const combined = new Observable<T | any>();
-    const currentValues = {} as T;
-    const observers: Observer<any>[] = [];
-    
-    // Subscribe to each property
-    Object.entries(properties).forEach(([key, property]) => {
-        currentValues[key as keyof T] = property.getValue();
-        
-        const observer = property.onChange(event => {
-            currentValues[key as keyof T] = event.to;
-            const result = combineFunction ? combineFunction(currentValues) : currentValues;
-            combined.notifyObservers(result);
-        });
-        
-        observers.push(observer);
-    });
-    
-    // Add cleanup method
-    (combined as any).cleanup = () => {
-        observers.forEach(observer => observer.remove());
-        combined.clear();
-    };
-    
-    return combined;
 }
