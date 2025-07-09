@@ -1,65 +1,358 @@
-// src/ecs-app.ts - Complete Reactive Input System Integration
+// src/minimal-reactive-test.ts - Test your reactive property system with minimal behaviors
+// Uses NetworkReactiveEntity, InputStateEntity, and property schemas - just simplified
 
 import { SceneManager } from "./engine/scene/SceneManager";
-import { Vector3 } from "@babylonjs/core";
-
-// ✅ NEW IMPORTS: Complete reactive input system
-import { InputStateEntity } from "./engine/inputs/InputStateEntity";
-import { ReactiveInputEnricher } from "./engine/inputs/ReactiveInputEnricher";
-import { PlayerCharacter } from "./game/entities/PlayerCharacter";
-import { NetworkRole } from "./engine/networking/NetworkTypes";
-import { SimpleNetworkManager } from "./engine/networking/SimpleNetworkManager";
-
-// ✅ SIMPLE GRID: Much lighter weight approach
+import { Vector3, MeshBuilder, StandardMaterial, Color3, ActionManager, ExecuteCodeAction } from "@babylonjs/core";
 import { createSimpleGrid } from "./engine/utils/SimpleGrid";
 
-function setupGameCanvasAndScene(id = "gameCanvas") {
-    let canvas = document.getElementById(id) as HTMLCanvasElement | null;
+// Use your existing architecture
+import { InputStateEntity } from "./engine/inputs/InputStateEntity";
+import { ReactiveInputEnricher } from "./engine/inputs/ReactiveInputEnricher";
+import { NetworkReactiveEntity } from "./engine/networking/NetworkReactiveEntity";
+import { SimpleNetworkManager } from "./engine/networking/SimpleNetworkManager";
+import { NetworkRole, EntitySchema } from "./engine/networking/NetworkTypes";
+
+// ============================================================================
+// 🎯 MINIMAL SCHEMA - Just the properties we need for 3 behaviors
+// ============================================================================
+
+const MINIMAL_BALL_SCHEMA: EntitySchema = {
+    entityType: 'minimal_ball',
+    properties: [
+        // Movement properties (server authority)
+        { name: 'position', type: 'vector', defaultValue: { x: 0, y: 0, z: 0 }, networkSync: true, authority: 'server' },
+        { name: 'targetPosition', type: 'vector', defaultValue: { x: 0, y: 0, z: 0 }, networkSync: true, authority: 'server' },
+        { name: 'isMoving', type: 'boolean', defaultValue: false, networkSync: true, authority: 'server' },
+        
+        // Color properties (server authority for consistency)
+        { name: 'colorState', type: 'number', defaultValue: 0, networkSync: true, authority: 'server' },
+        { name: 'isHovered', type: 'boolean', defaultValue: false, networkSync: true, authority: 'server' },
+        
+        // Local rendering properties (no sync needed)
+        { name: 'moveSpeed', type: 'number', defaultValue: 3.0, networkSync: false, authority: 'client' }
+    ]
+};
+
+// ============================================================================
+// 🎾 MINIMAL BALL - Uses your NetworkReactiveEntity system
+// ============================================================================
+
+class MinimalReactiveBall extends NetworkReactiveEntity {
+    public mesh: any;
+    public material: StandardMaterial;
+    private ballType: string;
+    private scene: any;
+
+    constructor(
+        networkId: string,
+        scene: any,
+        role: NetworkRole,
+        startPos: Vector3,
+        ballType: 'CLIENT' | 'SERVER'
+    ) {
+        super('minimal_ball', networkId, scene, role);
+        
+        this.scene = scene;
+        this.ballType = ballType;
+        
+        // ✅ Create properties from schema using your system
+        this.createPropertiesFromSchema(MINIMAL_BALL_SCHEMA);
+        
+        // ✅ Set initial position
+        this.getVectorProperty('position')?.set(startPos, 'initial_setup');
+        this.getVectorProperty('targetPosition')?.set(startPos, 'initial_setup');
+        
+        this.createVisual();
+        this.setupBehaviors();
+        this.setupRoleBehaviors();
+        
+        console.log(`🎾 ${ballType} MinimalReactiveBall created using NetworkReactiveEntity`);
+    }
+
+    private createVisual(): void {
+        // Create sphere mesh
+        this.mesh = MeshBuilder.CreateSphere(`${this.ballType}_ball`, { diameter: 1 }, this.scene);
+        
+        // Create material
+        this.material = new StandardMaterial(`${this.ballType}_material`, this.scene);
+        this.mesh.material = this.material;
+        
+        // ✅ Set up Actions for click interactions using your input system
+        this.setupMeshActions();
+        
+        console.log(`🎨 ${this.ballType} ball visual created`);
+    }
+
+    private setupMeshActions(): void {
+        this.mesh.actionManager = new ActionManager(this.scene);
+        
+        // ✅ BEHAVIOR 1: Click to cycle colors
+        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
+            ActionManager.OnLeftPickTrigger,
+            () => {
+                if (this.getRole().isServer) {
+                    // Server authority: cycle color state
+                    const colorState = this.getNumericProperty('colorState');
+                    const currentState = colorState?.getValue() || 0;
+                    const newState = (currentState + 1) % 3;
+                    colorState?.set(newState, 'click_color_cycle');
+                    
+                    console.log(`🎨 ${this.ballType} ball clicked - server set color state: ${newState}`);
+                }
+            }
+        ));
+        
+        // ✅ BEHAVIOR 2: Hover effects
+        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
+            ActionManager.OnPointerOverTrigger,
+            () => {
+                if (this.getRole().isServer) {
+                    this.getBooleanProperty('isHovered')?.setTrue('hover_enter');
+                    console.log(`🖱️ ${this.ballType} ball hovered`);
+                }
+            }
+        ));
+        
+        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
+            ActionManager.OnPointerOutTrigger,
+            () => {
+                if (this.getRole().isServer) {
+                    this.getBooleanProperty('isHovered')?.setFalse('hover_exit');
+                    console.log(`🖱️ ${this.ballType} ball unhovered`);
+                }
+            }
+        ));
+    }
+
+    protected setupBehaviors(): void {
+        // ✅ REACTIVE: Position changes update mesh
+        const position = this.getVectorProperty('position');
+        position?.onChange((event) => {
+            if (this.mesh) {
+                this.mesh.position.copyFrom(event.to);
+                console.log(`📍 ${this.ballType} ball position updated: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
+            }
+        });
+
+        // ✅ REACTIVE: Color state changes update visual
+        const colorState = this.getNumericProperty('colorState');
+        colorState?.onChange((event) => {
+            this.updateColor();
+            console.log(`🎨 ${this.ballType} ball color state: ${event.to} [${event.source}]`);
+        });
+
+        // ✅ REACTIVE: Hover state changes update visual
+        const isHovered = this.getBooleanProperty('isHovered');
+        isHovered?.onChange((event) => {
+            this.updateColor();
+            console.log(`🖱️ ${this.ballType} ball hover: ${event.to} [${event.source}]`);
+        });
+
+        // ✅ REACTIVE: Target position changes trigger movement
+        const targetPosition = this.getVectorProperty('targetPosition');
+        targetPosition?.onChange((event) => {
+            this.getBooleanProperty('isMoving')?.setTrue('movement_start');
+            console.log(`🎯 ${this.ballType} ball target: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
+        });
+
+        // ✅ REACTIVE: Movement updates
+        this.setupMovementBehavior();
+    }
+
+    private setupMovementBehavior(): void {
+        // Simple movement interpolation using your reactive properties
+        const updateMovement = () => {
+            const isMoving = this.getBooleanProperty('isMoving');
+            const position = this.getVectorProperty('position');
+            const targetPosition = this.getVectorProperty('targetPosition');
+            const moveSpeed = this.getNumericProperty('moveSpeed');
+
+            if (!isMoving?.isTrue() || !position || !targetPosition || !moveSpeed) return;
+
+            const currentPos = position.getValue();
+            const targetPos = targetPosition.getValue();
+            const speed = moveSpeed.getValue();
+
+            const direction = targetPos.subtract(currentPos);
+            const distance = direction.length();
+
+            if (distance < 0.1) {
+                // Reached target
+                isMoving.setFalse('movement_complete');
+                console.log(`🏁 ${this.ballType} ball reached target`);
+            } else {
+                // Move towards target
+                const deltaTime = 0.016; // ~60fps
+                const movement = direction.normalize().scale(speed * deltaTime);
+                const newPos = currentPos.add(movement);
+                position.set(newPos, 'movement_interpolation');
+            }
+        };
+
+        // Update movement every frame
+        this.scene.onBeforeRenderObservable.add(updateMovement);
+    }
+
+    private updateColor(): void {
+        const colorState = this.getNumericProperty('colorState')?.getValue() || 0;
+        const isHovered = this.getBooleanProperty('isHovered')?.isTrue() || false;
+
+        let baseColor: Color3;
+        switch (colorState) {
+            case 0: baseColor = this.ballType === 'CLIENT' ? Color3.Blue() : Color3.Green(); break;
+            case 1: baseColor = Color3.Yellow(); break;
+            case 2: baseColor = Color3.Red(); break;
+            default: baseColor = Color3.White(); break;
+        }
+
+        // Brighten if hovered
+        if (isHovered) {
+            baseColor = baseColor.add(new Color3(0.3, 0.3, 0.3));
+        }
+
+        this.material.diffuseColor = baseColor;
+        this.material.emissiveColor = baseColor.scale(0.2);
+    }
+
+    protected setupClientBehaviors(): void {
+        console.log(`💻 ${this.ballType} client behaviors set up`);
+    }
+
+    protected setupServerBehaviors(): void {
+        console.log(`🖥️ ${this.ballType} server behaviors set up`);
+    }
+
+    // ✅ PUBLIC API: Move ball using reactive properties
+    public moveTo(target: Vector3, source: string): void {
+        if (this.getRole().isServer) {
+            this.getVectorProperty('targetPosition')?.set(target, source);
+        }
+    }
+
+    // ✅ PUBLIC API: Cycle color using reactive properties
+    public cycleColor(source: string): void {
+        if (this.getRole().isServer) {
+            const colorState = this.getNumericProperty('colorState');
+            const currentState = colorState?.getValue() || 0;
+            const newState = (currentState + 1) % 3;
+            colorState?.set(newState, source);
+        }
+    }
+}
+
+// ============================================================================
+// 🎮 MINIMAL INPUT HANDLER - Uses your InputStateEntity system
+// ============================================================================
+
+class MinimalReactiveInputHandler {
+    private inputState: InputStateEntity;
+    private clientBall: MinimalReactiveBall;
+    private serverBall: MinimalReactiveBall;
+
+    constructor(inputState: InputStateEntity, clientBall: MinimalReactiveBall, serverBall: MinimalReactiveBall) {
+        this.inputState = inputState;
+        this.clientBall = clientBall;
+        this.serverBall = serverBall;
+        
+        this.setupInputObservation();
+    }
+
+    private setupInputObservation(): void {
+        // ✅ BEHAVIOR 3: Ground clicks move both balls
+        const recentClicks = this.inputState.getCollectionProperty('recentClicks');
+        recentClicks?.itemAddedObservable.add((event) => {
+            const clickEvent = event.value as any;
+            
+            // Only process clicks without picked entity (ground clicks)
+            if (!clickEvent.pickedEntityId) {
+                const worldPos = clickEvent.worldPosition;
+                console.log(`🖱️ Ground click at (${worldPos.x.toFixed(1)}, ${worldPos.z.toFixed(1)})`);
+                
+                // Move server ball (authority)
+                this.serverBall.moveTo(worldPos, 'ground_click_server');
+                
+                // Move client ball (prediction) - will be overridden by server
+                this.clientBall.moveTo(worldPos, 'ground_click_prediction');
+            }
+        });
+
+        // ✅ KEYBOARD: WASD movement using your input system
+        const keysPressed = this.inputState.getCollectionProperty('keysPressed');
+        keysPressed?.itemAddedObservable.add((event) => {
+            this.handleKeyPress(event.value);
+        });
+
+        console.log('🎮 Minimal reactive input handling set up');
+    }
+
+    private handleKeyPress(keyCode: string): void {
+        const moveDistance = 2.0;
+        let offset = Vector3.Zero();
+
+        switch (keyCode) {
+            case 'KeyW': offset.z = moveDistance; break;
+            case 'KeyS': offset.z = -moveDistance; break;
+            case 'KeyA': offset.x = -moveDistance; break;
+            case 'KeyD': offset.x = moveDistance; break;
+            default: return;
+        }
+
+        console.log(`⌨️ Key pressed: ${keyCode}`);
+
+        // Move both balls using reactive properties
+        const clientPos = this.clientBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
+        const serverPos = this.serverBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
+
+        this.clientBall.moveTo(clientPos.add(offset), 'keyboard_prediction');
+        this.serverBall.moveTo(serverPos.add(offset), 'keyboard_server');
+    }
+}
+
+// ============================================================================
+// 🚀 MAIN SETUP - Using your reactive architecture
+// ============================================================================
+
+function setupMinimalReactiveTest() {
+    // ✅ Standard setup
+    let canvas = document.getElementById("gameCanvas") as HTMLCanvasElement;
     if (!canvas) {
         canvas = document.createElement("canvas");
-        canvas.id = id;
+        canvas.id = "gameCanvas";
         canvas.style.width = "100vw";
         canvas.style.height = "100vh";
         canvas.style.display = "block";
         document.body.appendChild(canvas);
     }
+
     const sceneManager = new SceneManager(canvas);
     sceneManager.handleResize();
     sceneManager.start();
-    const rootNode = sceneManager.getRootNode();
-    return { canvas, sceneManager, rootNode };
-}
 
-// ✅ NEW: Setup complete reactive input system with networking
-function setupReactiveInputWithNetworking(sceneManager: SceneManager) {
-    console.log('🚀 Initializing Complete Reactive Input System with Networking...');
-    
-    // ✅ STEP 1: Create client and server network managers
+    // ✅ Grid
+    const groundGrid = createSimpleGrid(sceneManager.scene, 20);
+    groundGrid.position.y = -0.1;
+
+    // ✅ Network setup using your system
     const clientRole: NetworkRole = { isClient: true, isServer: false, ownedByThisClient: true };
     const serverRole: NetworkRole = { isClient: false, isServer: true };
-    
+
     const clientNetworkManager = new SimpleNetworkManager(clientRole);
     const serverNetworkManager = new SimpleNetworkManager(serverRole);
-    
-    // ✅ STEP 2: Set up mock networking between client and server
+
+    // ✅ FIXED: Simple message queue without bloat
     const messageQueue: any[] = [];
     let processingMessages = false;
-    
-    // Client sends to server
+
     clientNetworkManager.setSendCallback((message) => {
-        console.log(`📤 CLIENT → SERVER:`, message.type, message.propertyName, `(${message.authority}-auth)`);
         messageQueue.push({ to: 'server', message });
         processMessageQueue();
     });
-    
-    // Server sends to client  
+
     serverNetworkManager.setSendCallback((message) => {
-        console.log(`📤 SERVER → CLIENT:`, message.type, message.propertyName, `(${message.authority}-auth)`);
         messageQueue.push({ to: 'client', message });
         processMessageQueue();
     });
-    
-    // ✅ STEP 3: Process message queue asynchronously
+
     function processMessageQueue() {
         if (processingMessages) return;
         processingMessages = true;
@@ -69,331 +362,104 @@ function setupReactiveInputWithNetworking(sceneManager: SceneManager) {
                 const { to, message } = messageQueue.shift();
                 
                 if (to === 'server') {
-                    console.log(`📥 SERVER ← CLIENT:`, message.type, message.propertyName);
                     serverNetworkManager.handleMessage(message);
                 } else {
-                    console.log(`📥 CLIENT ← SERVER:`, message.type, message.propertyName);
                     clientNetworkManager.handleMessage(message);
                 }
             }
             processingMessages = false;
-        }, 16); // ~60fps network processing
+        }, 16);
     }
-    
-    // ✅ STEP 4: Create global input state entities for both sides
+
+    // ✅ Input system using your architecture
     const clientInputState = new InputStateEntity('client_input', sceneManager.scene, clientRole);
-    const serverInputState = new InputStateEntity('server_input', sceneManager.scene, serverRole);
-    
-    // ✅ STEP 5: Set up client-side input enrichment (only client has DOM access)
     const inputEnricher = new ReactiveInputEnricher(sceneManager.scene, clientInputState);
-    
-    console.log('✅ Reactive input system with networking initialized');
-    
-    return {
-        clientNetworkManager,
-        serverNetworkManager,
-        clientInputState,
-        serverInputState,
-        inputEnricher
-    };
-}
 
-// ✅ NEW: Create networked player characters
-function createNetworkedPlayerCharacters(
-    sceneManager: SceneManager,
-    rootNode: any,
-    clientNetworkManager: SimpleNetworkManager,
-    serverNetworkManager: SimpleNetworkManager,
-    clientInputState: InputStateEntity,
-    serverInputState: InputStateEntity
-) {
-    console.log('🎮 Creating Networked Player Characters...');
-    
-    // ✅ CLIENT PLAYER: Handles input, makes predictions
-    const clientPlayer = new PlayerCharacter(
-        'player1',
+    // ✅ Create balls using your NetworkReactiveEntity system
+    const clientBall = new MinimalReactiveBall(
+        'ball1',
         sceneManager.scene,
-        { isClient: true, isServer: false, ownedByThisClient: true },
-        clientInputState,
-        rootNode
+        clientRole,
+        new Vector3(-3, 0, 0),
+        'CLIENT'
     );
-    
-    // ✅ SERVER PLAYER: Receives input state, provides authority
-    const serverPlayer = new PlayerCharacter(
-        'player1', // Same ID - represents same entity on both sides
+
+    const serverBall = new MinimalReactiveBall(
+        'ball1',
         sceneManager.scene,
-        { isClient: false, isServer: true },
-        serverInputState,
-        rootNode
+        serverRole,
+        new Vector3(3, 0, 0),
+        'SERVER'
     );
-    
-    // ✅ REGISTER WITH NETWORK MANAGERS
-    clientNetworkManager.registerEntity(clientPlayer);
-    serverNetworkManager.registerEntity(serverPlayer);
-    
-    // ✅ POSITION ENTITIES: Offset slightly so we can see both
-    clientPlayer.position.set(new Vector3(-1, 0, 0), 'initial_setup');
-    serverPlayer.position.set(new Vector3(1, 0, 0), 'initial_setup');
-    
-    console.log('✅ Networked player characters created and registered');
-    
-    return { clientPlayer, serverPlayer };
-}
 
-// ✅ NEW: Set up comprehensive debugging and monitoring
-function setupReactiveInputMonitoring(
-    clientInputState: InputStateEntity,
-    serverInputState: InputStateEntity,
-    clientPlayer: PlayerCharacter,
-    serverPlayer: PlayerCharacter,
-    clientNetworkManager: SimpleNetworkManager,
-    serverNetworkManager: SimpleNetworkManager,
-    inputEnricher: ReactiveInputEnricher
-) {
-    console.log('🔍 Setting up reactive input monitoring...');
-    
-    // ✅ MONITOR INPUT STATE CHANGES
-    const clientMousePos = clientInputState.getVectorProperty('mouseWorldPosition');
-    clientMousePos?.onChange((event) => {
-        if (Math.random() < 0.02) { // Occasional logging to avoid spam
-            console.log(`🖱️ CLIENT: Mouse at (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)})`);
-        }
-    });
-    
-    const clientMouseButtons = clientInputState.getCollectionProperty('mouseButtons');
-    clientMouseButtons?.itemAddedObservable.add((event) => {
-        console.log(`🖱️ CLIENT: Mouse button ${event.value} pressed`);
-    });
-    
-    const clientKeysPressed = clientInputState.getCollectionProperty('keysPressed');
-    clientKeysPressed?.itemAddedObservable.add((event) => {
-        console.log(`⌨️ CLIENT: Key ${event.value} pressed`);
-    });
-    
-    // ✅ MONITOR GAME STATE CHANGES
-    const clientTargetPosition = clientPlayer.getVectorProperty('targetPosition');
-    clientTargetPosition?.onChange((event) => {
-        console.log(`🎯 CLIENT: Target position → (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
-    });
-    
-    const serverTargetPosition = serverPlayer.getVectorProperty('targetPosition');
-    serverTargetPosition?.onChange((event) => {
-        console.log(`🎯 SERVER: Target position → (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
-    });
-    
-    // ✅ MONITOR POSITION SYNC
-    const clientPosition = clientPlayer.getVectorProperty('position');
-    const serverPosition = serverPlayer.getVectorProperty('position');
-    
-    clientPosition?.onChange((event) => {
-        if (event.source !== 'movement_interpolation') {
-            console.log(`📍 CLIENT: Position → (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
-        }
-    });
-    
-    serverPosition?.onChange((event) => {
-        if (event.source !== 'movement_interpolation') {
-            console.log(`📍 SERVER: Position → (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
-        }
-    });
-    
-    console.log('✅ Reactive input monitoring active');
-}
+    // ✅ Register with network managers
+    clientNetworkManager.registerEntity(clientBall);
+    serverNetworkManager.registerEntity(serverBall);
 
-// ✅ ENHANCED: Main entry point with complete reactive input system
-(async () => {
-    const { canvas, sceneManager, rootNode } = setupGameCanvasAndScene();
-    
-    // ✅ ADD SIMPLE GRID: Create visual reference frame using GridMaterial
-    console.log('🟫 Creating simple grid for visual reference...');
-    const groundGrid = createSimpleGrid(sceneManager.scene, 30); // 30x30 grid
-    groundGrid.position.y = -0.1; // Slightly below Y=0
-    
-    // ✅ STEP 1: Initialize reactive input system with networking
-    const {
-        clientNetworkManager,
-        serverNetworkManager,
-        clientInputState,
-        serverInputState,
-        inputEnricher
-    } = setupReactiveInputWithNetworking(sceneManager);
-    
-    // ✅ STEP 2: Create networked player characters
-    const { clientPlayer, serverPlayer } = createNetworkedPlayerCharacters(
-        sceneManager,
-        rootNode,
-        clientNetworkManager,
-        serverNetworkManager,
-        clientInputState,
-        serverInputState
-    );
-    
-    // ✅ STEP 3: Set up monitoring and debugging
-    setupReactiveInputMonitoring(
-        clientInputState,
-        serverInputState,
-        clientPlayer,
-        serverPlayer,
-        clientNetworkManager,
-        serverNetworkManager,
-        inputEnricher
-    );
-    
-    // ✅ STEP 4: Make everything accessible for debugging
-    (window as any).reactiveInputDemo = {
-        // Network managers
-        clientNetworkManager,
-        serverNetworkManager,
-        
-        // Input state
-        clientInputState,
-        serverInputState,
-        inputEnricher,
-        
-        // Player characters
-        clientPlayer,
-        serverPlayer,
-        
-        // Scene and visuals
-        sceneManager,
-        groundGrid, // ✅ Simple grid mesh
-        
-        // ✅ DEBUGGING HELPERS
-        getInputState: () => ({
-            mouseWorldPos: clientInputState.getCurrentMouseWorldPosition(),
-            pickedEntity: clientInputState.getCurrentlyPickedEntity(),
-            keysPressed: Array.from(clientInputState.getCollectionProperty('keysPressed')?.getKeys() || []),
-            mouseButtons: Array.from(clientInputState.getCollectionProperty('mouseButtons')?.getKeys() || [])
-        }),
-        
-        getPlayerStates: () => ({
-            client: {
-                targetPosition: clientPlayer.getVectorProperty('targetPosition')?.getValue(),
-                position: clientPlayer.getVectorProperty('position')?.getValue(),
-                health: clientPlayer.getNumericProperty('health')?.getValue(),
-                unitState: clientPlayer.getEnumProperty('unitState')?.getValue()
-            },
-            server: {
-                targetPosition: serverPlayer.getVectorProperty('targetPosition')?.getValue(),
-                position: serverPlayer.getVectorProperty('position')?.getValue(),
-                health: serverPlayer.getNumericProperty('health')?.getValue(),
-                unitState: serverPlayer.getEnumProperty('unitState')?.getValue()
-            }
-        }),
-        
-        getNetworkStats: () => ({
-            client: clientNetworkManager.getAuthorityStats(),
-            server: serverNetworkManager.getAuthorityStats()
-        }),
-        
-        getInputPerformance: () => inputEnricher.getPerformanceStats(),
-        
-        // ✅ TESTING HELPERS
-        simulateClick: (x: number, z: number) => {
-            console.log(`🧪 Simulating click at (${x}, ${z})`);
-            clientInputState.updateMouseContext(
-                new Vector3(0.5, 0.5, 0), // Screen position
-                new Vector3(x, 0, z),     // World position
-                undefined,                // No picked entity
-                undefined,                // No picked UI
-                new Vector3(0, 1, 0),     // Surface normal
-                5                         // Raycast distance
-            );
-            clientInputState.addClickEvent(0, []); // Left click
-        },
-        
-        simulateKeyPress: (keyCode: string) => {
-            console.log(`🧪 Simulating key press: ${keyCode}`);
-            clientInputState.updateKeyPressed(keyCode, true, []);
-        },
-        
-        simulateKeyRelease: (keyCode: string) => {
-            console.log(`🧪 Simulating key release: ${keyCode}`);
-            clientInputState.updateKeyPressed(keyCode, false, []);
-        },
-        
-        // ✅ AUTHORITY TESTING
-        debugAuthority: () => {
-            console.log('🔍 Authority Configuration:');
-            clientNetworkManager.debugAuthority();
-            serverNetworkManager.debugAuthority();
-        },
-        
-        // ✅ PREDICTION vs AUTHORITY TESTING
-        testPredictionCorrection: () => {
-            console.log('🧪 Testing client prediction vs server authority...');
-            
-            // Client predicts movement to (5, 0, 5)
-            clientPlayer.getVectorProperty('targetPosition')?.set(new Vector3(5, 0, 5), 'client_prediction');
-            
-            // Server corrects to (3, 0, 3) after 1 second
-            setTimeout(() => {
-                serverPlayer.getVectorProperty('targetPosition')?.set(new Vector3(3, 0, 3), 'server_authority');
-                console.log('🔧 Server correction applied - client should sync to server position');
-            }, 1000);
-        },
-        
-        // ✅ VISUAL HELPERS
-        toggleGrid: () => {
-            groundGrid.isVisible = !groundGrid.isVisible;
-            console.log(`🟫 Ground grid ${groundGrid.isVisible ? 'shown' : 'hidden'}`);
-        },
-        
-        resetPlayerPositions: () => {
-            console.log('🔄 Resetting player positions to start positions');
-            clientPlayer.position.set(new Vector3(-2, 0, 0), 'manual_reset');
-            serverPlayer.position.set(new Vector3(2, 0, 0), 'manual_reset');
-        },
-        
-        moveCameraToOverview: () => {
-            sceneManager.camera.setTarget(Vector3.Zero());
-            sceneManager.camera.radius = 15;
-            sceneManager.camera.beta = Math.PI / 4; // 45 degree angle
-            console.log('📹 Camera moved to overview position');
-        }
-    };
-    
-    // ✅ SETUP BETTER CAMERA POSITION for viewing the grid
+    // ✅ Input handling using your reactive system
+    const inputHandler = new MinimalReactiveInputHandler(clientInputState, clientBall, serverBall);
+
+    // ✅ Camera
     sceneManager.camera.setTarget(Vector3.Zero());
-    sceneManager.camera.radius = 12;
-    sceneManager.camera.beta = Math.PI / 3; // 60 degree angle
-    sceneManager.camera.alpha = 0; // Front view initially
-    
+    sceneManager.camera.radius = 15;
+    sceneManager.camera.beta = Math.PI / 3;
+
+    // ✅ Make canvas focusable for keyboard
+    canvas.tabIndex = 0;
+    canvas.focus();
+
+    // ✅ Global debugging
+    (window as any).minimalReactiveTest = {
+        clientBall,
+        serverBall,
+        inputHandler,
+        clientInputState,
+        clientNetworkManager,
+        serverNetworkManager,
+
+        testClick: (x: number, z: number) => {
+            console.log(`🧪 Testing movement to (${x}, ${z})`);
+            clientBall.moveTo(new Vector3(x, 0, z), 'test_client');
+            serverBall.moveTo(new Vector3(x, 0, z), 'test_server');
+        },
+
+        testColors: () => {
+            console.log('🧪 Testing color cycling');
+            clientBall.cycleColor('test_client');
+            serverBall.cycleColor('test_server');
+        },
+
+        checkNetwork: () => {
+            console.log('Network stats:', {
+                client: clientNetworkManager.getAuthorityStats(),
+                server: serverNetworkManager.getAuthorityStats()
+            });
+        }
+    };
+
     console.log(`
-🎯 Complete Reactive Input System Demo Ready with Simple Grid!
+🎾 MINIMAL REACTIVE PROPERTY TEST READY!
 
-✅ FEATURES ACTIVE:
-- Simple grid using Babylon.js GridMaterial (lightweight!)
-- Global reactive input state with client authority
-- Continuous 3D mouse position enrichment  
-- Pure reactive game logic (no DOM events in PlayerCharacter)
-- Client prediction + server authority with automatic correction
-- Full network sync with authority validation
-- Performance monitoring and debugging tools
-- Visual feedback with colored spheres and effect flashes
+✅ USING YOUR ARCHITECTURE:
+- NetworkReactiveEntity with schema-driven properties
+- InputStateEntity with enriched input
+- SimpleNetworkManager with authority patterns
+- ReactiveInputEnricher for 3D picking
 
-🎮 WHAT TO TRY:
-1. Click anywhere on the grid - watch client prediction + server authority flow
-2. Press WASD keys - watch reactive keyboard movement  
-3. Observe console logs for complete reactive flow
-4. Watch players move relative to the grid reference
-5. Check authority separation working correctly
+🎮 BEHAVIORS TO TEST:
+1. Click on GROUND → Both balls move (reactive position properties)
+2. Press WASD → Both balls move by direction
+3. Click on BALLS → Cycle colors (reactive color properties)
+4. Hover on BALLS → Brighter colors (reactive hover properties)
 
 🧪 CONSOLE COMMANDS:
-- reactiveInputDemo.getInputState()           // Current input state
-- reactiveInputDemo.getPlayerStates()         // Client vs server player state  
-- reactiveInputDemo.simulateClick(5, 3)       // Test click at grid position (5,3)
-- reactiveInputDemo.testPredictionCorrection() // Test client prediction vs server authority
-- reactiveInputDemo.toggleGrid()              // Show/hide ground grid
-- reactiveInputDemo.resetPlayerPositions()    // Reset to start positions
-- reactiveInputDemo.moveCameraToOverview()    // Better camera angle
+- minimalReactiveTest.testClick(5, 3)    // Test movement
+- minimalReactiveTest.testColors()       // Test color cycling
+- minimalReactiveTest.checkNetwork()     // Check network sync
 
-🔍 VISUAL REFERENCE:
-- Blue sphere: CLIENT player entity (predictions)
-- Green sphere: SERVER player entity (authority)  
-- Grid: 1 unit per square, thick lines every 5 units
-- Flashes: Cyan=valid move, Red=rejected, Purple=interaction
-
-The complete reactive input architecture is now working with simple GridMaterial!
+This tests your reactive property + networking system with minimal complexity!
     `);
-})();
+}
+
+// Start the test
+setupMinimalReactiveTest();
