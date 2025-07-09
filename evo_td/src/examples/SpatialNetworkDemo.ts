@@ -6,7 +6,7 @@ import { SocketClient } from '../engine/networking/SocketClient';
 import { GameSocketServer } from '../engine/networking/SocketServer';
 import { NetworkRole } from '../engine/networking/NetworkTypes';
 import { ServerAuthoritativeWanderer } from '../game/entities/ServerAuthoratitiveWanderer';
-import { PredictiveTarget } from '../game/entities/PredictiveTarget';
+import { PlayerCharacter } from '../game/entities/PlayerCharacter';
 import { GameNodeObject } from '../engine/core/GameNodeObject';
 import { Scene, Vector3, Color3, MeshBuilder, StandardMaterial } from '@babylonjs/core';
 import { ObservableFactory } from '../engine/scene/ObservableFactory'; // <-- Add correct import path
@@ -15,7 +15,7 @@ import { ObservableFactory } from '../engine/scene/ObservableFactory'; // <-- Ad
  * DEMO SCENE: Spatial Networking Patterns
  * 
  * DEMONSTRATES:
- * 1. Client prediction + server authority (PredictiveTarget)
+ * 1. Client prediction + server authority (PlayerCharacter)
  * 2. Server-only simulation (ServerAuthoritativeWanderer)  
  * 3. Proximity detection between entities
  * 4. Clear separation: what runs where
@@ -142,7 +142,7 @@ export class SpatialNetworkDemo {
         // 🟢 CLIENT-PREDICTIVE TARGET (Green) 
         // Client predicts movement, server validates
         if (this.config.role === 'client') {
-            const target = new PredictiveTarget(
+            const target = new PlayerCharacter(
                 'demo_target',
                 this.sceneManager.scene,
                 role,

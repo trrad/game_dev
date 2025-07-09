@@ -169,15 +169,15 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     // EXISTING METHODS (unchanged)
     // ============================================================
 
-    protected getProperty<T>(name: string): ReactiveProperty<T> | undefined {
+    public getProperty<T>(name: string): ReactiveProperty<T> | undefined {
         return this.properties.getProperty<T>(name);
     }
 
-    protected getBooleanProperty(name: string) { return this.properties.getBooleanProperty(name); }
-    protected getNumericProperty(name: string) { return this.properties.getNumericProperty(name); }
-    protected getEnumProperty<T extends string>(name: string) { return this.properties.getEnumProperty<T>(name); }
-    protected getVectorProperty(name: string) { return this.properties.getVectorProperty(name); }
-    protected getCollectionProperty<T>(name: string) { return this.properties.getCollectionProperty<T>(name); }
+    public getBooleanProperty(name: string) { return this.properties.getBooleanProperty(name); }
+    public getNumericProperty(name: string) { return this.properties.getNumericProperty(name); }
+    public getEnumProperty<T extends string>(name: string) { return this.properties.getEnumProperty<T>(name); }
+    public getVectorProperty(name: string) { return this.properties.getVectorProperty(name); }
+    public getCollectionProperty<T>(name: string) { return this.properties.getCollectionProperty<T>(name); }
 
     private createPropertyFromSchema(schema: PropertySchema): ReactiveProperty<any> | null {
         const { 

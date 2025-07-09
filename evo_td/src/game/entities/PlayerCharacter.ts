@@ -1,11 +1,11 @@
-// src/game/entities/PredictiveTarget.ts - Updated to use reactive input system
+// src/game/entities/PlayerCharacter.ts - Clean reactive design following our philosophy
 
 import { NetworkReactiveEntity } from '../../engine/networking/NetworkReactiveEntity';
 import { NetworkRole } from '../../engine/networking/NetworkTypes';
 import { GAME_ENTITY_SCHEMAS } from '../schemas/EntitySchemas';
 import { Vector3, Scene } from '@babylonjs/core';
 import { ConfigurableTimers } from '../../engine/utils/ConfigurableTimers';
-import { InputStateEntity, ClickEvent } from '../../engine/inputs/InputStateEntity';
+import { InputStateEntity } from '../../engine/inputs/InputStateEntity';
 
 export class PlayerCharacter extends NetworkReactiveEntity {
     private inputState: InputStateEntity;
@@ -16,7 +16,7 @@ export class PlayerCharacter extends NetworkReactiveEntity {
         networkId: string, 
         scene: Scene | null, 
         role: NetworkRole, 
-        inputState: InputStateEntity, // ✅ NEW: Inject global input state
+        inputState: InputStateEntity,
         parentNode?: any
     ) {
         super('player_character', networkId, scene, role, parentNode);
@@ -27,6 +27,102 @@ export class PlayerCharacter extends NetworkReactiveEntity {
         this.setupRoleBehaviors();
     }
 
+    // ========================================================================
+    // ✅ SHARED GAME LOGIC: Same logic runs on both client and server
+    // ========================================================================
+
+    /**
+     * ✅ CORE SHARED LOGIC: Process input state into game commands
+     * This runs identically on client (prediction) and server (authority)
+     */
+    private handleInputStateChange(source: string): void {
+        const isAlive = this.getBooleanProperty('isAlive');
+        if (!isAlive?.isTrue()) return;
+
+        // ✅ MOVEMENT COMMAND: Check if left mouse button was just pressed
+        if (this.inputState.isMouseButtonPressed(0)) {
+            const worldPos = this.inputState.getCurrentMouseWorldPosition();
+            const pickedEntity = this.inputState.getCurrentlyPickedEntity();
+            
+            // Ground click → movement command
+            if (!pickedEntity && worldPos) {
+                this.processMovementCommand(worldPos, source);
+            }
+            
+            // Entity click → interaction command  
+            else if (pickedEntity) {
+                this.processInteractionCommand(pickedEntity, source);
+            }
+        }
+
+        // ✅ KEYBOARD MOVEMENT: Process continuous key state
+        this.processKeyboardMovement(source);
+    }
+
+    /**
+     * ✅ SHARED LOGIC: Process movement command with validation
+     */
+    private processMovementCommand(targetPos: Vector3, source: string): void {
+        const position = this.getVectorProperty('position');
+        const targetPosition = this.getVectorProperty('targetPosition');
+        
+        if (!position || !targetPosition) return;
+
+        // ✅ SAME VALIDATION: Distance check (same on client and server)
+        const currentPos = position.getValue();
+        const distance = Vector3.Distance(currentPos, targetPos);
+        const maxMoveDistance = 10;
+        
+        if (distance <= maxMoveDistance) {
+            console.log(`✅ ${source}: VALIDATED move to (${targetPos.x.toFixed(1)}, ${targetPos.z.toFixed(1)})`);
+            targetPosition.set(targetPos, source);
+        } else {
+            console.log(`❌ ${source}: REJECTED move (distance: ${distance.toFixed(2)})`);
+            // Keep current target or reset to current position
+            if (source.includes('server')) {
+                targetPosition.set(currentPos, 'server_validation_rejection');
+            }
+        }
+    }
+
+    /**
+     * ✅ SHARED LOGIC: Process interaction command
+     */
+    private processInteractionCommand(entityId: string, source: string): void {
+        const interactionTarget = this.getProperty<string>('interactionTarget');
+        if (interactionTarget) {
+            interactionTarget.set(entityId, source);
+            console.log(`🎯 ${source}: Interaction with ${entityId}`);
+        }
+    }
+
+    /**
+     * ✅ SHARED LOGIC: Process keyboard movement
+     */
+    private processKeyboardMovement(source: string): void {
+        const movementInput = this.getVectorProperty('movementInput');
+        if (!movementInput) return;
+
+        let movement = Vector3.Zero();
+        
+        // ✅ SAME LOGIC: Check current key state (not events)
+        if (this.inputState.isKeyPressed('KeyW')) movement.z += 1;
+        if (this.inputState.isKeyPressed('KeyS')) movement.z -= 1;
+        if (this.inputState.isKeyPressed('KeyA')) movement.x -= 1;
+        if (this.inputState.isKeyPressed('KeyD')) movement.x += 1;
+
+        // Normalize diagonal movement
+        if (movement.length() > 0) {
+            movement = movement.normalize();
+        }
+
+        movementInput.set(movement, source);
+    }
+
+    // ========================================================================
+    // ✅ REACTIVE BEHAVIORS: Standard game mechanics
+    // ========================================================================
+
     protected setupBehaviors(): void {
         const health = this.getNumericProperty('health');
         const isAlive = this.getBooleanProperty('isAlive');
@@ -35,28 +131,29 @@ export class PlayerCharacter extends NetworkReactiveEntity {
         const movementProgress = this.getNumericProperty('movementProgress');
 
         if (!health || !isAlive || !unitState || !targetPosition || !movementProgress) {
-            console.error(`Failed to get required properties for target ${this.getNetworkId()}`);
+            console.error(`Failed to get required properties for ${this.getNetworkId()}`);
             return;
         }
 
-        // ✅ EXISTING: Standard reactive behaviors (unchanged)
-        targetPosition.onChange((event: any) => {
+        // ✅ DEATH HANDLING
+        health.onChange((event) => {
+            if (event.to <= 0 && isAlive.isTrue()) {
+                isAlive.setFalse('death');
+                unitState.setTo('paused', 'death');
+                console.log(`💀 ${this.getNetworkId()} died`);
+            }
+        });
+
+        // ✅ MOVEMENT STATE MANAGEMENT
+        targetPosition.onChange((event) => {
             if (event.changed && isAlive.isTrue()) {
-                console.log(`🎯 ${this.getNetworkId()} new target: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) - ${event.source}`);
-                
-                if (event.source.includes('prediction')) {
-                    unitState.setTo('moving', 'client_prediction');
-                } else if (event.source.includes('server')) {
-                    unitState.setTo('moving', 'server_authority');
-                }
-                
+                console.log(`🎯 ${this.getNetworkId()} new target from ${event.source}`);
+                unitState.setTo('moving', 'target_changed');
                 movementProgress.set(0, 'movement_reset');
             }
         });
 
-        unitState.onChange((event: any) => {
-            console.log(`🎯 ${this.getNetworkId()} unit state: ${event.from} → ${event.to} (${event.source})`);
-            
+        unitState.onChange((event) => {
             if (event.to === 'moving') {
                 this.startMovement();
             } else if (event.from === 'moving') {
@@ -64,7 +161,7 @@ export class PlayerCharacter extends NetworkReactiveEntity {
             }
         });
 
-        movementProgress.onChange((event: any) => {
+        movementProgress.onChange((event) => {
             if (event.to >= 1.0 && unitState.getValue() === 'moving') {
                 unitState.setTo('reached_destination', 'movement_complete');
                 
@@ -80,199 +177,83 @@ export class PlayerCharacter extends NetworkReactiveEntity {
         });
     }
 
-    protected setupInputHandling(): void {
-        // ✅ NEW: Reactive input handling instead of DOM events
-        if (!this.getRole().ownedByThisClient) return;
+    // ========================================================================
+    // ✅ ROLE-SPECIFIC INPUT OBSERVERS: Different triggers, same logic
+    // ========================================================================
 
-        console.log(`🎮 Setting up REACTIVE input handling for ${this.getNetworkId()}`);
+    protected setupClientBehaviors(): void {
+        if (!this.getRole().isClient) return;
         
-        // ✅ CLICK-TO-MOVE: Observe click events from global input state
-        const cleanup1 = this.observeClickEvents();
-        
-        // ✅ HOVER FEEDBACK: Observe mouse hover state
-        const cleanup2 = this.observeMouseHover();
-        
-        // Store cleanup functions
-        this.inputObserverCleanup.push(cleanup1, cleanup2);
+        console.log(`💻 CLIENT: Setting up input state observers for ${this.getNetworkId()}`);
+        this.setupInputStateObservers('client_prediction');
     }
-
-    // ========================================================================
-    // ✅ NEW: Reactive Input Observers (replaces DOM event handling)
-    // ========================================================================
-
-    private observeClickEvents(): () => void {
-        const recentClicks = this.inputState.getCollectionProperty<ClickEvent>('recentClicks');
-        if (!recentClicks) {
-            console.warn('No recentClicks collection found on input state');
-            return () => {};
-        }
-
-        const observer = recentClicks.itemAddedObservable.add((event) => {
-            const clickEvent = event.value;
-            const isAlive = this.getBooleanProperty('isAlive');
-            
-            // Only process clicks for living entities
-            if (!isAlive?.isTrue()) return;
-            
-            // GROUND CLICKS: Move to location (same logic as before, but reactive)
-            if (!clickEvent.pickedEntityId) {
-                this.handleReactiveGroundClick(clickEvent);
-            }
-            
-            // ENTITY CLICKS: Handle entity interactions
-            else if (clickEvent.pickedEntityId === this.getNetworkId()) {
-                this.handleReactiveSelfClick(clickEvent);
-            }
-        });
-
-        return () => observer.remove();
-    }
-
-    private observeMouseHover(): () => void {
-        const currentlyPickedEntity = this.inputState.getProperty<string>('currentlyPickedEntity');
-        if (!currentlyPickedEntity) {
-            console.warn('No currentlyPickedEntity property found on input state');
-            return () => {};
-        }
-
-        const observer = currentlyPickedEntity.onChange((event) => {
-            // Log hover changes for this entity
-            if (event.to === this.getNetworkId()) {
-                console.log(`👆 ${this.getNetworkId()} is being hovered`);
-                // Could add visual feedback here
-            } else if (event.from === this.getNetworkId()) {
-                console.log(`👋 ${this.getNetworkId()} hover ended`);
-                // Could remove visual feedback here
-            }
-        });
-
-        return () => observer.remove();
-    }
-
-    // ========================================================================
-    // ✅ NEW: Reactive Input Event Handlers
-    // ========================================================================
-
-    private handleReactiveGroundClick(clickEvent: ClickEvent): void {
-        const targetPosition = this.getVectorProperty('targetPosition');
-        if (!targetPosition) return;
-        
-        console.log(`🖱️ REACTIVE PREDICTION: Ground click at (${clickEvent.worldPosition.x.toFixed(1)}, ${clickEvent.worldPosition.z.toFixed(1)})`);
-        
-        // ✅ CLIENT PREDICTION: Immediately update server-authoritative property with prediction source
-        targetPosition.set(clickEvent.worldPosition, 'client_prediction');
-        
-        // ✅ AUTOMATIC SYNC: Property system sends client prediction to server
-        // Server will process input state and update targetPosition with 'server_authority'
-        // Server authority will automatically overwrite client prediction via reactive property sync
-        
-        console.log(`📤 REACTIVE: Client prediction will sync to server, server authority will follow`);
-    }
-
-    private handleReactiveSelfClick(clickEvent: ClickEvent): void {
-        console.log(`👆 REACTIVE: Self-click detected on ${this.getNetworkId()} at (${clickEvent.worldPosition.x.toFixed(1)}, ${clickEvent.worldPosition.z.toFixed(1)})`);
-        
-        // Example: Toggle selection state or show info panel
-        // This could trigger UI behaviors, status display, etc.
-    }
-
-    // ========================================================================
-    // ✅ ENHANCED: Server-side input processing through reactive properties
-    // ========================================================================
 
     protected setupServerBehaviors(): void {
         if (!this.getRole().isServer) return;
         
-        console.log(`🖥️ SERVER: Setting up reactive input processing for ${this.getNetworkId()}`);
-        
-        // ✅ SERVER: Observe property changes from client authority
-        this.setupServerInputProcessing();
+        console.log(`🖥️ SERVER: Setting up input state observers for ${this.getNetworkId()}`);
+        this.setupInputStateObservers('server_authority');
     }
 
-    private setupServerInputProcessing(): void {
-        // ✅ SERVER: Observe client-authoritative input state to generate server-authoritative commands
-        const recentClicks = this.inputState.getCollectionProperty<ClickEvent>('recentClicks');
-        
-        if (recentClicks) {
-            const cleanup = recentClicks.itemAddedObservable.add((event) => {
-                const clickEvent = event.value;
-                
-                // Process ground clicks through shared game logic
-                if (!clickEvent.pickedEntityId) {
-                    this.processServerGroundClick(clickEvent);
-                }
-            });
-            
-            this.addCleanupFunction(cleanup);
-        }
-    }
-
-    private processServerGroundClick(clickEvent: ClickEvent): void {
-        const position = this.getVectorProperty('position');
-        const targetPosition = this.getVectorProperty('targetPosition');
-        const isAlive = this.getBooleanProperty('isAlive');
-        
-        if (!position || !targetPosition || !isAlive?.isTrue()) return;
-        
-        const currentPos = position.getValue();
-        const clickPos = clickEvent.worldPosition;
-        const distance = Vector3.Distance(currentPos, clickPos);
-        const maxMoveDistance = 10;
-        
-        if (distance <= maxMoveDistance) {
-            console.log(`✅ SERVER: VALIDATED ground click for ${this.getNetworkId()}`);
-            
-            // ✅ SERVER AUTHORITY: Set target position with server authority
-            targetPosition.set(clickPos, 'server_authority');
-            
-        } else {
-            console.log(`❌ SERVER: REJECTED ground click for ${this.getNetworkId()} (distance: ${distance.toFixed(2)})`);
-            
-            // ✅ SERVER CORRECTION: Keep current position as target
-            targetPosition.set(currentPos, 'server_validation_rejection');
-        }
+    protected setupInputHandling(): void {
+        // This is called for client-owned entities
+        // Client behavior already handles this
     }
 
     /**
-     * ✅ ENHANCED: Server input processing (same validation logic as before)
+     * ✅ CLEAN PATTERN: Both client and server observe same input state
+     * Only difference is the authority context passed to shared logic
      */
-    handleServerInput(inputData: any): void {
-        try {
-            if (inputData.action === 'move_to' && inputData.target) {
-                const isAlive = this.getBooleanProperty('isAlive');
-                if (!isAlive?.isTrue()) return;
+    private setupInputStateObservers(authority: string): void {
+        // ✅ OBSERVE MOUSE BUTTON CHANGES: Trigger shared game logic
+        const mouseButtons = this.inputState.getCollectionProperty('mouseButtons');
+        if (mouseButtons) {
+            const cleanup1 = () => {
+                const observer = mouseButtons.itemAddedObservable.add(() => {
+                    // Mouse button pressed → process through shared logic
+                    this.handleInputStateChange(authority);
+                });
+                return () => observer.remove();
+            };
+            this.inputObserverCleanup.push(cleanup1());
+        }
 
-                const target = inputData.target;
-                const targetPos = new Vector3(target.x || 0, target.y || 0, target.z || 0);
-                
-                const position = this.getVectorProperty('position');
-                const targetPosition = this.getVectorProperty('targetPosition');
-                
-                if (!position || !targetPosition) return;
+        // ✅ OBSERVE KEY STATE CHANGES: Trigger shared game logic  
+        const keysPressed = this.inputState.getCollectionProperty('keysPressed');
+        if (keysPressed) {
+            const cleanup2 = () => {
+                const addObserver = keysPressed.itemAddedObservable.add(() => {
+                    this.handleInputStateChange(authority);
+                });
+                const removeObserver = keysPressed.itemRemovedObservable.add(() => {
+                    this.handleInputStateChange(authority);
+                });
+                return () => {
+                    addObserver.remove();
+                    removeObserver.remove();
+                };
+            };
+            this.inputObserverCleanup.push(cleanup2());
+        }
 
-                const currentPos = position.getValue();
-                const distance = Vector3.Distance(currentPos, targetPos);
-                const maxMoveDistance = 10;
-                
-                if (distance <= maxMoveDistance) {
-                    console.log(`✅ SERVER VALIDATED reactive move for ${this.getNetworkId()}`);
-                    // ✅ TARGET ALREADY SET: Property was already updated by client prediction
-                    // Server authority will automatically correct if needed via reactive property sync
-                } else {
-                    console.log(`❌ SERVER REJECTED reactive move for ${this.getNetworkId()} (distance: ${distance.toFixed(2)})`);
-                    
-                    // ✅ SERVER CORRECTION: Reset to valid position
-                    targetPosition.set(currentPos, 'server_validation_rejection');
-                    // This will automatically sync back to client via reactive property system
-                }
-            }
-        } catch (error) {
-            console.error('Error handling server input:', error);
+        // ✅ OBSERVE MOUSE POSITION: For hover effects, spatial commands
+        const mouseWorldPos = this.inputState.getVectorProperty('mouseWorldPosition');
+        if (mouseWorldPos) {
+            const cleanup3 = () => {
+                const observer = mouseWorldPos.onChange((event) => {
+                    // Could update hover state, spatial UI, etc.
+                    if (Math.random() < 0.01) { // Occasional logging to avoid spam
+                        console.log(`🖱️ ${authority}: Mouse at (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)})`);
+                    }
+                });
+                return () => observer.remove();
+            };
+            this.inputObserverCleanup.push(cleanup3());
         }
     }
 
     // ========================================================================
-    // ✅ UNCHANGED: Movement logic (same as before)
+    // ✅ MOVEMENT MECHANICS: Same as before
     // ========================================================================
 
     private startMovement(): void {
@@ -335,43 +316,47 @@ export class PlayerCharacter extends NetworkReactiveEntity {
     }
 
     // ========================================================================
-    // ✅ ENHANCED: Cleanup
+    // ✅ CLEANUP
     // ========================================================================
 
     dispose(): void {
         this.stopMovement();
-        
-        // ✅ NEW: Clean up reactive input observers
         this.inputObserverCleanup.forEach(cleanup => cleanup());
         this.inputObserverCleanup = [];
-        
         super.dispose();
     }
 }
 
-// ============================================================================
-// ✅ MIGRATION COMPARISON
-// ============================================================================
-
 /*
-BEFORE (Event-based):
-- DOM event listeners directly on canvas
-- Manual input enrichment on click
-- Manual sendInputToServer() calls
-- Manual batching with InputEnricher
-- Direct handlePlayerInput() calls
+✅ CLEAN REACTIVE DESIGN PRINCIPLES DEMONSTRATED:
 
-AFTER (Reactive):
-- Global InputStateEntity captures all input state
-- ReactiveInputEnricher continuously enriches mouse context
-- Property system automatically handles network sync
-- Same validation logic through reactive property observers
-- Clean separation: input capture vs game logic
+1. **SHARED GAME LOGIC**: 
+   - Same handleInputStateChange() runs on client and server
+   - Only difference is authority context ('client_prediction' vs 'server_authority')
 
-BENEFITS:
-✅ Unified patterns - input uses same reactive system as health, position, etc.
-✅ Automatic sync - no manual network calls needed
-✅ Better testing - can set input properties directly
-✅ Centralized communication - all sync through same property system
-✅ Performance optimization - unified batching/throttling
+2. **PURE REACTIVE PATTERNS**:
+   - No DOM event handling in game logic
+   - All behavior triggered by reactive property observations
+   - Input state changes trigger same shared logic
+
+3. **CLEAN AUTHORITY SEPARATION**:
+   - Client observes input state → predicts server-auth properties
+   - Server observes same input state → authoritative server-auth properties
+   - Same validation logic, different authority context
+
+4. **NO EVENT-BASED THINKING**:
+   - No "click events" or "key events"
+   - Just reactive state changes: mouse button pressed, key state changed
+   - Game logic processes current input state, not discrete events
+
+5. **ROLE-BASED BEHAVIOR**:
+   - Client and server set up same observers with different authority
+   - Shared logic ensures consistency
+   - Authority context controls prediction vs final authority
+
+FLOW EXAMPLE:
+1. User clicks → InputStateEntity.mouseButtons changes (client-auth)
+2. Client observes change → handleInputStateChange('client_prediction')
+3. Server receives input state → observes change → handleInputStateChange('server_authority')
+4. Same logic runs both times, different authority = consistent game behavior
 */
