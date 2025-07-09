@@ -1,4 +1,4 @@
-// src/engine/networking/NetworkTypes.ts - Missing Network Interfaces
+// src/engine/networking/NetworkTypes.ts - Minimal authority direction update
 
 export interface NetworkSnapshot {
     id: string;
@@ -15,11 +15,13 @@ export interface NetworkRole {
     ownedByThisClient?: boolean;
 }
 
+// ✅ ENHANCED: PropertySchema with authority direction
 export interface PropertySchema {
     name: string;
-    type: 'boolean' | 'number' | 'enum' | 'vector' | 'collection';
+    type: 'boolean' | 'number' | 'enum' | 'vector' | 'collection' | 'string';
     defaultValue: any;
     networkSync: boolean;
+    authority: 'server' | 'client'; // ✅ NEW: Simple authority direction
     constraints?: {
         min?: number;
         max?: number;
@@ -32,32 +34,15 @@ export interface EntitySchema {
     properties: PropertySchema[];
 }
 
+// ✅ SIMPLIFIED: NetworkMessage - just property updates
 export interface NetworkMessage {
-    type: 'property_update' | 'input';
+    type: 'property_update';
     entityId: string;
     data: any;
     timestamp: number;
     senderId?: string;
-}
-
-export interface ClientControlConfig {
-    controlId: string;
-    propertyName: string;
-    enabled: boolean;
-    clientAuthoritative: boolean;
-    validation?: (value: any) => boolean;
-}
-
-export interface ClientControlDefinition {
-    id: string;
-    type: 'button' | 'slider' | 'toggle' | 'input';
-    targetProperty: string;
-    label: string;
-    defaultValue?: any;
-    constraints?: {
-        min?: number;
-        max?: number;
-        step?: number;
-        options?: string[];
-    };
+    authority: 'client' | 'server';
+    propertyName?: string;
+    // 🔒 TODO: Validate authority matches sender role (build system + network layer)
+    // Need to be careful there's no possibility of client sending updates to server-owned properties
 }
