@@ -1,5 +1,4 @@
-// src/minimal-reactive-test.ts - Test your reactive property system with minimal behaviors
-// Uses NetworkReactiveEntity, InputStateEntity, and property schemas - just simplified
+// src/ecs-app.ts - Fixed: Server ball visibility + color changes working
 
 import { SceneManager } from "./engine/scene/SceneManager";
 import { Vector3, MeshBuilder, StandardMaterial, Color3, ActionManager, ExecuteCodeAction } from "@babylonjs/core";
@@ -34,7 +33,7 @@ const MINIMAL_BALL_SCHEMA: EntitySchema = {
 };
 
 // ============================================================================
-// 🎾 MINIMAL BALL - Uses your NetworkReactiveEntity system
+// 🎾 MINIMAL BALL - Fixed visibility and color issues
 // ============================================================================
 
 class MinimalReactiveBall extends NetworkReactiveEntity {
@@ -58,13 +57,18 @@ class MinimalReactiveBall extends NetworkReactiveEntity {
         // ✅ Create properties from schema using your system
         this.createPropertiesFromSchema(MINIMAL_BALL_SCHEMA);
         
-        // ✅ Set initial position
-        this.getVectorProperty('position')?.set(startPos, 'initial_setup');
-        this.getVectorProperty('targetPosition')?.set(startPos, 'initial_setup');
-        
         this.createVisual();
         this.setupBehaviors();
         this.setupRoleBehaviors();
+        
+        // ✅ FIXED: Set initial state AFTER behaviors are set up so color updates trigger
+        this.getVectorProperty('position')?.set(startPos, 'initial_setup');
+        this.getVectorProperty('targetPosition')?.set(startPos, 'initial_setup');
+        
+        // ✅ FIXED: Force initial color update
+        this.updateColor();
+        
+        console.log(`🎾 ${ballType} initial state: pos(${startPos.x}, ${startPos.z}), color: ${this.getNumericProperty('colorState')?.getValue()}`);
         
         console.log(`🎾 ${ballType} MinimalReactiveBall created using NetworkReactiveEntity`);
     }
@@ -73,55 +77,81 @@ class MinimalReactiveBall extends NetworkReactiveEntity {
         // Create sphere mesh
         this.mesh = MeshBuilder.CreateSphere(`${this.ballType}_ball`, { diameter: 1 }, this.scene);
         
+        // ✅ FIXED: Set mesh name for entity picking (matches expected pattern)
+        this.mesh.name = `entity_${this.getNetworkId()}`;
+        
         // Create material
         this.material = new StandardMaterial(`${this.ballType}_material`, this.scene);
         this.mesh.material = this.material;
         
-        // ✅ Set up Actions for click interactions using your input system
+        // ✅ FIXED: Always make mesh visible (both client and server balls should be visible for demo)
+        this.mesh.isVisible = true;
+        
+        // ✅ Set up Actions for click interactions
         this.setupMeshActions();
         
-        console.log(`🎨 ${this.ballType} ball visual created`);
+        console.log(`🎨 ${this.ballType} ball visual created and visible with entity name: ${this.mesh.name}`);
     }
 
     private setupMeshActions(): void {
         this.mesh.actionManager = new ActionManager(this.scene);
         
-        // ✅ BEHAVIOR 1: Click to cycle colors
+        // ✅ FIXED: Click handling for both client and server balls
         this.mesh.actionManager.registerAction(new ExecuteCodeAction(
             ActionManager.OnLeftPickTrigger,
             () => {
-                if (this.getRole().isServer) {
-                    // Server authority: cycle color state
-                    const colorState = this.getNumericProperty('colorState');
-                    const currentState = colorState?.getValue() || 0;
-                    const newState = (currentState + 1) % 3;
-                    colorState?.set(newState, 'click_color_cycle');
-                    
-                    console.log(`🎨 ${this.ballType} ball clicked - server set color state: ${newState}`);
-                }
+                // ✅ BEHAVIOR 1: Click to cycle colors with proper authority handling
+                this.handleColorCycleClick();
+                
+                console.log(`🎨 ${this.ballType} ball clicked - processing color cycle`);
             }
         ));
         
-        // ✅ BEHAVIOR 2: Hover effects
+        // ✅ FIXED: Hover effects with proper authority handling  
         this.mesh.actionManager.registerAction(new ExecuteCodeAction(
             ActionManager.OnPointerOverTrigger,
             () => {
-                if (this.getRole().isServer) {
-                    this.getBooleanProperty('isHovered')?.setTrue('hover_enter');
-                    console.log(`🖱️ ${this.ballType} ball hovered`);
-                }
+                this.handleHoverEnter();
+                console.log(`🖱️ ${this.ballType} ball hovered`);
             }
         ));
         
         this.mesh.actionManager.registerAction(new ExecuteCodeAction(
             ActionManager.OnPointerOutTrigger,
             () => {
-                if (this.getRole().isServer) {
-                    this.getBooleanProperty('isHovered')?.setFalse('hover_exit');
-                    console.log(`🖱️ ${this.ballType} ball unhovered`);
-                }
+                this.handleHoverExit();
+                console.log(`🖱️ ${this.ballType} ball unhovered`);
             }
         ));
+    }
+
+    // ✅ FIXED: Proper color cycle handling with authority
+    private handleColorCycleClick(): void {
+        const colorState = this.getNumericProperty('colorState');
+        if (!colorState) return;
+        
+        const currentState = colorState.getValue() || 0;
+        const newState = (currentState + 1) % 3;
+        
+        // Always update the property - reactive system handles network sync based on authority
+        colorState.set(newState, `click_color_cycle_${this.ballType}`);
+        
+        console.log(`🎨 ${this.ballType} ball color state changed: ${currentState} → ${newState}`);
+    }
+
+    // ✅ FIXED: Proper hover handling with authority
+    private handleHoverEnter(): void {
+        const isHovered = this.getBooleanProperty('isHovered');
+        if (isHovered) {
+            isHovered.setTrue(`hover_enter_${this.ballType}`);
+        }
+    }
+
+    private handleHoverExit(): void {
+        const isHovered = this.getBooleanProperty('isHovered');
+        if (isHovered) {
+            isHovered.setFalse(`hover_exit_${this.ballType}`);
+        }
     }
 
     protected setupBehaviors(): void {
@@ -134,14 +164,14 @@ class MinimalReactiveBall extends NetworkReactiveEntity {
             }
         });
 
-        // ✅ REACTIVE: Color state changes update visual
+        // ✅ FIXED: Color state changes update visual immediately
         const colorState = this.getNumericProperty('colorState');
         colorState?.onChange((event) => {
             this.updateColor();
             console.log(`🎨 ${this.ballType} ball color state: ${event.to} [${event.source}]`);
         });
 
-        // ✅ REACTIVE: Hover state changes update visual
+        // ✅ FIXED: Hover state changes update visual immediately
         const isHovered = this.getBooleanProperty('isHovered');
         isHovered?.onChange((event) => {
             this.updateColor();
@@ -193,25 +223,40 @@ class MinimalReactiveBall extends NetworkReactiveEntity {
         this.scene.onBeforeRenderObservable.add(updateMovement);
     }
 
+    // ✅ FIXED: More distinct colors and proper hover effects
     private updateColor(): void {
         const colorState = this.getNumericProperty('colorState')?.getValue() || 0;
         const isHovered = this.getBooleanProperty('isHovered')?.isTrue() || false;
 
         let baseColor: Color3;
-        switch (colorState) {
-            case 0: baseColor = this.ballType === 'CLIENT' ? Color3.Blue() : Color3.Green(); break;
-            case 1: baseColor = Color3.Yellow(); break;
-            case 2: baseColor = Color3.Red(); break;
-            default: baseColor = Color3.White(); break;
+        
+        // Different base colors for client vs server balls to make them easily distinguishable
+        if (this.ballType === 'CLIENT') {
+            switch (colorState) {
+                case 0: baseColor = Color3.Blue(); break;     // Blue
+                case 1: baseColor = Color3.Cyan(); break;     // Cyan  
+                case 2: baseColor = Color3.Purple(); break;   // Purple
+                default: baseColor = Color3.White(); break;
+            }
+        } else { // SERVER
+            switch (colorState) {
+                case 0: baseColor = Color3.Green(); break;    // Green
+                case 1: baseColor = Color3.Yellow(); break;   // Yellow
+                case 2: baseColor = Color3.Red(); break;      // Red
+                default: baseColor = Color3.Gray(); break;
+            }
         }
 
-        // Brighten if hovered
+        // ✅ FIXED: More noticeable hover effect
         if (isHovered) {
-            baseColor = baseColor.add(new Color3(0.3, 0.3, 0.3));
+            baseColor = baseColor.add(new Color3(0.5, 0.5, 0.5)); // Brighter when hovered
         }
 
         this.material.diffuseColor = baseColor;
-        this.material.emissiveColor = baseColor.scale(0.2);
+        this.material.emissiveColor = baseColor.scale(0.3); // More emissive for better visibility
+        
+        // ✅ FIXED: Force material update
+        this.material.markDirty();
     }
 
     protected setupClientBehaviors(): void {
@@ -224,19 +269,17 @@ class MinimalReactiveBall extends NetworkReactiveEntity {
 
     // ✅ PUBLIC API: Move ball using reactive properties
     public moveTo(target: Vector3, source: string): void {
-        if (this.getRole().isServer) {
-            this.getVectorProperty('targetPosition')?.set(target, source);
-        }
+        // Always allow movement - reactive system handles authority through network sync
+        this.getVectorProperty('targetPosition')?.set(target, source);
     }
 
     // ✅ PUBLIC API: Cycle color using reactive properties
     public cycleColor(source: string): void {
-        if (this.getRole().isServer) {
-            const colorState = this.getNumericProperty('colorState');
-            const currentState = colorState?.getValue() || 0;
-            const newState = (currentState + 1) % 3;
-            colorState?.set(newState, source);
-        }
+        // Always allow color changes - reactive system handles authority through network sync
+        const colorState = this.getNumericProperty('colorState');
+        const currentState = colorState?.getValue() || 0;
+        const newState = (currentState + 1) % 3;
+        colorState?.set(newState, source);
     }
 }
 
@@ -258,21 +301,21 @@ class MinimalReactiveInputHandler {
     }
 
     private setupInputObservation(): void {
-        // ✅ BEHAVIOR 3: Ground clicks move both balls
+        // ✅ FIXED: Ground clicks move both balls (only when NOT clicking on entities)
         const recentClicks = this.inputState.getCollectionProperty('recentClicks');
         recentClicks?.itemAddedObservable.add((event) => {
             const clickEvent = event.value as any;
             
-            // Only process clicks without picked entity (ground clicks)
-            if (!clickEvent.pickedEntityId) {
+            // ✅ FIXED: Only process as ground click if NO entity was picked
+            if (!clickEvent.pickedEntityId || clickEvent.pickedEntityId === '') {
                 const worldPos = clickEvent.worldPosition;
                 console.log(`🖱️ Ground click at (${worldPos.x.toFixed(1)}, ${worldPos.z.toFixed(1)})`);
                 
-                // Move server ball (authority)
+                // Move both balls - reactive system handles network sync based on authority
                 this.serverBall.moveTo(worldPos, 'ground_click_server');
-                
-                // Move client ball (prediction) - will be overridden by server
-                this.clientBall.moveTo(worldPos, 'ground_click_prediction');
+                this.clientBall.moveTo(worldPos, 'ground_click_client');
+            } else {
+                console.log(`🎯 Entity click on: ${clickEvent.pickedEntityId} - ignoring ground movement`);
             }
         });
 
@@ -303,8 +346,8 @@ class MinimalReactiveInputHandler {
         const clientPos = this.clientBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
         const serverPos = this.serverBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
 
-        this.clientBall.moveTo(clientPos.add(offset), 'keyboard_prediction');
-        this.serverBall.moveTo(serverPos.add(offset), 'keyboard_server');
+        this.clientBall.moveTo(clientPos.add(offset), `keyboard_client_${keyCode}`);
+        this.serverBall.moveTo(serverPos.add(offset), `keyboard_server_${keyCode}`);
     }
 }
 
@@ -339,7 +382,7 @@ function setupMinimalReactiveTest() {
     const clientNetworkManager = new SimpleNetworkManager(clientRole);
     const serverNetworkManager = new SimpleNetworkManager(serverRole);
 
-    // ✅ FIXED: Simple message queue without bloat
+    // ✅ FIXED: More reliable message queue processing
     const messageQueue: any[] = [];
     let processingMessages = false;
 
@@ -354,61 +397,75 @@ function setupMinimalReactiveTest() {
     });
 
     function processMessageQueue() {
-        if (processingMessages) return;
+        if (processingMessages || messageQueue.length === 0) return;
         processingMessages = true;
         
+        // Process immediately but yield to prevent blocking
         setTimeout(() => {
-            while (messageQueue.length > 0) {
-                const { to, message } = messageQueue.shift();
-                
-                if (to === 'server') {
-                    serverNetworkManager.handleMessage(message);
-                } else {
-                    clientNetworkManager.handleMessage(message);
+            const batch = messageQueue.splice(0, 5); // Process up to 5 messages per frame
+            
+            batch.forEach(({ to, message }) => {
+                try {
+                    if (to === 'server') {
+                        serverNetworkManager.handleMessage(message);
+                    } else {
+                        clientNetworkManager.handleMessage(message);
+                    }
+                } catch (error) {
+                    console.error(`Error processing message:`, error);
                 }
-            }
+            });
+            
             processingMessages = false;
-        }, 16);
+            
+            // Continue processing if more messages exist
+            if (messageQueue.length > 0) {
+                processMessageQueue();
+            }
+        }, 1);
     }
 
     // ✅ Input system using your architecture
     const clientInputState = new InputStateEntity('client_input', sceneManager.scene, clientRole);
     const inputEnricher = new ReactiveInputEnricher(sceneManager.scene, clientInputState);
 
-    // ✅ Create balls using your NetworkReactiveEntity system
+    // ✅ FIXED: Create balls with different positions and ensure they're both visible
     const clientBall = new MinimalReactiveBall(
         'ball1',
         sceneManager.scene,
         clientRole,
-        new Vector3(-3, 0, 0),
+        new Vector3(-3, 0.5, 0), // Slightly elevated for visibility
         'CLIENT'
     );
 
     const serverBall = new MinimalReactiveBall(
-        'ball1',
+        'ball2', // ✅ FIXED: Different network ID for server ball
         sceneManager.scene,
         serverRole,
-        new Vector3(3, 0, 0),
+        new Vector3(3, 0.5, 0), // Slightly elevated for visibility
         'SERVER'
     );
 
-    // ✅ Register with network managers
+    // ✅ FIXED: Register both entities with both managers for proper cross-sync
     clientNetworkManager.registerEntity(clientBall);
+    clientNetworkManager.registerEntity(serverBall); // Client needs to receive server ball updates
+    serverNetworkManager.registerEntity(clientBall); // Server needs to receive client ball updates  
     serverNetworkManager.registerEntity(serverBall);
 
     // ✅ Input handling using your reactive system
     const inputHandler = new MinimalReactiveInputHandler(clientInputState, clientBall, serverBall);
 
-    // ✅ Camera
+    // ✅ Camera positioning for better view of both balls
     sceneManager.camera.setTarget(Vector3.Zero());
-    sceneManager.camera.radius = 15;
-    sceneManager.camera.beta = Math.PI / 3;
+    sceneManager.camera.radius = 12;
+    sceneManager.camera.beta = Math.PI / 4; // Better angle
+    sceneManager.camera.alpha = Math.PI / 4; // Angled view
 
     // ✅ Make canvas focusable for keyboard
     canvas.tabIndex = 0;
     canvas.focus();
 
-    // ✅ Global debugging
+    // ✅ ENHANCED: Global debugging with more useful test functions
     (window as any).minimalReactiveTest = {
         clientBall,
         serverBall,
@@ -419,8 +476,8 @@ function setupMinimalReactiveTest() {
 
         testClick: (x: number, z: number) => {
             console.log(`🧪 Testing movement to (${x}, ${z})`);
-            clientBall.moveTo(new Vector3(x, 0, z), 'test_client');
-            serverBall.moveTo(new Vector3(x, 0, z), 'test_server');
+            clientBall.moveTo(new Vector3(x, 0.5, z), 'test_client');
+            serverBall.moveTo(new Vector3(x, 0.5, z), 'test_server');
         },
 
         testColors: () => {
@@ -429,16 +486,48 @@ function setupMinimalReactiveTest() {
             serverBall.cycleColor('test_server');
         },
 
+        separateBalls: () => {
+            console.log('🧪 Separating balls for visibility');
+            clientBall.moveTo(new Vector3(-5, 0.5, 0), 'test_separate');
+            serverBall.moveTo(new Vector3(5, 0.5, 0), 'test_separate');
+        },
+
         checkNetwork: () => {
-            console.log('Network stats:', {
+            console.log('📊 Network stats:', {
                 client: clientNetworkManager.getAuthorityStats(),
-                server: serverNetworkManager.getAuthorityStats()
+                server: serverNetworkManager.getAuthorityStats(),
+                messageQueue: messageQueue.length,
+                entities: {
+                    clientBall: clientBall.getNetworkId(),
+                    serverBall: serverBall.getNetworkId(),
+                    clientBallMesh: clientBall.mesh?.name || 'no mesh',
+                    serverBallMesh: serverBall.mesh?.name || 'no mesh'
+                }
+            });
+        },
+
+        checkColors: () => {
+            console.log('🎨 Current colors:', {
+                client: clientBall.getNumericProperty('colorState')?.getValue(),
+                server: serverBall.getNumericProperty('colorState')?.getValue()
             });
         }
     };
 
     console.log(`
-🎾 MINIMAL REACTIVE PROPERTY TEST READY!
+🎾 MINIMAL REACTIVE PROPERTY TEST READY! ✅ FIXED v2
+
+✅ NEW FIXES APPLIED:
+- Fixed "No entity found for message: ball2" (both entities registered with both network managers)
+- Fixed click handling overlap (ground clicks only when no entity picked)  
+- Fixed entity picking (proper mesh naming for detection)
+- Both balls now visible immediately with proper network sync
+
+✅ ORIGINAL FIXES:
+- Server ball visible with distinct colors
+- Color changes work for both balls (authority handled by reactive system)
+- More distinct colors (Blue/Cyan/Purple for CLIENT, Green/Yellow/Red for SERVER)
+- Better hover effects and improved message queue processing
 
 ✅ USING YOUR ARCHITECTURE:
 - NetworkReactiveEntity with schema-driven properties
@@ -448,16 +537,18 @@ function setupMinimalReactiveTest() {
 
 🎮 BEHAVIORS TO TEST:
 1. Click on GROUND → Both balls move (reactive position properties)
-2. Press WASD → Both balls move by direction
-3. Click on BALLS → Cycle colors (reactive color properties)
+2. Press WASD → Both balls move by direction  
+3. Click on BALLS → Cycle colors ONLY (no movement!)
 4. Hover on BALLS → Brighter colors (reactive hover properties)
 
 🧪 CONSOLE COMMANDS:
-- minimalReactiveTest.testClick(5, 3)    // Test movement
-- minimalReactiveTest.testColors()       // Test color cycling
-- minimalReactiveTest.checkNetwork()     // Check network sync
+- minimalReactiveTest.testClick(5, 3)     // Test movement
+- minimalReactiveTest.testColors()        // Test color cycling
+- minimalReactiveTest.separateBalls()     // Move balls apart for testing
+- minimalReactiveTest.checkColors()       // Check current color states
+- minimalReactiveTest.checkNetwork()      // Check network sync + entity info
 
-This tests your reactive property + networking system with minimal complexity!
+Both balls should be immediately visible with proper click handling!
     `);
 }
 
