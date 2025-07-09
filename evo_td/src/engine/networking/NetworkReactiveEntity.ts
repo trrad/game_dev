@@ -1,8 +1,16 @@
-// src/engine/networking/NetworkReactiveEntity.ts - Updated with authority direction support
+// src/engine/networking/NetworkReactiveEntity.ts - Fixed with static imports
 
 import { GameNodeObject } from '../core/GameNodeObject';
-import { ReactivePropertiesComponent, ReactiveProperty } from '../components/ReactivePropertyComponent';
-import { Scene } from '@babylonjs/core';
+import { 
+    ReactivePropertiesComponent, 
+    ReactiveProperty,
+    BooleanProperty,
+    NumericProperty,
+    EnumProperty,
+    VectorProperty,
+    CollectionProperty
+} from '../components/ReactivePropertyComponent';
+import { Scene, Vector3 } from '@babylonjs/core';
 import { NetworkRole, PropertySchema, EntitySchema, NetworkSnapshot } from './NetworkTypes';
 
 /**
@@ -126,7 +134,6 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
 
             // Handle Vector3 serialization
             if (property.getName() === 'position' && this.isVector3Object(value)) {
-                const { Vector3 } = require('@babylonjs/core');
                 property.set(new Vector3(value.x, value.y, value.z), source);
             } else {
                 property.set(value, source);
@@ -179,16 +186,10 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     public getVectorProperty(name: string) { return this.properties.getVectorProperty(name); }
     public getCollectionProperty<T>(name: string) { return this.properties.getCollectionProperty<T>(name); }
 
+    /**
+     * ✅ FIXED: Use static imports instead of require()
+     */
     private createPropertyFromSchema(schema: PropertySchema): ReactiveProperty<any> | null {
-        const { 
-            BooleanProperty, 
-            NumericProperty, 
-            EnumProperty, 
-            VectorProperty, 
-            CollectionProperty 
-        } = require('../components/ReactivePropertyComponent');
-        const { Vector3 } = require('@babylonjs/core');
-
         try {
             switch (schema.type) {
                 case 'boolean':
@@ -218,6 +219,10 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
                     
                 case 'collection':
                     return new CollectionProperty(schema.name, schema.defaultValue);
+                    
+                case 'string':
+                    // ✅ ADDED: Support for string type (missing from original)
+                    return new ReactiveProperty(schema.name, schema.defaultValue);
                     
                 default:
                     console.warn(`Unknown property type: ${schema.type}`);

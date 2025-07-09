@@ -1,4 +1,4 @@
-// src/engine/components/NodeComponent.ts - Clean Reactive Version
+// src/engine/components/NodeComponent.ts - Fixed reactive property sync
 
 import { Component } from './Component';
 import { TransformNode, Vector3, Matrix, Quaternion, Scene } from '@babylonjs/core';
@@ -15,7 +15,7 @@ export interface NodeComponentData {
  * NodeComponent with ReactiveProperty integration
  * Provides reactive transform properties that other systems can observe
  * 
- * No events, no complex propagation - just clean reactive transforms
+ * ✅ FIXED: Reactive property → TransformNode sync
  */
 export class NodeComponent extends Component<NodeComponentData> {
     public readonly type = 'Node';
@@ -50,19 +50,59 @@ export class NodeComponent extends Component<NodeComponentData> {
         this.worldPosition = new VectorProperty('worldPosition', Vector3.Zero());
         this.worldRotation = new VectorProperty('worldRotation', Vector3.Zero());
         
-        // Set up reactive sync: VectorProperty -> Babylon.js TransformNode
+        // ✅ FIXED: Set up reactive sync with proper Vector3 conversion
         this.position.onChange((event) => {
-            this._node.position.copyFrom(event.to);
+            console.log(`🔧 NodeComponent: Updating TransformNode position`, event.to);
+            
+            // ✅ FIX: Ensure we have a proper Vector3 object
+            let newPosition: Vector3;
+            if (event.to instanceof Vector3) {
+                newPosition = event.to;
+            } else if (event.to && typeof event.to === 'object' && 'x' in event.to && 'y' in event.to && 'z' in event.to) {
+                // Convert plain object to Vector3
+                newPosition = new Vector3(event.to.x, event.to.y, event.to.z);
+            } else {
+                console.error('Invalid position value:', event.to);
+                return;
+            }
+            
+            this._node.position.copyFrom(newPosition);
             this._updateWorldTransforms();
+            
+            console.log(`✅ NodeComponent: TransformNode updated to`, this._node.position);
         });
         
         this.rotation.onChange((event) => {
-            this._node.rotation.copyFrom(event.to);
+            console.log(`🔧 NodeComponent: Updating TransformNode rotation`, event.to);
+            
+            let newRotation: Vector3;
+            if (event.to instanceof Vector3) {
+                newRotation = event.to;
+            } else if (event.to && typeof event.to === 'object' && 'x' in event.to && 'y' in event.to && 'z' in event.to) {
+                newRotation = new Vector3(event.to.x, event.to.y, event.to.z);
+            } else {
+                console.error('Invalid rotation value:', event.to);
+                return;
+            }
+            
+            this._node.rotation.copyFrom(newRotation);
             this._updateWorldTransforms();
         });
         
         this.scale.onChange((event) => {
-            this._node.scaling.copyFrom(event.to);
+            console.log(`🔧 NodeComponent: Updating TransformNode scale`, event.to);
+            
+            let newScale: Vector3;
+            if (event.to instanceof Vector3) {
+                newScale = event.to;
+            } else if (event.to && typeof event.to === 'object' && 'x' in event.to && 'y' in event.to && 'z' in event.to) {
+                newScale = new Vector3(event.to.x, event.to.y, event.to.z);
+            } else {
+                console.error('Invalid scale value:', event.to);
+                return;
+            }
+            
+            this._node.scaling.copyFrom(newScale);
             this._updateWorldTransforms();
         });
         
@@ -70,6 +110,8 @@ export class NodeComponent extends Component<NodeComponentData> {
         if (parent) {
             this.setParent(parent);
         }
+        
+        console.log(`🎯 NodeComponent created: ${nodeName}`);
     }
     
     // ============================================================
@@ -136,17 +178,23 @@ export class NodeComponent extends Component<NodeComponentData> {
     }
     
     /**
-     * Update world transform reactive properties
+     * ✅ ENHANCED: Update world transform reactive properties with debugging
      */
     private _updateWorldTransforms(): void {
-        // Update world position
-        const worldPos = this._node.getAbsolutePosition();
-        this.worldPosition.set(worldPos.clone(), 'transform_update');
-        
-        // Update world rotation
-        const worldQuat = this._node.absoluteRotationQuaternion;
-        const worldRot = worldQuat.toEulerAngles();
-        this.worldRotation.set(worldRot, 'transform_update');
+        try {
+            // Update world position
+            const worldPos = this._node.getAbsolutePosition();
+            this.worldPosition.set(worldPos.clone(), 'transform_update');
+            
+            // Update world rotation
+            const worldQuat = this._node.absoluteRotationQuaternion;
+            const worldRot = worldQuat.toEulerAngles();
+            this.worldRotation.set(worldRot, 'transform_update');
+            
+            console.log(`🌍 NodeComponent: World transforms updated - pos: (${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`);
+        } catch (error) {
+            console.error('Error updating world transforms:', error);
+        }
     }
     
     // ============================================================
@@ -165,8 +213,10 @@ export class NodeComponent extends Component<NodeComponentData> {
         if (parent) {
             this._node.parent = parent.getTransformNode();
             parent._children.push(this);
+            console.log(`🔗 NodeComponent: Set parent to ${parent.getTransformNode().name}`);
         } else {
             this._node.parent = null;
+            console.log(`🔗 NodeComponent: Removed parent`);
         }
         
         // Update world transforms due to hierarchy change

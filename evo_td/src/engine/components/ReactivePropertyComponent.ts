@@ -331,7 +331,7 @@ export class EnumProperty<T extends string> extends ReactiveProperty<T> {
     }
 }
 
-// NEW: VectorProperty for Vector3 operations
+// NEW: VectorProperty for Vector3 operations with proper type conversion
 export class VectorProperty extends ReactiveProperty<Vector3> {
     public readonly type = 'reactiveProperty';
     
@@ -339,7 +339,26 @@ export class VectorProperty extends ReactiveProperty<Vector3> {
         super(propertyName, initialValue.clone(), (a, b) => a.equals(b));
     }
 
-    // Vector operations
+    /**
+     * ✅ FIXED: Override set method to always ensure Vector3 instances
+     */
+    set(newValue: Vector3 | {x: number, y: number, z: number}, source: string = 'unknown'): boolean {
+        // Convert to Vector3 if needed
+        let vector3Value: Vector3;
+        
+        if (newValue instanceof Vector3) {
+            vector3Value = newValue.clone(); // Always clone to avoid reference issues
+        } else if (newValue && typeof newValue === 'object' && 'x' in newValue && 'y' in newValue && 'z' in newValue) {
+            vector3Value = new Vector3(newValue.x, newValue.y, newValue.z);
+        } else {
+            console.error(`VectorProperty.set: Invalid value type for ${this.propertyName}:`, newValue);
+            return false;
+        }
+        
+        return super.set(vector3Value, source);
+    }
+
+    // Vector operations (keep all existing methods but ensure they use proper Vector3)
     translate(x: number, y: number, z: number, source: string = 'translate'): boolean {
         const newValue = this.currentValue.add(new Vector3(x, y, z));
         return this.set(newValue, source);
