@@ -292,10 +292,8 @@ export class ReactiveInputEnricher {
      * ✅ MINIMAL FIX: Simple screen-to-world projection
      */
     private screenToWorldPosition(screenX: number, screenY: number): Vector3 {
-        // Simple fallback projection
         const worldX = (screenX - 0.5) * 20;
-        const worldZ = (screenY - 0.5) * 20;
-        
+        const worldZ = -(screenY - 0.5) * 20;  // Flip Y→Z mapping
         return new Vector3(worldX, 0, worldZ);
     }
 

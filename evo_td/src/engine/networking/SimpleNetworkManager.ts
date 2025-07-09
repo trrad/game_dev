@@ -4,9 +4,9 @@ import { NetworkReactiveEntity } from './NetworkReactiveEntity';
 import { NetworkRole, NetworkMessage } from './NetworkTypes';
 
 export class SimpleNetworkManager {
-    private entities: Map<string, NetworkReactiveEntity> = new Map();
-    private sendCallback?: (message: NetworkMessage) => void;
-    private role: NetworkRole;
+    protected entities: Map<string, NetworkReactiveEntity> = new Map();
+    protected sendCallback?: (message: NetworkMessage) => void;
+    protected role: NetworkRole;
 
     constructor(role: NetworkRole) {
         this.role = role;
@@ -27,7 +27,7 @@ export class SimpleNetworkManager {
     /**
      * ✅ ENHANCED: Send property update with authority from entity
      */
-    private sendPropertyUpdate(entityId: string, propertyName: string, value: any, authority: 'client' | 'server'): void {
+    protected sendPropertyUpdate(entityId: string, propertyName: string, value: any, authority: 'client' | 'server'): void {
         if (!this.sendCallback) return;
 
         // ✅ AUTHORITY COMES FROM ENTITY (schema): No need to guess

@@ -1,4 +1,4 @@
-// src/engine/networking/NetworkReactiveEntity.ts - Fixed with static imports
+// src/engine/networking/NetworkReactiveEntity.ts - Enhanced with authority tracking
 
 import { GameNodeObject } from '../core/GameNodeObject';
 import { 
@@ -14,14 +14,14 @@ import { Scene, Vector3 } from '@babylonjs/core';
 import { NetworkRole, PropertySchema, EntitySchema, NetworkSnapshot } from './NetworkTypes';
 
 /**
- * NetworkReactiveEntity with authority direction support
+ * NetworkReactiveEntity with enhanced authority direction support and automatic sync capabilities
  */
 export abstract class NetworkReactiveEntity extends GameNodeObject {
     protected properties: ReactivePropertiesComponent;
     private role: NetworkRole;
     private networkId: string;
     private networkSyncedProperties: Set<string> = new Set();
-    private propertyAuthorities: Map<string, 'client' | 'server'> = new Map(); // ✅ NEW: Store property authorities
+    private propertyAuthorities: Map<string, 'client' | 'server'> = new Map();
     private propertyChangeCleanup: (() => void)[] = [];
     private entityCleanup: (() => void)[] = [];
 
@@ -41,7 +41,7 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     }
 
     /**
-     * ✅ ENHANCED: Schema-based property creation with authority direction
+     * ✅ ENHANCED: Schema-based property creation with authority tracking
      */
     protected createPropertiesFromSchema(schema: EntitySchema): void {
         schema.properties.forEach(propSchema => {
@@ -49,69 +49,119 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
             if (property) {
                 this.properties.addProperty(property);
                 
-                // ✅ NEW: Store authority and set up network sync
+                // ✅ ENHANCED: Store authority and network sync info
                 if (propSchema.networkSync) {
                     this.networkSyncedProperties.add(propSchema.name);
-                    this.propertyAuthorities.set(propSchema.name, propSchema.authority); // ✅ Store authority from schema
-                    this.setupAuthorityBasedSync(property, propSchema.authority);
+                    this.propertyAuthorities.set(propSchema.name, propSchema.authority);
                 }
             }
         });
-    }
-
-    /**
-     * ✅ NEW: Set up network sync based on authority direction
-     */
-    private setupAuthorityBasedSync(property: ReactiveProperty<any>, authority: 'client' | 'server'): void {
-        // Only set up sync if this entity has the authority to send updates for this property
-        if (this.canSendProperty(authority)) {
-            const cleanup = property.onChange((event) => {
-                // Don't sync changes that came from the network
-                if (!event.source.startsWith('network_')) {
-                    this.onPropertyChanged(property.getName(), event.to, authority); // ✅ Pass authority from schema
-                }
-            });
-            
-            this.propertyChangeCleanup.push(() => cleanup.remove());
-        }
-    }
-
-    /**
-     * ✅ NEW: Check if this entity can send updates for a property with given authority
-     */
-    private canSendProperty(authority: 'client' | 'server'): boolean {
-        // Client can send client-authoritative properties
-        if (authority === 'client' && this.role.isClient) {
-            return true;
-        }
         
-        // Server can send server-authoritative properties
-        if (authority === 'server' && this.role.isServer) {
-            return true;
+        console.log(`🏗️ ${this.networkId}: Created properties with authorities:`, {
+            clientAuth: this.getClientAuthProperties(),
+            serverAuth: this.getServerAuthProperties(),
+            localOnly: this.getLocalOnlyProperties()
+        });
+    }
+
+    // ============================================================
+    // ✅ NEW: Authority Query Methods for Natural Sync
+    // ============================================================
+
+    /**
+     * Get properties that this entity has client authority over
+     */
+    public getClientAuthProperties(): string[] {
+        return Array.from(this.propertyAuthorities.entries())
+            .filter(([name, auth]) => auth === 'client')
+            .map(([name]) => name);
+    }
+
+    /**
+     * Get properties that this entity has server authority over
+     */
+    public getServerAuthProperties(): string[] {
+        return Array.from(this.propertyAuthorities.entries())
+            .filter(([name, auth]) => auth === 'server')
+            .map(([name]) => name);
+    }
+
+    /**
+     * Get properties that don't sync over network (local only)
+     */
+    public getLocalOnlyProperties(): string[] {
+        return this.properties.getPropertyNames()
+            .filter(name => !this.networkSyncedProperties.has(name));
+    }
+
+    /**
+     * Get the authority for a specific property
+     */
+    public getPropertyAuthority(propertyName: string): 'client' | 'server' | 'local' {
+        if (this.propertyAuthorities.has(propertyName)) {
+            return this.propertyAuthorities.get(propertyName)!;
         }
+        return 'local'; // Not networked
+    }
+
+    /**
+     * Check if this entity should send updates for a property (has authority)
+     */
+    public shouldSendProperty(propertyName: string): boolean {
+        const authority = this.getPropertyAuthority(propertyName);
+        if (authority === 'local') return false;
+        
+        // Send if we have authority for this property
+        if (authority === 'client' && this.role.isClient) return true;
+        if (authority === 'server' && this.role.isServer) return true;
         
         return false;
     }
 
     /**
-     * ✅ NEW: Check if this entity should accept updates for a property with given authority
+     * Check if this entity should accept updates for a property (lacks authority)
      */
-    private shouldAcceptProperty(authority: 'client' | 'server'): boolean {
-        // Server accepts client-authoritative properties
-        if (authority === 'client' && this.role.isServer) {
-            return true;
-        }
+    public shouldAcceptProperty(propertyName: string): boolean {
+        const authority = this.getPropertyAuthority(propertyName);
+        if (authority === 'local') return false;
         
-        // Client accepts server-authoritative properties
-        if (authority === 'server' && this.role.isClient) {
-            return true;
-        }
+        // Accept if we DON'T have authority for this property
+        if (authority === 'server' && this.role.isClient) return true;
+        if (authority === 'client' && this.role.isServer) return true;
         
         return false;
     }
 
     /**
-     * ✅ ENHANCED: Apply network update with authority validation
+     * Get all properties this entity should send (based on role + authority)
+     */
+    public getPropertiesToSend(): string[] {
+        if (this.role.isClient) {
+            return this.getClientAuthProperties();
+        } else if (this.role.isServer) {
+            return this.getServerAuthProperties();
+        }
+        return [];
+    }
+
+    /**
+     * Get all properties this entity should receive (based on role + authority)
+     */
+    public getPropertiesToReceive(): string[] {
+        if (this.role.isClient) {
+            return this.getServerAuthProperties();
+        } else if (this.role.isServer) {
+            return this.getClientAuthProperties();
+        }
+        return [];
+    }
+
+    // ============================================================
+    // EXISTING METHODS (unchanged but enhanced for debugging)
+    // ============================================================
+
+    /**
+     * ✅ ENHANCED: Apply network update with enhanced authority validation
      */
     applyNetworkUpdate(
         propertyName: string, 
@@ -122,13 +172,13 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
         try {
             const property = this.properties.getProperty(propertyName);
             if (!property || !this.networkSyncedProperties.has(propertyName)) {
-                console.warn(`Network update for unknown/non-synced property: ${propertyName}`);
+                console.warn(`❌ Network update for unknown/non-synced property: ${propertyName} on ${this.networkId}`);
                 return;
             }
 
-            // ✅ NEW: Basic authority validation
-            if (authority && !this.shouldAcceptProperty(authority)) {
-                console.warn(`Rejected network update: ${this.role.isClient ? 'client' : 'server'} cannot accept ${authority}-authoritative property ${propertyName}`);
+            // ✅ ENHANCED: Authority validation with better logging
+            if (authority && !this.shouldAcceptProperty(propertyName)) {
+                console.warn(`🚫 ${this.networkId}: Rejected ${authority}-auth property ${propertyName} (role: ${this.role.isClient ? 'client' : 'server'})`);
                 return;
             }
 
@@ -138,22 +188,25 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
             } else {
                 property.set(value, source);
             }
+
+            console.log(`✅ ${this.networkId}: Applied ${authority}-auth update ${propertyName} = ${JSON.stringify(value)} [${source}]`);
         } catch (error) {
-            console.error(`Failed to apply network update for ${propertyName}:`, error);
+            console.error(`💥 Failed to apply network update for ${propertyName} on ${this.networkId}:`, error);
         }
     }
 
     /**
-     * ✅ ENHANCED: Network snapshot with authority awareness
+     * ✅ ENHANCED: Network snapshot with role-based filtering
      */
     getNetworkSnapshot(): NetworkSnapshot {
         const snapshot: Record<string, any> = {};
         
-        // Only include properties this entity has authority to send
-        this.networkSyncedProperties.forEach(propName => {
+        // Only include properties this entity should send
+        const propertiesToSend = this.getPropertiesToSend();
+        
+        propertiesToSend.forEach(propName => {
             const property = this.properties.getProperty(propName);
             if (property) {
-                // TODO: Get authority from schema - for now include all synced properties
                 const value = property.getValue();
                 
                 // Handle Vector3 serialization
@@ -173,7 +226,7 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     }
 
     // ============================================================
-    // EXISTING METHODS (unchanged)
+    // EXISTING PROPERTY ACCESS METHODS (unchanged)
     // ============================================================
 
     public getProperty<T>(name: string): ReactiveProperty<T> | undefined {
@@ -186,9 +239,10 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     public getVectorProperty(name: string) { return this.properties.getVectorProperty(name); }
     public getCollectionProperty<T>(name: string) { return this.properties.getCollectionProperty<T>(name); }
 
-    /**
-     * ✅ FIXED: Use static imports instead of require()
-     */
+    // ============================================================
+    // EXISTING PRIVATE METHODS (unchanged)
+    // ============================================================
+
     private createPropertyFromSchema(schema: PropertySchema): ReactiveProperty<any> | null {
         try {
             switch (schema.type) {
@@ -221,7 +275,6 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
                     return new CollectionProperty(schema.name, schema.defaultValue);
                     
                 case 'string':
-                    // ✅ ADDED: Support for string type (missing from original)
                     return new ReactiveProperty(schema.name, schema.defaultValue);
                     
                 default:
@@ -242,16 +295,29 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
                typeof value.z === 'number';
     }
 
-    // Override point for network property changes - ✅ NOW INCLUDES AUTHORITY
+    // ============================================================
+    // LEGACY COMPATIBILITY (will be removed in natural sync)
+    // ============================================================
+
     protected onPropertyChanged(propertyName: string, value: any, authority: 'client' | 'server'): void {
-        // Will be handled by NetworkManager
+        // Legacy method - will be replaced by automatic sync
         if (false) { // Debug flag
-            console.log(`Network property changed: ${propertyName}`, value, `(${authority}-auth)`);
+            console.log(`Legacy property changed: ${propertyName}`, value, `(${authority}-auth)`);
         }
     }
 
-    // Abstract methods for role-specific behaviors
+    setPropertyChangeCallback(callback: (entityId: string, propertyName: string, value: any, authority: 'client' | 'server') => void): void {
+        this.onPropertyChanged = (propertyName: string, value: any, authority: 'client' | 'server') => {
+            callback(this.networkId, propertyName, value, authority);
+        };
+    }
+
+    // ============================================================
+    // ABSTRACT METHODS AND LIFECYCLE (unchanged)
+    // ============================================================
+
     protected abstract setupBehaviors(): void;
+    
     protected setupRoleBehaviors(): void {
         if (this.role.isServer) {
             this.setupServerBehaviors();
@@ -268,7 +334,6 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     protected setupClientBehaviors(): void { /* Override in subclasses */ }
     protected setupInputHandling(): void { /* Override in subclasses */ }
 
-    // Utility methods
     protected addCleanupFunction(cleanup: () => void): void {
         this.entityCleanup.push(cleanup);
     }
@@ -276,13 +341,6 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
     getNetworkId(): string { return this.networkId; }
     getRole(): NetworkRole { return this.role; }
     isOwnedByThisClient(): boolean { return this.role.ownedByThisClient || false; }
-
-    // Legacy compatibility - ✅ ENHANCED: Now includes authority
-    setPropertyChangeCallback(callback: (entityId: string, propertyName: string, value: any, authority: 'client' | 'server') => void): void {
-        this.onPropertyChanged = (propertyName: string, value: any, authority: 'client' | 'server') => {
-            callback(this.networkId, propertyName, value, authority);
-        };
-    }
 
     dispose(): void {
         this.propertyChangeCleanup.forEach(cleanup => cleanup());

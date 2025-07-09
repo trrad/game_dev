@@ -4,11 +4,11 @@ import { SceneManager } from "./engine/scene/SceneManager";
 import { Vector3, MeshBuilder, StandardMaterial, Color3, ActionManager, ExecuteCodeAction } from "@babylonjs/core";
 import { createSimpleGrid } from "./engine/utils/SimpleGrid";
 
-// Use your existing architecture
+// Use your existing architecture with Natural Sync
 import { InputStateEntity } from "./engine/inputs/InputStateEntity";
 import { ReactiveInputEnricher } from "./engine/inputs/ReactiveInputEnricher";
 import { NetworkReactiveEntity } from "./engine/networking/NetworkReactiveEntity";
-import { SimpleNetworkManager } from "./engine/networking/SimpleNetworkManager";
+import { NaturalSyncNetworkManager } from "./engine/networking/NaturalSyncNetworkManager";
 import { NetworkRole, EntitySchema } from "./engine/networking/NetworkTypes";
 
 // ============================================================================
@@ -375,12 +375,12 @@ function setupMinimalReactiveTest() {
     const groundGrid = createSimpleGrid(sceneManager.scene, 20);
     groundGrid.position.y = -0.1;
 
-    // ✅ Network setup using your system
+    // ✅ NATURAL SYNC: Network setup using automatic property sync
     const clientRole: NetworkRole = { isClient: true, isServer: false, ownedByThisClient: true };
     const serverRole: NetworkRole = { isClient: false, isServer: true };
 
-    const clientNetworkManager = new SimpleNetworkManager(clientRole);
-    const serverNetworkManager = new SimpleNetworkManager(serverRole);
+    const clientNetworkManager = new NaturalSyncNetworkManager(clientRole);
+    const serverNetworkManager = new NaturalSyncNetworkManager(serverRole);
 
     // ✅ FIXED: More reliable message queue processing
     const messageQueue: any[] = [];
@@ -446,11 +446,9 @@ function setupMinimalReactiveTest() {
         'SERVER'
     );
 
-    // ✅ FIXED: Register both entities with both managers for proper cross-sync
-    clientNetworkManager.registerEntity(clientBall);
-    clientNetworkManager.registerEntity(serverBall); // Client needs to receive server ball updates
-    serverNetworkManager.registerEntity(clientBall); // Server needs to receive client ball updates  
-    serverNetworkManager.registerEntity(serverBall);
+    // ✅ NATURAL SYNC: Clean single registration per role (no manual dual registration)
+    clientNetworkManager.registerEntity(clientBall);   // Auto-detects client-auth properties to send, server-auth to receive
+    serverNetworkManager.registerEntity(serverBall);   // Auto-detects server-auth properties to send, client-auth to receive
 
     // ✅ Input handling using your reactive system
     const inputHandler = new MinimalReactiveInputHandler(clientInputState, clientBall, serverBall);
@@ -493,17 +491,31 @@ function setupMinimalReactiveTest() {
         },
 
         checkNetwork: () => {
-            console.log('📊 Network stats:', {
-                client: clientNetworkManager.getAuthorityStats(),
-                server: serverNetworkManager.getAuthorityStats(),
+            console.log('📊 Natural Sync Stats:', {
+                client: clientNetworkManager.getNaturalSyncStats(),
+                server: serverNetworkManager.getNaturalSyncStats(),
                 messageQueue: messageQueue.length,
                 entities: {
-                    clientBall: clientBall.getNetworkId(),
-                    serverBall: serverBall.getNetworkId(),
-                    clientBallMesh: clientBall.mesh?.name || 'no mesh',
-                    serverBallMesh: serverBall.mesh?.name || 'no mesh'
+                    clientBall: {
+                        id: clientBall.getNetworkId(),
+                        sending: clientBall.getPropertiesToSend(),
+                        receiving: clientBall.getPropertiesToReceive(),
+                        mesh: clientBall.mesh?.name || 'no mesh'
+                    },
+                    serverBall: {
+                        id: serverBall.getNetworkId(),
+                        sending: serverBall.getPropertiesToSend(),
+                        receiving: serverBall.getPropertiesToReceive(),
+                        mesh: serverBall.mesh?.name || 'no mesh'
+                    }
                 }
             });
+        },
+
+        debugSync: () => {
+            console.log('🔍 Detailed Natural Sync Debug:');
+            clientNetworkManager.debugNaturalSync();
+            serverNetworkManager.debugNaturalSync();
         },
 
         checkColors: () => {
@@ -515,28 +527,28 @@ function setupMinimalReactiveTest() {
     };
 
     console.log(`
-🎾 MINIMAL REACTIVE PROPERTY TEST READY! ✅ FIXED v2
+🎾 MINIMAL REACTIVE PROPERTY TEST READY! ✅ NATURAL SYNC v1.3
 
-✅ NEW FIXES APPLIED:
-- Fixed "No entity found for message: ball2" (both entities registered with both network managers)
-- Fixed click handling overlap (ground clicks only when no entity picked)  
-- Fixed entity picking (proper mesh naming for detection)
-- Both balls now visible immediately with proper network sync
+✅ NATURAL SYNC IMPLEMENTED:
+- ✅ Automatic property sync based on schema authority (no manual registration!)
+- ✅ Clean single registration per role (client sends client-auth, server sends server-auth)
+- ✅ Zero manual callbacks - everything driven by schema authority flags
+- ✅ Enhanced authority validation with detailed logging
 
-✅ ORIGINAL FIXES:
-- Server ball visible with distinct colors
-- Color changes work for both balls (authority handled by reactive system)
-- More distinct colors (Blue/Cyan/Purple for CLIENT, Green/Yellow/Red for SERVER)
-- Better hover effects and improved message queue processing
+✅ PREVIOUS FIXES MAINTAINED:
+- Fixed coordinate mapping (clicks off-grid move balls in correct direction)
+- Fixed initial state application (balls appear at correct positions with colors)
+- Fixed click handling overlap (ground clicks only when no entity picked)
+- Server ball visible with distinct colors and proper network sync
 
-✅ USING YOUR ARCHITECTURE:
-- NetworkReactiveEntity with schema-driven properties
+✅ USING ENHANCED ARCHITECTURE:
+- NetworkReactiveEntity with automatic authority queries
+- NaturalSyncNetworkManager with schema-driven sync
 - InputStateEntity with enriched input
-- SimpleNetworkManager with authority patterns
 - ReactiveInputEnricher for 3D picking
 
 🎮 BEHAVIORS TO TEST:
-1. Click on GROUND → Both balls move (reactive position properties)
+1. Click on GROUND or OFF-GRID → Both balls move in CORRECT direction
 2. Press WASD → Both balls move by direction  
 3. Click on BALLS → Cycle colors ONLY (no movement!)
 4. Hover on BALLS → Brighter colors (reactive hover properties)
@@ -546,9 +558,10 @@ function setupMinimalReactiveTest() {
 - minimalReactiveTest.testColors()        // Test color cycling
 - minimalReactiveTest.separateBalls()     // Move balls apart for testing
 - minimalReactiveTest.checkColors()       // Check current color states
-- minimalReactiveTest.checkNetwork()      // Check network sync + entity info
+- minimalReactiveTest.checkNetwork()      // Check natural sync stats + entity info
+- minimalReactiveTest.debugSync()         // Detailed natural sync debug info
 
-Both balls should be immediately visible with proper click handling!
+🎯 NEXT: Ready for build system (Step 2.1) - client/server bundle separation!
     `);
 }
 
