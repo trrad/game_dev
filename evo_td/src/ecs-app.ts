@@ -25,7 +25,7 @@ export const BALL_SCHEMA: EntitySchema = {
         
         // Color properties (server authority for consistency)
         { name: 'colorState', type: 'number', defaultValue: 0, networkSync: true, authority: 'server' },
-        { name: 'isHovered', type: 'boolean', defaultValue: false, networkSync: true, authority: 'server' },
+        { name: 'isHovered', type: 'boolean', defaultValue: false, networkSync: true, authority: 'client' },
         
         // Local rendering properties (no sync needed)
         { name: 'moveSpeed', type: 'number', defaultValue: 3.0, networkSync: false, authority: 'client' }
