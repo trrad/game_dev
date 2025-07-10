@@ -187,7 +187,9 @@ export abstract class BaseBall extends NetworkReactiveEntity {
             }
         };
 
-        this.scene.onBeforeRenderObservable.add(updateMovement);
+        if (this.scene) {
+            this.scene.onBeforeRenderObservable.add(updateMovement);
+        };
     }
 
     // ============================================================================
@@ -758,12 +760,6 @@ function setupExtensionPatternTest() {
         getPing: () => {
             console.log(`🌐 Current network ping: ${networkPingMs}ms`);
             return networkPingMs;
-        },
-
-        testPrediction: (x: number = 5, z: number = 3) => {
-            console.log(`🧪 Testing client prediction with ${networkPingMs}ms ping...`);
-            console.log(`📍 Watch: CLIENT sphere moves immediately, SERVER cube follows after ${networkPingMs}ms`);
-            extensionTest.testMovement(x, z);
         },
 
         noPing: () => {
