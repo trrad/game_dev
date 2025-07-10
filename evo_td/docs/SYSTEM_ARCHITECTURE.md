@@ -134,78 +134,6 @@ class SystemNode extends GameNodeObject {
         super(`system:${systemName}`, scene, sceneRoot);
     }
 }
-```
-
-## Unified Event System
-
-### Event Flow Architecture
-
-All events flow through the scene graph with DOM-like propagation:
-
-```typescript
-// Scene Root captures ALL events for logging
-class SceneRoot extends NodeComponent {
-    constructor(scene: Scene, eventStack: EventStack) {
-        super(scene);
-        
-        this.addEventListener('*', (event) => {
-            eventStack.handleSceneEvent(event);
-            uiSystem.handleSceneEvent(event);
-        }, { capture: true });
-    }
-}
-```
-
-### Event Propagation Phases
-
-1. **Capture Phase**: Root → Target (top-down)
-2. **Target Phase**: At the target node
-3. **Bubble Phase**: Target → Root (bottom-up)
-
-### Event Types
-
-**State Change Events**
-```typescript
-'health:changed' → { oldHealth: 100, newHealth: 75, damage: 25 }
-'position:updated' → { oldPos: Vector3, newPos: Vector3 }
-'radius:collision' → { other: NodeComponent, overlap: number }
-```
-
-**Game Events**
-```typescript
-'journey:started' → { trainId, railId, targetStationId }
-'station:reached' → { trainId, stationId, cargoSummary }
-'enemy:spawned' → { enemyType, position, threatLevel }
-```
-
-**Spatial Events**
-```typescript
-'explosion:damage' → emitToRadius(50) → affects all in range
-'aura:healing' → emitToRadius(20) → heals nearby allies
-'detection:pulse' → emitToRadius(100) → reveals hidden units
-```
-
-**Babylon.js Integration Events**
-```typescript
-'rail:position:updated' → { progress: number, position: Vector3 }
-'rail:junction:reached' → { junctionId: string, options: string[] }
-'ai:pathfinding:completed' → { path: Vector3[], estimatedTime: number }
-'physics:ragdoll:enabled' → { entity: NodeComponent, mass: number }
-'skeleton:animation:started' → { animationName: string, duration: number }
-'skeleton:bone:attached' → { boneName: string, attachedObject: NodeComponent }
-```
-
-### Event Naming Conventions
-
-- `<domain>:<action>`
-- `<domain>:<object>:<action>`
-- `<component>:<property>:<state>`
-
-Examples:
-- `train:journey:completed`
-- `health:damage:taken`
-- `voxel:attachment:mounted`
-- `station:trade:initiated`
 
 ## Component Architecture
 
@@ -237,17 +165,10 @@ abstract class DependentComponent<T> extends Component<T> {
 ### Core Engine Components
 
 **NodeComponent**
-- Manages scene graph hierarchy using Babylon.js TransformNode
+- Manages scene position using Babylon.js TransformNode
 - Handles local/world transforms with automatic inheritance
-- Provides spatial event propagation (emitToRadius, hierarchical events)
 - Serializes parent-child relationships
 - Integrates with Babylon.js bone systems for skeletal attachment
-
-**RadiusComponent**
-- Generic spatial queries (collision, detection, interaction)
-- Integrates with event system for radius-based events
-- Supports multiple radius types on same entity
-- Works with NavigationMesh for AI obstacle detection
 
 **HealthComponent**
 - Damage/healing with resistance types

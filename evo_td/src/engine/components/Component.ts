@@ -30,12 +30,6 @@ export abstract class Component<T = any> {
     }
 
     /**
-     * Called every update tick if enabled.
-     * @param deltaTime Time since last update
-     */
-    update?(deltaTime: number): void;
-
-    /**
      * Enable this component.
      */
     enable(): void {

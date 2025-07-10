@@ -500,7 +500,7 @@ function setupExtensionPatternTest() {
     // --- NEW: Large hilly ground mesh with quad grid overlay ---
     const groundSize = 100;
     const subdivisions = 100;
-    const minHeight = -3;
+    const minHeight = -1;
     const maxHeight = 5;
     let ground: any;
     // --- Step 1: Generate a height map texture in memory ---
@@ -566,9 +566,9 @@ function setupExtensionPatternTest() {
         [sceneManager.camera]
     );
     pipeline.depthOfFieldEnabled = true;
-    pipeline.depthOfField.focalLength = 150;
+    pipeline.depthOfField.focalLength = 80;
     pipeline.depthOfField.fStop = 2.8;
-    pipeline.depthOfField.focusDistance = 4000; // Large, so effect is subtle
+    pipeline.depthOfField.focusDistance = 500; // Large, so effect is subtle
 
     // ✅ NATURAL SYNC: Network setup using automatic property sync
     const clientRole: NetworkRole = { isClient: true, isServer: false, ownedByThisClient: true };

@@ -32,13 +32,6 @@ export interface GameObjectData {
  * Lightweight network snapshot for efficient delta updates
  * Contains only frequently changing data
  */
-export interface NetworkSnapshot {
-    id: string;
-    timestamp: number;
-    position?: any;
-    health?: any;
-    state?: any;
-}
 
 let nextGameObjectId = 1;
 
@@ -87,17 +80,6 @@ export class GameObject {
         const comp = this._components.get(type);
         if (comp) comp.dispose();
         this._components.delete(type);
-    }
-
-    /**
-     * Calls update on all components.
-     */
-    update(deltaTime: number): void {
-        for (const comp of this._components.values()) {
-            if (typeof comp.update === 'function') {
-                comp.update(deltaTime);
-            }
-        }
     }
 
     /**
