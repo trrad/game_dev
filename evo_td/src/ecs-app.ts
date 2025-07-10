@@ -1,7 +1,7 @@
 // src/ecs-app.ts - Extension Pattern Implementation in Single File
 
 import { SceneManager } from "./engine/scene/SceneManager";
-import { Vector3, MeshBuilder, StandardMaterial, Color3, ActionManager, ExecuteCodeAction } from "@babylonjs/core";
+import { Vector3, MeshBuilder, StandardMaterial, Color3, ActionManager, ExecuteCodeAction, VertexBuffer, DefaultRenderingPipeline, ArcRotateCamera } from "@babylonjs/core";
 import { createSimpleGrid } from "./engine/utils/SimpleGrid";
 
 // Use your existing architecture with Natural Sync
@@ -477,9 +477,98 @@ function setupExtensionPatternTest() {
     sceneManager.handleResize();
     sceneManager.start();
 
+    // --- Environmental Fog ---
+    const scene = sceneManager.scene;
+    scene.fogMode = 1; // Scene.FOGMODE_EXP
+    scene.fogColor = new Color3(0.42, 0.22, 0.55); // More purple tone
+    scene.fogDensity = 0.012; // Subtle, tweak as needed
+
+    // --- Gradient Skybox ---
+    const skybox = MeshBuilder.CreateBox("skyBox", { size: 500 }, scene);
+    const skyMat = new StandardMaterial("skyMat", scene);
+    skyMat.backFaceCulling = false;
+    skyMat.disableLighting = true;
+    // Use a vertical gradient by setting diffuse/emissive colors (approximate)
+    skyMat.diffuseColor = new Color3(0.18, 0.13, 0.28); // Bottom (darker)
+    skyMat.emissiveColor = new Color3(0.45, 0.38, 0.65); // Top (lighter)
+    skybox.material = skyMat;
+    skybox.infiniteDistance = true;
+    skybox.isPickable = false;
+    skybox.renderingGroupId = 0;
+
     // ✅ Grid
-    const groundGrid = createSimpleGrid(sceneManager.scene, 20);
-    groundGrid.position.y = -0.1;
+    // --- NEW: Large hilly ground mesh with quad grid overlay ---
+    const groundSize = 100;
+    const subdivisions = 100;
+    const minHeight = -3;
+    const maxHeight = 5;
+    let ground: any;
+    // --- Step 1: Generate a height map texture in memory ---
+    function generateHeightMapDataURL(size: number = 256): string {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        const imgData = ctx.createImageData(size, size);
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                // Normalized coordinates
+                const nx = (x / size) * Math.PI * 2;
+                const ny = (y / size) * Math.PI * 2;
+                // Blend of sin/cos for hills
+                let h = 0.5 + 0.5 * Math.sin(nx) * Math.cos(ny);
+                h += 0.2 * Math.sin(nx * 2 + ny * 1.5);
+                h += 0.1 * Math.cos(nx * 3 - ny * 2);
+                h = Math.max(0, Math.min(1, h));
+                const val = Math.floor(h * 255);
+                const idx = (y * size + x) * 4;
+                imgData.data[idx] = val;
+                imgData.data[idx + 1] = val;
+                imgData.data[idx + 2] = val;
+                imgData.data[idx + 3] = 255;
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        return canvas.toDataURL();
+    }
+    // Example usage: const heightMapURL = generateHeightMapDataURL(256);
+    const heightMapURL = generateHeightMapDataURL(256);
+    MeshBuilder.CreateGroundFromHeightMap(
+        "ground",
+        heightMapURL,
+        {
+            width: groundSize,
+            height: groundSize,
+            subdivisions: subdivisions,
+            minHeight: minHeight,
+            maxHeight: maxHeight,
+            onReady: (mesh) => {
+                ground = mesh;
+                ground.position.y = -0.1;
+                // Matte grey material (updated from purple)
+                const greyMat = new StandardMaterial("greyMat", scene);
+                greyMat.diffuseColor = new Color3(0.45, 0.45, 0.48); // Neutral grey
+                greyMat.specularColor = Color3.Black();
+                ground.material = greyMat;
+                // --- Render edges on the ground mesh ---
+                ground.enableEdgesRendering();
+                ground.edgesWidth = 1.0;
+                ground.edgesColor = new Color3(0.7, 0.7, 0.9).toColor4(0.7); // Soft bluish lines, semi-transparent
+            }
+        },
+        scene
+    );
+
+    // --- NEW: Subtle Depth of Field effect ---
+    const pipeline = new DefaultRenderingPipeline(
+        "defaultPipeline",
+        true,
+        sceneManager.scene,
+        [sceneManager.camera]
+    );
+    pipeline.depthOfFieldEnabled = true;
+    pipeline.depthOfField.focalLength = 150;
+    pipeline.depthOfField.fStop = 2.8;
+    pipeline.depthOfField.focusDistance = 4000; // Large, so effect is subtle
 
     // ✅ NATURAL SYNC: Network setup using automatic property sync
     const clientRole: NetworkRole = { isClient: true, isServer: false, ownedByThisClient: true };
@@ -572,6 +661,29 @@ function setupExtensionPatternTest() {
         serverRole,
         new Vector3(3, 0.5, 0)
     );
+
+    // --- ArcRotateCamera to follow client ball with limited bounds ---
+    sceneManager.camera.detachControl();
+    sceneManager.camera.dispose();
+    const arcRotateCamera = new ArcRotateCamera(
+        "arcRotateCamera",
+        Math.PI / 4, // alpha (horizontal angle)
+        Math.PI / 3, // beta (vertical angle)
+        18, // radius (distance)
+        clientBall.mesh.position, // target
+        scene
+    );
+    arcRotateCamera.lowerRadiusLimit = 8;
+    arcRotateCamera.upperRadiusLimit = 40;
+    arcRotateCamera.lowerBetaLimit = Math.PI / 6;
+    arcRotateCamera.upperBetaLimit = Math.PI / 2.1;
+    arcRotateCamera.attachControl(canvas, true);
+    scene.activeCamera = arcRotateCamera;
+
+    // Keep camera target updated as the client ball moves
+    scene.onBeforeRenderObservable.add(() => {
+        arcRotateCamera.target.copyFrom(clientBall.mesh.position);
+    });
 
     // ✅ NATURAL SYNC: Clean single registration per role
     clientNetworkManager.registerEntity(clientBall as any);
