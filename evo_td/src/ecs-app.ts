@@ -25,6 +25,7 @@ export const BALL_SCHEMA: EntitySchema = {
         
         // Color properties (server authority for consistency)
         { name: 'colorState', type: 'number', defaultValue: 0, networkSync: true, authority: 'server' },
+        // this is input state, so we give it client-authority.
         { name: 'isHovered', type: 'boolean', defaultValue: false, networkSync: true, authority: 'client' },
         
         // Local rendering properties (no sync needed)
@@ -39,7 +40,6 @@ export const BALL_SCHEMA: EntitySchema = {
 export abstract class BaseBall extends NetworkReactiveEntity {
     public mesh: any;
     public material: StandardMaterial;
-    protected scene: any;
 
     constructor(
         networkId: string,
@@ -48,8 +48,6 @@ export abstract class BaseBall extends NetworkReactiveEntity {
         startPos: Vector3
     ) {
         super('ball', networkId, scene, role);
-        
-        this.scene = scene;
         
         // ✅ Create properties from shared schema
         this.createPropertiesFromSchema(BALL_SCHEMA);
@@ -430,7 +428,7 @@ class MinimalReactiveInputHandler {
         // ✅ KEYBOARD: WASD movement using your input system
         const keysPressed = this.inputState.getCollectionProperty('keysPressed');
         keysPressed?.itemAddedObservable.add((event) => {
-            this.handleKeyPress(event.value);
+            this.handleKeyPress(event.value as string);
         });
 
         console.log('🎮 Minimal reactive input handling set up');

@@ -2,22 +2,24 @@
 
 ## Game Vision
 
-**Train Trading Game** is a multiplayer cozy trading and exploration game where players form shipping guilds and control customizable trains traveling between procedurally generated stations. The game combines strategic trade route optimization with a satisfying 3D train customization system and cooperative multiplayer mechanics.
+**Train Trading Game** is a multiplayer cozy-ish trading and exploration game where players form shipping guilds and control customizable trains traveling between procedurally generated stations. The game combines strategic trade route optimization with a satisfying 3D train customization system and cooperative multiplayer mechanics. There are tower defense elements, as you'll need to equip your train cars with attachments to servive random, evolving procedurally generated hazards and enemies as you travel along routes. Populations of enemies will evolve over time, developing new features, etc. as the game progresses. Routes they get too developed stop being profitable for the pioneering explorer, and you'll be forced to explore more dangerous paths.
+
+FTL meets Dredge is probably the closest comparison in terms of gameplay.
 
 ### Core Pillars
 - **Cooperative Multiplayer**: Form shipping guilds, share goals and resources
 - **Train Customization**: 3D grid-based attachment system for weapons, cargo, equipment  
-- **Cozy Trading**: Simple but engaging economic gameplay with profitable route discovery
+- **Cozy Trading**: Simple at first, but deep, and engaging economic gameplay with profitable route discovery
 - **Accessible Design**: Web-first with mobile support, intuitive touch controls
 - **Procedural Worlds**: Dynamically generated trade networks for replayability
 
 ## Art Direction
 
 ### Visual Style
-- **Cozy Industrial**: Clean, friendly interpretation of steam-era machinery
-- **Voxel-Based**: Chunky, modular aesthetic for train customization
-- **Warm Color Palette**: Earthy tones with bright accent colors for important elements
-- **Atmospheric Lighting**: Dynamic day/night cycles with soft, inviting lighting
+- **Industrial frontier, future noire, grunge**: Frontiers people pushing the limits of civilization in the wreckage of a ruined high-tech world
+- **Voxel-Based**: Chunky, simpple aesthetic for train customization
+- **Post-apocolyptic and neon Color Palette**: Greys, green, purple. Environment is constantly changing, fog, lighting, storms, etc. even the ground itself on your routes seems to change trip to trip. Implement field of view camera filters, fog etc.
+- **Atmospheric Lighting**: Dynamic day/night cycles.
 
 ### Technical Art Goals
 - **Performance-First**: Runs smoothly on web browsers and mobile devices
@@ -30,9 +32,8 @@
 ### 1. Train System
 
 #### Train Composition
-- **Modular Cars**: Each train consists of multiple specialized cars
-- **Car Types**: Engine, cargo, passenger, utility, defense
-- **Car Health**: Individual cars can take damage and be destroyed
+- **Modular Cars**: Each train consists of multiple specialized cars. car defines the size of the grid of voxels that you can attach things to.
+- **Car Health**: Individual cars can take damage and be destroyed.
 - **Performance Impact**: Car composition affects speed, capacity, and efficiency
 
 #### 3D Attachment System
@@ -40,13 +41,12 @@
 - **Attachment Types**:
   - **Weapons**: Turrets for defending against enemies
   - **Cargo**: Additional storage capacity
-  - **Utility**: Repair stations, radar, shields
-  - **Decorative**: Visual customization elements
+  - **Utility**: radar, shields, life support.
+  - **Armor**: attached to sides of train to project it.
 
 #### Train Customization
-- **Voxel-Level Detail**: Individual voxels can be modified and upgraded
-- **Functional Placement**: Weapon positioning affects firing arcs and effectiveness
-- **Weight & Balance**: Attachment placement impacts train handling
+- **Voxel-Level Detail**: Individual voxels can be modified and upgraded (effects hp, what kind of cargo they can store, etc.)
+- **Attachments**: can be attached to any open face of a voxel.
 - **Visual Feedback**: Health, damage, and status clearly visible on train components
 
 ### 2. Trading & Economy
@@ -61,23 +61,8 @@
 - **Route Discovery**: Players explore to find profitable connections
 - **Efficiency Optimization**: Better routes and faster trains increase profits
 - **Risk vs Reward**: Longer routes offer higher profits but more danger
-- **Guild Coordination**: Share route information and coordinate deliveries
 
-### 3. Cooperative Multiplayer
-
-#### Shipping Guilds
-- **Shared Goals**: Guild members work toward common objectives
-- **Resource Pooling**: Share materials and trade route information
-- **Coordinated Operations**: Multi-train operations for large deliveries
-- **Guild Progression**: Unlock benefits through collective achievements
-
-#### Collaboration Mechanics
-- **Communication Tools**: In-game chat and route sharing
-- **Joint Ventures**: Multi-player missions requiring coordination
-- **Mutual Aid**: Repair and defend other guild members' trains
-- **Competition Elements**: Friendly rivalry between guilds
-
-### 4. Exploration & Challenges
+### 3. Exploration & Challenges
 
 #### Dynamic World Events
 - **Environmental Hazards**: Weather, terrain obstacles, resource shortages
@@ -87,9 +72,8 @@
 
 #### Enemy System
 - **Dynamic Spawning**: Enemies appear based on trade route activity
-- **Adaptive Behavior**: AI that responds to player tactics
 - **Progressive Difficulty**: Challenges scale with player progression
-- **Defensive Gameplay**: Players must balance offense and defense
+- **Defensive Gameplay**: Players must balance offense and defense -- speed and profit, etc. Many different paths to success.
 
 ### 5. Progression Systems
 
@@ -100,22 +84,20 @@
 - **Prestige Elements**: Rare and unique customization options
 
 #### Player Progression
-- **Trading Reputation**: Build standing with different stations
+- **Trading Reputation**: Build standing with different stations/factions
 - **Exploration Rewards**: Discover rare routes and hidden stations
-- **Combat Experience**: Improve defensive capabilities through conflict
-- **Guild Advancement**: Collective progression unlocks group benefits
+- **Combat Experience**: Improve capabilities through conflict
 
 ## User Experience Goals
 
 ### Accessibility
 - **Touch-Friendly**: All interactions work well on mobile devices
 - **Clear Information**: Important data is always visible and readable
-- **Forgiving Mechanics**: Mistakes are recoverable, not catastrophic
 - **Scalable Complexity**: Simple entry point with deep optimization potential
 
 ### Emotional Tone
-- **Relaxing Exploration**: Discover new routes at your own pace
-- **Satisfying Optimization**: Find increasingly efficient solutions
+- **Relaxing Exploration**: Limited time pressure to the game, but you can die (can be disabled)
+- **Satisfying Optimization**: Find increasingly efficient solutions (maybe more interactive train design, ie:backpack battles or something similar where attachments interact)
 - **Social Connection**: Meaningful cooperation with other players
 - **Creative Expression**: Personalize trains with functional customization
 
@@ -159,7 +141,7 @@
 
 ## Current Implementation Status
 
-### ✅ Implemented Mechanics
+### ✅ Implemented Mechanics -- we deleted these to re-make them with our new reactiveproperty, network and nodecomponent systems.
 - **Basic Train System**: Train and TrainCar entities with modular composition
 - **3D Voxel System**: TrainCarVoxel entities with individual health and rendering  
 - **Attachment Framework**: Attachment entities with slot-based mounting system
