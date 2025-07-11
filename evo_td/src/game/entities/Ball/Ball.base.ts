@@ -11,7 +11,7 @@ import { BALL_SCHEMA } from './Ball.schema';
  * Contains all the reactive behaviors that work identically on client and server.
  * Visual differences are handled by client/server extensions.
  */
-export abstract class BaseBall extends ExtendableEntity {
+export abstract class Ball extends ExtendableEntity {
     // Material is typed for better IDE support
     public material: StandardMaterial | null = null;
 

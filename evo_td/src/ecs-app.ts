@@ -23,24 +23,21 @@ class EnhancedReactiveInputHandler {
     private inputState: InputStateEntity;
     private clientBall: any; // Using EntityFactory entities
     private serverBall: any;
-    private gameWorld: GameWorld;
 
     constructor(
         inputState: InputStateEntity, 
         clientBall: any, 
-        serverBall: any,
-        gameWorld: GameWorld
+        serverBall: any
     ) {
         this.inputState = inputState;
         this.clientBall = clientBall;
         this.serverBall = serverBall;
-        this.gameWorld = gameWorld;
         
         this.setupInputObservation();
     }
 
     private setupInputObservation(): void {
-        // ✅ ENHANCED: Ground clicks with lag compensation option
+        // ✅ PURE REACTIVE: Client only does prediction, no direct server calls
         const recentClicks = this.inputState.getCollectionProperty('recentClicks');
         recentClicks?.itemAddedObservable.add((event) => {
             const clickEvent = event.value as any;
@@ -48,34 +45,26 @@ class EnhancedReactiveInputHandler {
             // ✅ Only process as ground click if NO entity was picked
             if (!clickEvent.pickedEntityId || clickEvent.pickedEntityId === '') {
                 const worldPos = clickEvent.worldPosition;
-                console.log(`🖱️ Ground click at (${worldPos.x.toFixed(1)}, ${worldPos.z.toFixed(1)})`);
+                console.log(`🖱️ CLIENT: Ground click at (${worldPos.x.toFixed(1)}, ${worldPos.z.toFixed(1)})`);
                 
-                // ✅ NEW: Use lag compensation for server movement
-                console.log('🕒 Processing with lag compensation (simulated 100ms lag)');
-                this.gameWorld.processClientInput({
-                    timestamp: Date.now() - 100, // Simulate 100ms client→server lag
-                    sequenceId: Date.now(),
-                    entityId: this.serverBall.getNetworkId(),
-                    action: 'moveTo',
-                    parameters: { target: worldPos, source: 'lag_compensated_ground_click' },
-                    clientId: 'main_client'
-                });
-                
-                // Client still does immediate prediction
+                // Client does immediate prediction
                 this.clientBall.moveTo(worldPos, 'client_prediction_ground_click');
                 
+                // The click is already in the InputStateEntity's recentClicks collection
+                // Server will observe this through Natural Sync!
+                
             } else {
-                console.log(`🎯 Entity click on: ${clickEvent.pickedEntityId} - ignoring ground movement`);
+                console.log(`🎯 CLIENT: Entity click on: ${clickEvent.pickedEntityId} - ignoring ground movement`);
             }
         });
 
-        // ✅ KEYBOARD: WASD movement using your input system
+        // ✅ KEYBOARD: Client prediction only
         const keysPressed = this.inputState.getCollectionProperty('keysPressed');
         keysPressed?.itemAddedObservable.add((event) => {
             this.handleKeyPress(event.value as string);
         });
 
-        console.log('🎮 Enhanced reactive input handling set up with lag compensation');
+        console.log('🎮 Client-side reactive input handling (prediction only)');
     }
 
     private handleKeyPress(keyCode: string): void {
@@ -90,24 +79,15 @@ class EnhancedReactiveInputHandler {
             default: return;
         }
 
-        console.log(`⌨️ Key pressed: ${keyCode}`);
+        console.log(`⌨️ CLIENT: Key pressed ${keyCode}`);
 
-        // Get current positions
+        // Get current position
         const clientPos = this.clientBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
-        const serverPos = this.serverBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
 
-        // ✅ ENHANCED: Server movement with lag compensation
-        this.gameWorld.processClientInput({
-            timestamp: Date.now() - 80, // Simulate 80ms keyboard input lag
-            sequenceId: Date.now(),
-            entityId: this.serverBall.getNetworkId(),
-            action: 'moveTo',
-            parameters: { target: serverPos.add(offset), source: `lag_compensated_keyboard_${keyCode}` },
-            clientId: 'main_client'
-        });
-
-        // Client immediate prediction
+        // Client prediction only
         this.clientBall.moveTo(clientPos.add(offset), `client_prediction_keyboard_${keyCode}`);
+        
+        // Server observes the keysPressed collection changes through Natural Sync!
     }
 }
 
@@ -303,7 +283,7 @@ function setupCleanModularGame() {
     const serverBall = EntityFactory.create(
         'ball',
         'ball1', // Same networkId - same entity  
-        sceneManager.scene,
+        null, // ✅ Server can have null scene!
         serverRole,
         new Vector3(3, 0.5, 0)
     );
@@ -311,14 +291,79 @@ function setupCleanModularGame() {
     console.log('🎾 Created modular Ball entities using EntityFactory');
 
     // ✅ ENHANCED: Create GameWorld for lag compensation
-    const gameWorld = new GameWorld(sceneManager.scene);
+    const gameWorld = new GameWorld(null); // ✅ GameWorld also works with null scene
     gameWorld.addEntity(serverBall);
     console.log('🌍 GameWorld created with lag compensation support');
 
-    // ✅ ENHANCED: Game loop with lag compensation
-    sceneManager.scene.onBeforeRenderObservable.add(() => {
-        gameWorld.update(0.016); // 60fps delta time
+    // ✅ PURE REACTIVE: Server observes input state changes
+    // Create server-side InputStateEntity that receives client updates
+    const serverInputState = new InputStateEntity('client_input', null, serverRole);
+    serverNetworkManager.registerEntity(serverInputState as any);
+    
+    // Server reactively observes client input through Natural Sync
+    serverInputState.getCollectionProperty('recentClicks')?.itemAddedObservable.add((event) => {
+        const clickEvent = event.value as any;
+        
+        // Only process ground clicks
+        if (!clickEvent.pickedEntityId || clickEvent.pickedEntityId === '') {
+            console.log(`📥 SERVER: Received click at (${clickEvent.worldPosition.x.toFixed(1)}, ${clickEvent.worldPosition.z.toFixed(1)})`);
+            
+            // Process with lag compensation
+            gameWorld.processClientInput({
+                timestamp: clickEvent.timestamp,
+                sequenceId: clickEvent.sequenceId,
+                entityId: serverBall.getNetworkId(),
+                action: 'moveTo',
+                parameters: { target: clickEvent.worldPosition, source: 'reactive_click' },
+                clientId: 'main_client'
+            });
+        }
     });
+    
+    // Server observes keyboard input
+    serverInputState.getCollectionProperty('keysPressed')?.itemAddedObservable.add((event) => {
+        const keyCode = event.value as string;
+        console.log(`📥 SERVER: Key pressed ${keyCode}`);
+        
+        // Calculate movement offset
+        const moveDistance = 2.0;
+        let offset = Vector3.Zero();
+        
+        switch (keyCode) {
+            case 'KeyW': offset.z = moveDistance; break;
+            case 'KeyS': offset.z = -moveDistance; break;
+            case 'KeyA': offset.x = -moveDistance; break;
+            case 'KeyD': offset.x = moveDistance; break;
+            default: return;
+        }
+        
+        const currentPos = serverBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
+        serverBall.moveTo(currentPos.add(offset), `reactive_keyboard_${keyCode}`);
+    });
+    
+    console.log('📡 Server reactively observing client input state');
+
+    // ✅ ENHANCED: Independent game loop with proper timing
+    let lastGameUpdateTime = performance.now();
+    let gameLoopRunning = true;
+    
+    function gameLoop() {
+        if (!gameLoopRunning) return;
+        
+        const currentTime = performance.now();
+        const deltaTime = (currentTime - lastGameUpdateTime) / 1000; // Convert to seconds
+        lastGameUpdateTime = currentTime;
+        
+        // Update game world with actual delta time
+        gameWorld.update(deltaTime);
+        
+        // Schedule next update
+        requestAnimationFrame(gameLoop);
+    }
+    
+    // Start the game loop
+    gameLoop();
+    console.log('🎮 Independent game loop started');
 
     // --- ArcRotateCamera setup (unchanged) ---
     sceneManager.camera.detachControl();
@@ -345,13 +390,24 @@ function setupCleanModularGame() {
     // ✅ NATURAL SYNC: Clean registration
     clientNetworkManager.registerEntity(clientBall as any);
     serverNetworkManager.registerEntity(serverBall as any);
+    
+    // ✅ PURE REACTIVE: Register input states with network managers
+    clientNetworkManager.registerEntity(clientInputState as any);
+    
+    
+    // ✅ PURE REACTIVE: Server ball observes input state directly!
+    (serverBall as any).observeInputState(serverInputState);
+    (serverBall as any).setGameWorld(gameWorld);
+    
+    console.log('🎯 Pure reactive flow established:');
+    console.log('  Client clicks/keys → InputStateEntity → Natural Sync → Server observes → Game state updates');
+    console.log('  With lag compensation when GameWorld is provided!');
 
-    // ✅ ENHANCED: Input handler with lag compensation
+    // ✅ CLIENT INPUT: Just handles prediction, no server calls
     const inputHandler = new EnhancedReactiveInputHandler(
         clientInputState, 
         clientBall, 
-        serverBall,
-        gameWorld
+        serverBall
     );
 
     // ✅ Make canvas focusable for keyboard
@@ -394,11 +450,11 @@ function setupCleanModularGame() {
             console.log('🔄 Testing: Immediate vs Lag Compensated');
             
             console.log('  1. Immediate movement (left side):');
-            this.testMovement(x - 3, z);
+            (window as any).extensionTest.testMovement(x - 3, z);
             
             setTimeout(() => {
                 console.log('  2. Lag compensated movement (right side, 200ms lag):');
-                this.testLagCompensation(x + 3, z, 200);
+                (window as any).extensionTest.testLagCompensation(x + 3, z, 200);
             }, 2000);
         },
 
@@ -442,6 +498,21 @@ function setupCleanModularGame() {
             return stats;
         },
 
+        // ✅ NEW: Stop/start game loop
+        stopGameLoop: () => {
+            gameLoopRunning = false;
+            console.log('⏸️ Game loop stopped');
+        },
+
+        startGameLoop: () => {
+            if (!gameLoopRunning) {
+                gameLoopRunning = true;
+                lastGameUpdateTime = performance.now();
+                gameLoop();
+                console.log('▶️ Game loop restarted');
+            }
+        },
+
         // ✅ PING SIMULATION CONTROLS (unchanged)
         setPing: (ms: number) => {
             networkPingMs = ms;
@@ -475,46 +546,52 @@ function setupCleanModularGame() {
     };
 
     console.log(`
-🎾 MODULAR BALL ENTITIES + LAG COMPENSATION READY! ✅
+🎾 PURE REACTIVE ARCHITECTURE + LAG COMPENSATION READY! ✅
+
+✅ PURE REACTIVE FLOW:
+- ✅ Client Input → InputStateEntity (client-authoritative)
+- ✅ Natural Sync → Automatic property synchronization
+- ✅ Server Observes → Input state changes trigger game logic
+- ✅ Game State Updates → Server-authoritative properties change
+- ✅ Natural Sync → Automatic sync back to clients
+- ✅ NO MANUAL EVENT FORWARDING!
 
 ✅ CLEAN MODULAR ARCHITECTURE:
-- ✅ BaseBall: Shared reactive game logic (imported from game/entities/Ball/)
-- ✅ ClientBall: Client-specific extensions (blue sphere, prediction, rendering)
-- ✅ ServerBall: Server-specific extensions (green cube, validation, authority)
-- ✅ EntityFactory: Clean entity creation and registration
-- ✅ No more inline entity definitions - pure modular approach
+- ✅ BaseBall: Shared reactive game logic
+- ✅ ClientBall: Client rendering + prediction
+- ✅ ServerBall: Pure game logic + input observation
+- ✅ EntityFactory: Clean entity creation
+- ✅ NO VALIDATION LOOPS!
 
-✅ LAG COMPENSATION FEATURES:
-- ✅ State History: 1 second buffer for server-side rewinding
-- ✅ GameWorld: Lag compensation processing with input timestamps
-- ✅ Enhanced Input: All ground clicks now use lag compensation by default
-- ✅ Fast-Forward: Replay simulation after historical processing
+✅ LAG COMPENSATION:
+- ✅ State History: Automatic recording via reactive properties
+- ✅ GameWorld: Handles timing and lag compensation
+- ✅ Input timestamps preserved through reactive system
+- ✅ Server rewinds and replays at correct time
 
-🎮 ENHANCED BEHAVIORS TO TEST:
-1. Click on GROUND → Watch lag compensation with 100ms simulated lag
-2. Press WASD → Server processes with 80ms lag compensation
-3. Click on SHAPES → Both change colors together (synced state)
-4. Use extensionTest commands for targeted testing
+🎮 REACTIVE BEHAVIORS:
+1. Click on GROUND → Updates InputState → Server observes → Ball moves
+2. Press WASD → Updates InputState → Server observes → Ball moves
+3. All state changes flow through reactive properties
+4. No manual method calls between client and server!
 
-🧪 ENHANCED CONSOLE COMMANDS:
-- extensionTest.testLagCompensation(5, 3, 200)  // Test 200ms lag compensation
-- extensionTest.testComparison(5, 3)           // Compare immediate vs lag compensated
-- extensionTest.getLagStats()                  // Get lag compensation performance
-- extensionTest.showEntityInfo()               // Show modular entity details
-- extensionTest.setPing(200)                   // Add network simulation on top
+🧪 CONSOLE COMMANDS:
+- extensionTest.showEntityInfo()                // See reactive property setup
+- extensionTest.debugSync()                     // See Natural Sync status
+- extensionTest.getLagStats()                   // Lag compensation stats
+- extensionTest.setPing(200)                    // Test with network delay
 
 🔍 WHAT TO WATCH FOR:
-- Console logs: "⏪ Rewinding world to..." and "⏩ Fast-forwarding..."
-- Smooth movement despite simulated lag
-- Blue sphere (client) immediate prediction
-- Green cube (server) lag compensated authority
+- "📥 SERVER: Click at..." logs showing reactive observation
+- Smooth movement despite network delay
+- Client prediction + server reconciliation
+- Pure reactive property flow
 
-🎯 READY FOR PRODUCTION:
-- Modular entity architecture ✅
-- Lag compensation system ✅  
-- State history working ✅
-- Network authority patterns ✅
-- Build system ready for Phase 2 ✅
+🎯 ARCHITECTURE BENEFITS:
+- Declarative: Just define properties and authority
+- Automatic: Natural Sync handles all networking
+- Clean: No event buses or manual forwarding
+- Scalable: Easy to add new properties
     `);
 }
 

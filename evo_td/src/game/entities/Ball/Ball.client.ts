@@ -1,6 +1,6 @@
 // src/game/entities/Ball/Ball.client.ts
 
-import { BaseBall } from './Ball.base';
+import { Ball } from './Ball.base';
 import { MeshBuilder, StandardMaterial, Color3 } from '@babylonjs/core';
 import { Scene, Vector3 } from '@babylonjs/core';
 import { NetworkRole } from '../../../engine/networking/NetworkTypes';
@@ -14,7 +14,7 @@ import { NetworkRole } from '../../../engine/networking/NetworkTypes';
  * - Input prediction (future)
  * - Audio feedback (future)
  */
-export class ClientBall extends BaseBall {
+export class ClientBall extends Ball {
     constructor(
         networkId: string,
         scene: Scene | null,
