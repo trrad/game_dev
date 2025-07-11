@@ -77,6 +77,17 @@ export abstract class ExtendableEntity extends NetworkReactiveEntity {
         console.log(`🎮 ${this.getExtensionType()} ${entityType} created: ${networkId}`);
     }
 
+    /**
+     * Update game logic - called by game loop
+     * Override in entity implementations
+     * 
+     * @param deltaTime - Time since last update in seconds
+     */
+    public updateGameLogic(deltaTime: number): void {
+        // Default: no-op
+        // Entities override this to implement their game logic
+    }    
+
     // ============================================================
     // ABSTRACT METHODS - Must be implemented by entity classes
     // ============================================================
@@ -231,6 +242,7 @@ export abstract class ExtendableEntity extends NetworkReactiveEntity {
             }
         });
     }
+    
 
     // ============================================================
     // LIFECYCLE

@@ -81,6 +81,13 @@ export class ClientBall extends BaseBall {
      */
     protected setupClientBehaviors(): void {
         super.setupClientBehaviors();
+
+        // Set up client render loop update
+        if (this.scene) {
+            this.scene.onBeforeRenderObservable.add(() => {
+                this.updateGameLogic(0.016); // ~60fps
+            });
+        }        
         
         // Future: Add client prediction
         this.setupClientPrediction();

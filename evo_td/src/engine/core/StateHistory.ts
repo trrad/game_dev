@@ -84,15 +84,13 @@ export class StateHistory {
      * More efficient than getStateAt if you only need one property
      */
     getPropertyAt(propertyName: string, timestamp: number): any {
-        // Search backwards for most recent change to this property
+        // Search backwards for most recent change before timestamp
         for (let i = this.changes.length - 1; i >= 0; i--) {
             const change = this.changes[i];
-            if (change.timestamp > timestamp) continue;
-            if (change.propertyName === propertyName) {
+            if (change.propertyName === propertyName && change.timestamp <= timestamp) {
                 return change.value;
             }
         }
-        
         return undefined;
     }
 

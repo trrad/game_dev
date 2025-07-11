@@ -299,8 +299,12 @@ export class GameWorld {
      * Update core game logic
      */
     private updateGameLogic(): void {
-        // Entities update themselves through reactive properties
-        // This is where you'd add world-level game logic
+        const deltaTime = 1 / this.tickConfig.gameLogic; // Use configured game logic tick rate
+        
+        // Update all entities' game logic
+        this.entities.forEach(entity => {
+            entity.updateGameLogic(deltaTime);
+        });
     }
 
     /**

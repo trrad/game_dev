@@ -53,51 +53,80 @@ export abstract class BaseBall extends ExtendableEntity {
             console.log(`🎯 ${this.getExtensionType()} target: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
         });
 
-        // ✅ SHARED: Movement interpolation
-        this.setupMovementBehavior();
+        // NOTE: Movement update is NOT set up here anymore
+        // It will be called by the game loop (client render loop or server tick)
     }
 
     /**
-     * Movement interpolation behavior
-     * Smoothly moves position towards target
+     * Update game logic - called by game loop
+     * This is the main update method for all game logic that needs to run every frame/tick
+     * 
+     * @param deltaTime - Time since last update in seconds
      */
-    private setupMovementBehavior(): void {
-        if (!this.scene) return; // No scene means no render loop
+    public updateGameLogic(deltaTime: number): void {
+        console.log(`🎮 BaseBall.updateGameLogic called with deltaTime: ${deltaTime}`);
 
-        const updateMovement = () => {
-            const isMoving = this.getBooleanProperty('isMoving');
-            const position = this.getVectorProperty('position');
-            const targetPosition = this.getVectorProperty('targetPosition');
-            const moveSpeed = this.getNumericProperty('moveSpeed');
-
-            if (!isMoving?.isTrue() || !position || !targetPosition || !moveSpeed) return;
-
-            const currentPos = position.getValue();
-            const targetPos = targetPosition.getValue();
-            const speed = moveSpeed.getValue();
-
-            const direction = targetPos.subtract(currentPos);
-            const distance = direction.length();
-
-            if (distance < 0.1) {
-                // Reached target
-                isMoving.setFalse('movement_complete');
-                console.log(`🏁 ${this.getExtensionType()} reached target`);
-            } else {
-                // Move towards target
-                const deltaTime = 0.016; // ~60fps
-                const movement = direction.normalize().scale(speed * deltaTime);
-                const newPos = currentPos.add(movement);
-                position.set(newPos, 'movement_interpolation');
-            }
-        };
-
-        this.scene.onBeforeRenderObservable.add(updateMovement);
-        this.addCleanupFunction(() => {
-            this.scene?.onBeforeRenderObservable.removeCallback(updateMovement);
-        });
+        // Update movement
+        this.updateMovement(deltaTime);
+        
+        // Future: Add other game logic updates here
+        // - Status effects
+        // - Buffs/debuffs
+        // - AI behavior
+        // - etc.
     }
 
+    /**
+     * Movement interpolation logic
+     * Core game logic that runs on both client and server
+     * 
+     * @param deltaTime - Time since last update in seconds
+     */
+    private updateMovement(deltaTime: number): void {
+        const isMoving = this.getBooleanProperty('isMoving');
+        const position = this.getVectorProperty('position');
+        const targetPosition = this.getVectorProperty('targetPosition');
+        const moveSpeed = this.getNumericProperty('moveSpeed');
+
+        console.log(`🔍 updateMovement called: deltaTime=${deltaTime}`);
+        console.log(`  isMoving: ${isMoving?.getValue()}`);
+        console.log(`  hasPosition: ${!!position}`);
+        console.log(`  hasTargetPosition: ${!!targetPosition}`);
+        console.log(`  moveSpeed: ${moveSpeed?.getValue()}`);
+
+        if (!isMoving?.isTrue() || !position || !targetPosition || !moveSpeed) return;
+
+        const currentPos = position.getValue();
+        const targetPos = targetPosition.getValue();
+        const speed = moveSpeed.getValue();
+
+        console.log(`  currentPos: ${formatVector(currentPos)}`);
+        console.log(`  targetPos: ${formatVector(targetPos)}`);
+        console.log(`  speed: ${speed}`);
+
+        const direction = targetPos.subtract(currentPos);
+        const distance = direction.length();
+
+        console.log(`  direction: ${formatVector(direction)}`);
+        console.log(`  distance: ${distance}`);
+
+        if (distance < 0.1) {
+            // Reached target
+            isMoving.setFalse('movement_complete');
+            position.set(targetPos, 'movement_complete');
+            console.log(`🏁 ${this.getExtensionType()} reached target`);
+        } else {
+            // Move towards target
+            const movement = direction.normalize().scale(speed * deltaTime);
+            const newPos = currentPos.add(movement);
+            
+            console.log(`  movement: ${formatVector(movement)}`);
+            console.log(`  newPos: ${formatVector(newPos)}`);
+            
+            position.set(newPos, 'movement_interpolation');
+            console.log(`  position.set() called`);
+        }
+    }
     /**
      * Set up mesh action handlers
      * Called by extensions after creating their mesh
@@ -190,6 +219,13 @@ export abstract class BaseBall extends ExtendableEntity {
      */
     protected abstract getColorForState(state: number): Color3;
 
+    // Add this helper function to BaseBall if it doesn't exist
+    private formatVector(v: Vector3): string {
+        return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
+    }
+
+
+
     // ============================================================
     // PUBLIC API
     // ============================================================
@@ -216,5 +252,12 @@ export abstract class BaseBall extends ExtendableEntity {
      */
     public getPosition(): Vector3 {
         return this.getVectorProperty('position')?.getValue() || Vector3.Zero();
+    }
+
+    /**
+     * Check if entity is currently moving
+     */
+    public isMoving(): boolean {
+        return this.getBooleanProperty('isMoving')?.isTrue() || false;
     }
 }
