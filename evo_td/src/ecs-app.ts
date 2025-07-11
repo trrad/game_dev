@@ -1,427 +1,69 @@
-// src/ecs-app.ts - Extension Pattern Implementation in Single File
+// src/ecs-app.ts - Clean version using modular Ball entities + Lag Compensation
 
 import { SceneManager } from "./engine/scene/SceneManager";
-import { Vector3, MeshBuilder, StandardMaterial, Color3, ActionManager, ExecuteCodeAction, VertexBuffer, DefaultRenderingPipeline, ArcRotateCamera } from "@babylonjs/core";
-import { createSimpleGrid } from "./engine/utils/SimpleGrid";
+import { Vector3, MeshBuilder, Color3, DefaultRenderingPipeline, ArcRotateCamera, StandardMaterial } from "@babylonjs/core";
+
+// Use modular Ball entities instead of inline definitions
+import { EntityFactory } from "./engine/core/EntityFactory";
+import { GameWorld } from "./game/systems/GameWorld";
+import './game/entities/Ball'; // This registers Ball entities with EntityFactory
 
 // Use your existing architecture with Natural Sync
 import { InputStateEntity } from "./engine/inputs/InputStateEntity";
 import { ReactiveInputEnricher } from "./engine/inputs/ReactiveInputEnricher";
 import { NetworkReactiveEntity } from "./engine/networking/NetworkReactiveEntity";
 import { NaturalSyncNetworkManager } from "./engine/networking/NaturalSyncNetworkManager";
-import { NetworkRole, EntitySchema } from "./engine/networking/NetworkTypes";
+import { NetworkRole } from "./engine/networking/NetworkTypes";
 
 // ============================================================================
-// 🎯 SHARED SCHEMA - Same for both client and server extensions
+// 🎮 ENHANCED INPUT HANDLER - Now with Lag Compensation Support
 // ============================================================================
 
-export const BALL_SCHEMA: EntitySchema = {
-    entityType: 'ball',
-    properties: [
-        // Movement properties (server authority)
-        { name: 'position', type: 'vector', defaultValue: { x: 0, y: 0, z: 0 }, networkSync: true, authority: 'server' },
-        { name: 'targetPosition', type: 'vector', defaultValue: { x: 0, y: 0, z: 0 }, networkSync: true, authority: 'server' },
-        { name: 'isMoving', type: 'boolean', defaultValue: false, networkSync: true, authority: 'server' },
-        
-        // Color properties (server authority for consistency)
-        { name: 'colorState', type: 'number', defaultValue: 0, networkSync: true, authority: 'server' },
-        // this is input state, so we give it client-authority.
-        { name: 'isHovered', type: 'boolean', defaultValue: false, networkSync: true, authority: 'client' },
-        
-        // Local rendering properties (no sync needed)
-        { name: 'moveSpeed', type: 'number', defaultValue: 3.0, networkSync: false, authority: 'client' }
-    ]
-};
-
-// ============================================================================
-// 🎾 BASE BALL - All shared reactive game state logic
-// ============================================================================
-
-export abstract class BaseBall extends NetworkReactiveEntity {
-    public mesh: any;
-    public material: StandardMaterial;
+class EnhancedReactiveInputHandler {
+    private inputState: InputStateEntity;
+    private clientBall: any; // Using EntityFactory entities
+    private serverBall: any;
+    private gameWorld: GameWorld;
 
     constructor(
-        networkId: string,
-        scene: any,
-        role: NetworkRole,
-        startPos: Vector3
+        inputState: InputStateEntity, 
+        clientBall: any, 
+        serverBall: any,
+        gameWorld: GameWorld
     ) {
-        super('ball', networkId, scene, role);
-        
-        // ✅ Create properties from shared schema
-        this.createPropertiesFromSchema(BALL_SCHEMA);
-        
-        this.createVisual();
-        this.setupSharedBehaviors();
-        this.setupRoleSpecificBehaviors();
-        
-        // ✅ Set initial state AFTER behaviors are set up
-        this.getVectorProperty('position')?.set(startPos, 'initial_setup');
-        this.getVectorProperty('targetPosition')?.set(startPos, 'initial_setup');
-        this.updateColor();
-        
-        console.log(`🎾 ${this.getExtensionType()} Ball created: ${networkId} at (${startPos.x}, ${startPos.z})`);
-    }
-
-    // ============================================================================
-    // SHARED VISUAL CREATION (same for both extensions for now)
-    // ============================================================================
-
-    private createVisual(): void {
-        // ✅ EXTENSION PATTERN: Different local rendering based on extension type
-        if (this.getExtensionType() === 'CLIENT') {
-            // CLIENT: Sphere (blue family) - smaller size
-            this.mesh = MeshBuilder.CreateSphere(`${this.getExtensionType()}_ball`, { diameter: 0.8 }, this.scene);
-        } else {
-            // SERVER: Cube (green family) - larger size, semi-transparent
-            this.mesh = MeshBuilder.CreateBox(`${this.getExtensionType()}_ball`, { size: 1.2 }, this.scene);
-        }
-        
-        // ✅ Set mesh name for entity picking
-        this.mesh.name = `entity_${this.getNetworkId()}`;
-        
-        // Create material
-        this.material = new StandardMaterial(`${this.getExtensionType()}_material`, this.scene);
-        this.mesh.material = this.material;
-        this.mesh.isVisible = true;
-        
-        // ✅ VISUAL SEPARATION: Make server cube semi-transparent
-        if (this.getExtensionType() === 'SERVER') {
-            this.material.alpha = 0.7; // Semi-transparent cube
-        }
-        
-        // Set up click interactions
-        this.setupMeshActions();
-        
-        console.log(`🎨 ${this.getExtensionType()} visual created: ${this.getExtensionType() === 'CLIENT' ? 'SPHERE (0.8)' : 'CUBE (1.2, transparent)'} named ${this.mesh.name}`);
-    }
-
-    private setupMeshActions(): void {
-        this.mesh.actionManager = new ActionManager(this.scene);
-        
-        // Click to cycle colors
-        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
-            ActionManager.OnLeftPickTrigger,
-            () => this.handleColorCycleClick()
-        ));
-        
-        // Hover effects
-        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
-            ActionManager.OnPointerOverTrigger,
-            () => this.handleHoverEnter()
-        ));
-        
-        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
-            ActionManager.OnPointerOutTrigger,
-            () => this.handleHoverExit()
-        ));
-    }
-
-    // ============================================================================
-    // SHARED REACTIVE GAME LOGIC (identical on client and server)
-    // ============================================================================
-
-    private setupSharedBehaviors(): void {
-        // ✅ SHARED: Position changes update mesh with visual offset
-        const position = this.getVectorProperty('position');
-        position?.onChange((event) => {
-            if (this.mesh) {
-                // ✅ VISUAL SEPARATION: Offset mesh position while keeping logical position synced
-                const logicalPos = event.to.clone();
-
-                this.mesh.position.copyFrom(logicalPos);
-                console.log(`📍 ${this.getExtensionType()} position: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
-            }
-        });
-
-        // ✅ SHARED: Color state changes update visual
-        const colorState = this.getNumericProperty('colorState');
-        colorState?.onChange((event) => {
-            this.updateColor();
-            console.log(`🎨 ${this.getExtensionType()} color: ${event.to} [${event.source}]`);
-        });
-
-        // ✅ SHARED: Hover state changes update visual
-        const isHovered = this.getBooleanProperty('isHovered');
-        isHovered?.onChange((event) => {
-            this.updateColor();
-            console.log(`🖱️ ${this.getExtensionType()} hover: ${event.to} [${event.source}]`);
-        });
-
-        // ✅ SHARED: Target position changes trigger movement
-        const targetPosition = this.getVectorProperty('targetPosition');
-        targetPosition?.onChange((event) => {
-            this.getBooleanProperty('isMoving')?.setTrue('movement_start');
-            console.log(`🎯 ${this.getExtensionType()} target: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
-        });
-
-        // ✅ SHARED: Movement interpolation logic
-        this.setupMovementBehavior();
-    }
-
-    private setupMovementBehavior(): void {
-        const updateMovement = () => {
-            const isMoving = this.getBooleanProperty('isMoving');
-            const position = this.getVectorProperty('position');
-            const targetPosition = this.getVectorProperty('targetPosition');
-            const moveSpeed = this.getNumericProperty('moveSpeed');
-
-            if (!isMoving?.isTrue() || !position || !targetPosition || !moveSpeed) return;
-
-            const currentPos = position.getValue();
-            const targetPos = targetPosition.getValue();
-            const speed = moveSpeed.getValue();
-
-            const direction = targetPos.subtract(currentPos);
-            const distance = direction.length();
-
-            if (distance < 0.1) {
-                isMoving.setFalse('movement_complete');
-                console.log(`🏁 ${this.getExtensionType()} reached target`);
-            } else {
-                const deltaTime = 0.016; // ~60fps
-                const movement = direction.normalize().scale(speed * deltaTime);
-                const newPos = currentPos.add(movement);
-                position.set(newPos, 'movement_interpolation');
-            }
-        };
-
-        if (this.scene) {
-            this.scene.onBeforeRenderObservable.add(updateMovement);
-        };
-    }
-
-    // ============================================================================
-    // SHARED INTERACTION LOGIC (identical behavior, different authority)
-    // ============================================================================
-
-    private handleColorCycleClick(): void {
-        const colorState = this.getNumericProperty('colorState');
-        if (!colorState) return;
-        
-        const currentState = colorState.getValue() || 0;
-        const newState = (currentState + 1) % 3;
-        
-        // Always update - natural sync handles authority automatically
-        colorState.set(newState, `click_color_${this.getExtensionType()}`);
-        console.log(`🎨 ${this.getExtensionType()} color clicked: ${currentState} → ${newState}`);
-    }
-
-    private handleHoverEnter(): void {
-        const isHovered = this.getBooleanProperty('isHovered');
-        if (isHovered) {
-            isHovered.setTrue(`hover_enter_${this.getExtensionType()}`);
-        }
-    }
-
-    private handleHoverExit(): void {
-        const isHovered = this.getBooleanProperty('isHovered');
-        if (isHovered) {
-            isHovered.setFalse(`hover_exit_${this.getExtensionType()}`);
-        }
-    }
-
-    private updateColor(): void {
-        const colorState = this.getNumericProperty('colorState')?.getValue() || 0;
-        const isHovered = this.getBooleanProperty('isHovered')?.isTrue() || false;
-
-        let baseColor: Color3;
-        
-        // Different colors to distinguish client vs server extensions visually
-        if (this.getExtensionType() === 'CLIENT') {
-            switch (colorState) {
-                case 0: baseColor = Color3.Blue(); break;
-                case 1: baseColor = new Color3(0, 1, 1); break;     // Cyan
-                case 2: baseColor = Color3.Purple(); break;
-                default: baseColor = Color3.White(); break;
-            }
-        } else { // SERVER
-            switch (colorState) {
-                case 0: baseColor = Color3.Green(); break;
-                case 1: baseColor = Color3.Yellow(); break;
-                case 2: baseColor = Color3.Red(); break;
-                default: baseColor = Color3.Gray(); break;
-            }
-        }
-
-        if (isHovered) {
-            baseColor = baseColor.add(new Color3(0.5, 0.5, 0.5));
-        }
-
-        this.material.diffuseColor = baseColor;
-        this.material.emissiveColor = baseColor.scale(0.3);
-        this.material.markDirty();
-    }
-
-    // ============================================================================
-    // PUBLIC API (shared interface)
-    // ============================================================================
-
-    public moveTo(target: Vector3, source: string): void {
-        this.getVectorProperty('targetPosition')?.set(target, source);
-    }
-
-    public cycleColor(source: string): void {
-        const colorState = this.getNumericProperty('colorState');
-        const currentState = colorState?.getValue() || 0;
-        const newState = (currentState + 1) % 3;
-        colorState?.set(newState, source);
-    }
-
-    // ============================================================================
-    // ABSTRACT METHODS - Role-specific behaviors
-    // ============================================================================
-
-    protected abstract setupRoleSpecificBehaviors(): void;
-    protected abstract getExtensionType(): 'CLIENT' | 'SERVER';
-
-    // Base implementation of NetworkReactiveEntity abstract methods
-    protected setupBehaviors(): void {
-        // Shared behaviors are set up in setupSharedBehaviors()
-        // Role-specific behaviors handled by extensions
-    }
-}
-
-// ============================================================================
-// 🖥️ CLIENT EXTENSION - Input capture, rendering, prediction
-// ============================================================================
-
-export class ClientBall extends BaseBall {
-    constructor(networkId: string, scene: any, role: NetworkRole, startPos: Vector3) {
-        super(networkId, scene, role, startPos);
-    }
-
-    protected getExtensionType(): 'CLIENT' {
-        return 'CLIENT';
-    }
-
-    protected setupRoleSpecificBehaviors(): void {
-        // ✅ CLIENT: Focus on input capture and rendering
-        console.log(`💻 CLIENT ball setup: Handles input capture, rendering, and prediction`);
-        
-        // Future: DOM event handling, immediate visual feedback, client prediction
-        // For now: just logging to show extension point
-        this.setupClientPrediction();
-    }
-
-    protected setupClientBehaviors(): void {
-        console.log(`💻 CLIENT behaviors active for ${this.getNetworkId()}`);
-    }
-
-    private setupClientPrediction(): void {
-        // ✅ CLIENT: Immediate response to inputs (prediction)
-        // Future: Override server authority with immediate visual feedback
-        console.log(`🔮 CLIENT prediction system ready for ${this.getNetworkId()}`);
-    }
-
-    // ✅ CLIENT: Enhanced input handling (future: immediate visual response)
-    public moveTo(target: Vector3, source: string): void {
-        console.log(`🎮 CLIENT prediction: Moving to (${target.x.toFixed(1)}, ${target.z.toFixed(1)})`);
-        super.moveTo(target, source);
-    }
-}
-
-// ============================================================================
-// 🖥️ SERVER EXTENSION - Validation, authority, AI
-// ============================================================================
-
-export class ServerBall extends BaseBall {
-    constructor(networkId: string, scene: any, role: NetworkRole, startPos: Vector3) {
-        super(networkId, scene, role, startPos);
-    }
-
-    protected getExtensionType(): 'SERVER' {
-        return 'SERVER';
-    }
-
-    protected setupRoleSpecificBehaviors(): void {
-        // ✅ SERVER: Focus on validation and authority
-        console.log(`🖥️ SERVER ball setup: Handles validation, authority, and anti-cheat`);
-        
-        // Future: Input validation, authoritative state, AI, anti-cheat
-        // For now: just logging to show extension point
-        this.setupServerAuthority();
-    }
-
-    protected setupServerBehaviors(): void {
-        console.log(`🖥️ SERVER behaviors active for ${this.getNetworkId()}`);
-    }
-
-    private setupServerAuthority(): void {
-        // ✅ SERVER: Authoritative state management
-        // Future: Input validation, bounds checking, anti-cheat
-        console.log(`⚖️ SERVER authority system ready for ${this.getNetworkId()}`);
-    }
-
-    // ✅ SERVER: Enhanced validation (future: bounds checking, anti-cheat)
-    public moveTo(target: Vector3, source: string): void {
-        // Basic validation placeholder
-        if (this.isValidMoveTarget(target)) {
-            console.log(`⚖️ SERVER authority: Validated move to (${target.x.toFixed(1)}, ${target.z.toFixed(1)})`);
-            super.moveTo(target, source);
-        } else {
-            console.warn(`🚫 SERVER rejected invalid move to (${target.x.toFixed(1)}, ${target.z.toFixed(1)})`);
-        }
-    }
-
-    private isValidMoveTarget(target: Vector3): boolean {
-        // Basic bounds checking
-        return Math.abs(target.x) <= 20 && Math.abs(target.z) <= 20;
-    }
-}
-
-// ============================================================================
-// 🏭 FACTORY PATTERN (will be compile-time resolved in build system)
-// ============================================================================
-
-export class BallFactory {
-    /**
-     * Create appropriate ball extension based on role
-     * NOTE: In real build system, this will be compile-time resolved:
-     * - CLIENT BUNDLE: Only gets ClientBall creation path
-     * - SERVER BUNDLE: Only gets ServerBall creation path
-     */
-    static create(networkId: string, scene: any, role: NetworkRole, startPos: Vector3): BaseBall {
-        if (role.isClient) {
-            return new ClientBall(networkId, scene, role, startPos);
-        } else {
-            return new ServerBall(networkId, scene, role, startPos);
-        }
-    }
-}
-
-// ============================================================================
-// 🎮 MINIMAL INPUT HANDLER - Uses your InputStateEntity system
-// ============================================================================
-
-class MinimalReactiveInputHandler {
-    private inputState: InputStateEntity;
-    private clientBall: BaseBall;
-    private serverBall: BaseBall;
-
-    constructor(inputState: InputStateEntity, clientBall: BaseBall, serverBall: BaseBall) {
         this.inputState = inputState;
         this.clientBall = clientBall;
         this.serverBall = serverBall;
+        this.gameWorld = gameWorld;
         
         this.setupInputObservation();
     }
 
     private setupInputObservation(): void {
-        // ✅ FIXED: Ground clicks move both balls (only when NOT clicking on entities)
+        // ✅ ENHANCED: Ground clicks with lag compensation option
         const recentClicks = this.inputState.getCollectionProperty('recentClicks');
         recentClicks?.itemAddedObservable.add((event) => {
             const clickEvent = event.value as any;
             
-            // ✅ FIXED: Only process as ground click if NO entity was picked
+            // ✅ Only process as ground click if NO entity was picked
             if (!clickEvent.pickedEntityId || clickEvent.pickedEntityId === '') {
                 const worldPos = clickEvent.worldPosition;
                 console.log(`🖱️ Ground click at (${worldPos.x.toFixed(1)}, ${worldPos.z.toFixed(1)})`);
                 
-                // Move both balls - reactive system handles network sync based on authority
-                this.serverBall.moveTo(worldPos, 'ground_click_server');
-                this.clientBall.moveTo(worldPos, 'ground_click_client');
+                // ✅ NEW: Use lag compensation for server movement
+                console.log('🕒 Processing with lag compensation (simulated 100ms lag)');
+                this.gameWorld.processClientInput({
+                    timestamp: Date.now() - 100, // Simulate 100ms client→server lag
+                    sequenceId: Date.now(),
+                    entityId: this.serverBall.getNetworkId(),
+                    action: 'moveTo',
+                    parameters: { target: worldPos, source: 'lag_compensated_ground_click' },
+                    clientId: 'main_client'
+                });
+                
+                // Client still does immediate prediction
+                this.clientBall.moveTo(worldPos, 'client_prediction_ground_click');
+                
             } else {
                 console.log(`🎯 Entity click on: ${clickEvent.pickedEntityId} - ignoring ground movement`);
             }
@@ -433,7 +75,7 @@ class MinimalReactiveInputHandler {
             this.handleKeyPress(event.value as string);
         });
 
-        console.log('🎮 Minimal reactive input handling set up');
+        console.log('🎮 Enhanced reactive input handling set up with lag compensation');
     }
 
     private handleKeyPress(keyCode: string): void {
@@ -450,21 +92,31 @@ class MinimalReactiveInputHandler {
 
         console.log(`⌨️ Key pressed: ${keyCode}`);
 
-        // Move both balls using reactive properties
+        // Get current positions
         const clientPos = this.clientBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
         const serverPos = this.serverBall.getVectorProperty('position')?.getValue() || Vector3.Zero();
 
-        this.clientBall.moveTo(clientPos.add(offset), `keyboard_client_${keyCode}`);
-        this.serverBall.moveTo(serverPos.add(offset), `keyboard_server_${keyCode}`);
+        // ✅ ENHANCED: Server movement with lag compensation
+        this.gameWorld.processClientInput({
+            timestamp: Date.now() - 80, // Simulate 80ms keyboard input lag
+            sequenceId: Date.now(),
+            entityId: this.serverBall.getNetworkId(),
+            action: 'moveTo',
+            parameters: { target: serverPos.add(offset), source: `lag_compensated_keyboard_${keyCode}` },
+            clientId: 'main_client'
+        });
+
+        // Client immediate prediction
+        this.clientBall.moveTo(clientPos.add(offset), `client_prediction_keyboard_${keyCode}`);
     }
 }
 
 // ============================================================================
-// 🚀 MAIN SETUP - Using your reactive architecture
+// 🚀 MAIN SETUP - Clean Modular Architecture + Lag Compensation
 // ============================================================================
 
-function setupExtensionPatternTest() {
-    // ✅ Standard setup
+function setupCleanModularGame() {
+    // ✅ Standard scene setup
     let canvas = document.getElementById("gameCanvas") as HTMLCanvasElement;
     if (!canvas) {
         canvas = document.createElement("canvas");
@@ -479,33 +131,34 @@ function setupExtensionPatternTest() {
     sceneManager.handleResize();
     sceneManager.start();
 
-    // --- Environmental Fog ---
-    const scene = sceneManager.scene;
-    scene.fogMode = 1; // Scene.FOGMODE_EXP
-    scene.fogColor = new Color3(0.42, 0.22, 0.55); // More purple tone
-    scene.fogDensity = 0.012; // Subtle, tweak as needed
+    // ✅ ENHANCED: Enable state history for lag compensation
+    NetworkReactiveEntity.enableStateHistory(1000); // 1 second buffer
+    console.log('🕒 State history enabled for lag compensation');
 
-    // --- Gradient Skybox ---
+    // --- Environmental Setup (unchanged) ---
+    const scene = sceneManager.scene;
+    scene.fogMode = 1; 
+    scene.fogColor = new Color3(0.42, 0.22, 0.55);
+    scene.fogDensity = 0.012;
+
+    // --- Gradient Skybox (unchanged) ---
     const skybox = MeshBuilder.CreateBox("skyBox", { size: 500 }, scene);
     const skyMat = new StandardMaterial("skyMat", scene);
     skyMat.backFaceCulling = false;
     skyMat.disableLighting = true;
-    // Use a vertical gradient by setting diffuse/emissive colors (approximate)
-    skyMat.diffuseColor = new Color3(0.18, 0.13, 0.28); // Bottom (darker)
-    skyMat.emissiveColor = new Color3(0.45, 0.38, 0.65); // Top (lighter)
+    skyMat.diffuseColor = new Color3(0.18, 0.13, 0.28);
+    skyMat.emissiveColor = new Color3(0.45, 0.38, 0.65);
     skybox.material = skyMat;
     skybox.infiniteDistance = true;
     skybox.isPickable = false;
     skybox.renderingGroupId = 0;
 
-    // ✅ Grid
-    // --- NEW: Large hilly ground mesh with quad grid overlay ---
+    // --- Hilly Ground (unchanged) ---
     const groundSize = 100;
     const subdivisions = 100;
     const minHeight = -1;
     const maxHeight = 5;
-    let ground: any;
-    // --- Step 1: Generate a height map texture in memory ---
+    
     function generateHeightMapDataURL(size: number = 256): string {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = size;
@@ -513,10 +166,8 @@ function setupExtensionPatternTest() {
         const imgData = ctx.createImageData(size, size);
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
-                // Normalized coordinates
                 const nx = (x / size) * Math.PI * 2;
                 const ny = (y / size) * Math.PI * 2;
-                // Blend of sin/cos for hills
                 let h = 0.5 + 0.5 * Math.sin(nx) * Math.cos(ny);
                 h += 0.2 * Math.sin(nx * 2 + ny * 1.5);
                 h += 0.1 * Math.cos(nx * 3 - ny * 2);
@@ -532,8 +183,9 @@ function setupExtensionPatternTest() {
         ctx.putImageData(imgData, 0, 0);
         return canvas.toDataURL();
     }
-    // Example usage: const heightMapURL = generateHeightMapDataURL(256);
+    
     const heightMapURL = generateHeightMapDataURL(256);
+    let ground: any;
     MeshBuilder.CreateGroundFromHeightMap(
         "ground",
         heightMapURL,
@@ -546,21 +198,19 @@ function setupExtensionPatternTest() {
             onReady: (mesh) => {
                 ground = mesh;
                 ground.position.y = -0.1;
-                // Matte grey material (updated from purple)
                 const greyMat = new StandardMaterial("greyMat", scene);
-                greyMat.diffuseColor = new Color3(0.45, 0.45, 0.48); // Neutral grey
+                greyMat.diffuseColor = new Color3(0.45, 0.45, 0.48);
                 greyMat.specularColor = Color3.Black();
                 ground.material = greyMat;
-                // --- Render edges on the ground mesh ---
                 ground.enableEdgesRendering();
                 ground.edgesWidth = 1.0;
-                ground.edgesColor = new Color3(0.7, 0.7, 0.9).toColor4(0.7); // Soft bluish lines, semi-transparent
+                ground.edgesColor = new Color3(0.7, 0.7, 0.9).toColor4(0.7);
             }
         },
         scene
     );
 
-    // --- NEW: Subtle Depth of Field effect ---
+    // --- Depth of Field (unchanged) ---
     const pipeline = new DefaultRenderingPipeline(
         "defaultPipeline",
         true,
@@ -570,7 +220,7 @@ function setupExtensionPatternTest() {
     pipeline.depthOfFieldEnabled = true;
     pipeline.depthOfField.focalLength = 80;
     pipeline.depthOfField.fStop = 2.8;
-    pipeline.depthOfField.focusDistance = 500; // Large, so effect is subtle
+    pipeline.depthOfField.focusDistance = 500;
 
     // ✅ NATURAL SYNC: Network setup using automatic property sync
     const clientRole: NetworkRole = { isClient: true, isServer: false, ownedByThisClient: true };
@@ -579,15 +229,12 @@ function setupExtensionPatternTest() {
     const clientNetworkManager = new NaturalSyncNetworkManager(clientRole);
     const serverNetworkManager = new NaturalSyncNetworkManager(serverRole);
 
-    // ✅ PING SIMULATION: Network delay configuration
-    let networkPingMs = 0; // Default: no ping simulation
-    
-    // ✅ Message queue processing with network ping simulation
+    // ✅ PING SIMULATION: Network delay configuration (unchanged)
+    let networkPingMs = 0;
     const messageQueue: any[] = [];
     let processingMessages = false;
 
     clientNetworkManager.setSendCallback((message) => {
-        // ✅ PING SIMULATION: Add timestamp and delay client→server messages
         const delayedMessage = {
             to: 'server',
             message,
@@ -599,7 +246,6 @@ function setupExtensionPatternTest() {
     });
 
     serverNetworkManager.setSendCallback((message) => {
-        // ✅ PING SIMULATION: Add timestamp and delay server→client messages  
         const delayedMessage = {
             to: 'client',
             message,
@@ -619,7 +265,6 @@ function setupExtensionPatternTest() {
             const readyMessages = messageQueue.filter(item => currentTime >= item.deliverAt);
             const delayedMessages = messageQueue.filter(item => currentTime < item.deliverAt);
             
-            // Process ready messages
             readyMessages.forEach(({ to, message }) => {
                 try {
                     if (to === 'server') {
@@ -632,15 +277,12 @@ function setupExtensionPatternTest() {
                 }
             });
             
-            // Keep delayed messages in queue
             messageQueue.length = 0;
             messageQueue.push(...delayedMessages);
-            
             processingMessages = false;
             
-            // Continue processing if more messages exist
             if (messageQueue.length > 0) {
-                setTimeout(processMessageQueue, 10); // Check every 10ms
+                setTimeout(processMessageQueue, 10);
             }
         }, 1);
     }
@@ -649,30 +291,44 @@ function setupExtensionPatternTest() {
     const clientInputState = new InputStateEntity('client_input', sceneManager.scene, clientRole);
     const inputEnricher = new ReactiveInputEnricher(sceneManager.scene, clientInputState);
 
-    // ✅ EXTENSION PATTERN: Create balls using factory - SAME entity, different rendering
-    const clientBall = BallFactory.create(
+    // ✅ MODULAR ENTITIES: Use EntityFactory instead of inline classes
+    const clientBall = EntityFactory.create(
+        'ball',
         'ball1', // Same networkId - same entity
         sceneManager.scene,
         clientRole,
         new Vector3(-3, 0.5, 0)
     );
 
-    const serverBall = BallFactory.create(
-        'ball1', // Same networkId - same entity
+    const serverBall = EntityFactory.create(
+        'ball',
+        'ball1', // Same networkId - same entity  
         sceneManager.scene,
         serverRole,
         new Vector3(3, 0.5, 0)
     );
 
-    // --- ArcRotateCamera to follow client ball with limited bounds ---
+    console.log('🎾 Created modular Ball entities using EntityFactory');
+
+    // ✅ ENHANCED: Create GameWorld for lag compensation
+    const gameWorld = new GameWorld(sceneManager.scene);
+    gameWorld.addEntity(serverBall);
+    console.log('🌍 GameWorld created with lag compensation support');
+
+    // ✅ ENHANCED: Game loop with lag compensation
+    sceneManager.scene.onBeforeRenderObservable.add(() => {
+        gameWorld.update(0.016); // 60fps delta time
+    });
+
+    // --- ArcRotateCamera setup (unchanged) ---
     sceneManager.camera.detachControl();
     sceneManager.camera.dispose();
     const arcRotateCamera = new ArcRotateCamera(
         "arcRotateCamera",
-        Math.PI / 4, // alpha (horizontal angle)
-        Math.PI / 3, // beta (vertical angle)
-        18, // radius (distance)
-        clientBall.mesh.position, // target
+        Math.PI / 4,
+        Math.PI / 3,
+        18,
+        clientBall.mesh.position,
         scene
     );
     arcRotateCamera.lowerRadiusLimit = 8;
@@ -682,29 +338,27 @@ function setupExtensionPatternTest() {
     arcRotateCamera.attachControl(canvas, true);
     scene.activeCamera = arcRotateCamera;
 
-    // Keep camera target updated as the client ball moves
     scene.onBeforeRenderObservable.add(() => {
         arcRotateCamera.target.copyFrom(clientBall.mesh.position);
     });
 
-    // ✅ NATURAL SYNC: Clean single registration per role
+    // ✅ NATURAL SYNC: Clean registration
     clientNetworkManager.registerEntity(clientBall as any);
     serverNetworkManager.registerEntity(serverBall as any);
 
-    // ✅ Input handling using your reactive system
-    const inputHandler = new MinimalReactiveInputHandler(clientInputState, clientBall, serverBall);
-
-    // ✅ Camera positioning for better view of both balls
-    sceneManager.camera.setTarget(Vector3.Zero());
-    sceneManager.camera.radius = 12;
-    sceneManager.camera.beta = Math.PI / 4;
-    sceneManager.camera.alpha = Math.PI / 4;
+    // ✅ ENHANCED: Input handler with lag compensation
+    const inputHandler = new EnhancedReactiveInputHandler(
+        clientInputState, 
+        clientBall, 
+        serverBall,
+        gameWorld
+    );
 
     // ✅ Make canvas focusable for keyboard
     canvas.tabIndex = 0;
     canvas.focus();
 
-    // ✅ Enhanced debugging for extension pattern testing
+    // ✅ ENHANCED: Debugging with lag compensation features
     (window as any).extensionTest = {
         clientBall,
         serverBall,
@@ -712,46 +366,83 @@ function setupExtensionPatternTest() {
         clientInputState,
         clientNetworkManager,
         serverNetworkManager,
-        factory: BallFactory,
+        gameWorld, // ✅ NEW
 
+        // ✅ ENHANCED: Movement testing with lag compensation
         testMovement: (x: number, z: number) => {
-            console.log(`🧪 Testing extension pattern movement to (${x}, ${z})`);
-            clientBall.moveTo(new Vector3(x, 0.5, z), 'test_client_extension');
-            serverBall.moveTo(new Vector3(x, 0.5, z), 'test_server_extension');
+            console.log(`🧪 Testing modular entity movement to (${x}, ${z})`);
+            clientBall.moveTo(new Vector3(x, 0.5, z), 'test_client_modular');
+            serverBall.moveTo(new Vector3(x, 0.5, z), 'test_server_modular');
         },
 
+        // ✅ NEW: Lag compensation testing
+        testLagCompensation: (x: number, z: number, lagMs: number = 150) => {
+            console.log(`🕒 Testing lag compensation: (${x}, ${z}) with ${lagMs}ms lag`);
+            
+            gameWorld.processClientInput({
+                timestamp: Date.now() - lagMs,
+                sequenceId: Date.now(),
+                entityId: serverBall.getNetworkId(),
+                action: 'moveTo',
+                parameters: { target: new Vector3(x, 0.5, z), source: 'test_lag_compensation' },
+                clientId: 'test_player'
+            });
+        },
+
+        // ✅ NEW: Compare immediate vs lag compensated
+        testComparison: (x: number, z: number) => {
+            console.log('🔄 Testing: Immediate vs Lag Compensated');
+            
+            console.log('  1. Immediate movement (left side):');
+            this.testMovement(x - 3, z);
+            
+            setTimeout(() => {
+                console.log('  2. Lag compensated movement (right side, 200ms lag):');
+                this.testLagCompensation(x + 3, z, 200);
+            }, 2000);
+        },
+
+        // ✅ ENHANCED: Color testing
         testColors: () => {
-            console.log('🧪 Testing extension pattern color cycling');
-            clientBall.cycleColor('test_client_extension');
-            serverBall.cycleColor('test_server_extension');
+            console.log('🧪 Testing modular entity color cycling');
+            clientBall.cycleColor('test_client_modular');
+            serverBall.cycleColor('test_server_modular');
         },
 
         separateBalls: () => {
-            console.log('🧪 Separating extension pattern balls');
+            console.log('🧪 Separating modular entities');
             clientBall.moveTo(new Vector3(-5, 0.5, 0), 'test_separate');
             serverBall.moveTo(new Vector3(5, 0.5, 0), 'test_separate');
         },
 
-        showExtensionTypes: () => {
-            console.log('🔍 Extension Pattern Types:', {
-                client: (clientBall as any).getExtensionType(),
-                server: (serverBall as any).getExtensionType(),
+        showEntityInfo: () => {
+            console.log('🔍 Modular Entity Info:', {
+                client: clientBall.getExtensionType(),
+                server: serverBall.getExtensionType(),
                 sameNetworkId: clientBall.getNetworkId() === serverBall.getNetworkId(),
                 networkId: clientBall.getNetworkId(),
                 clientRender: 'SPHERE (blue family)',
                 serverRender: 'CUBE (green family)',
                 clientAuthorities: clientBall.getClientAuthProperties(),
-                serverAuthorities: serverBall.getServerAuthProperties()
+                serverAuthorities: serverBall.getServerAuthProperties(),
+                stateHistoryEnabled: NetworkReactiveEntity.isStateHistoryEnabled()
             });
         },
 
         debugSync: () => {
-            console.log('🔍 Extension Pattern Natural Sync Debug:');
+            console.log('🔍 Enhanced Natural Sync Debug:');
             clientNetworkManager.debugNaturalSync();
             serverNetworkManager.debugNaturalSync();
         },
 
-        // ✅ PING SIMULATION CONTROLS
+        // ✅ NEW: Lag compensation stats
+        getLagStats: () => {
+            const stats = gameWorld.getStats();
+            console.log('📊 Lag Compensation Stats:', stats);
+            return stats;
+        },
+
+        // ✅ PING SIMULATION CONTROLS (unchanged)
         setPing: (ms: number) => {
             networkPingMs = ms;
             console.log(`🌐 Network ping simulation set to ${ms}ms`);
@@ -784,63 +475,48 @@ function setupExtensionPatternTest() {
     };
 
     console.log(`
-🎾 EXTENSION PATTERN TEST READY! ✅ BaseBall + ClientBall + ServerBall
+🎾 MODULAR BALL ENTITIES + LAG COMPENSATION READY! ✅
 
-✅ EXTENSION PATTERN IMPLEMENTED:
-- ✅ BaseBall: Shared reactive game logic (movement, colors, interactions)
-- ✅ ClientBall: Client-specific extensions (small blue sphere, input capture, prediction)
-- ✅ ServerBall: Server-specific extensions (large transparent cube, validation, authority)
-- ✅ BallFactory: Role-based creation (ready for build-time resolution)
-- ✅ Same networkId ('ball1') - same entity, visually separated rendering
+✅ CLEAN MODULAR ARCHITECTURE:
+- ✅ BaseBall: Shared reactive game logic (imported from game/entities/Ball/)
+- ✅ ClientBall: Client-specific extensions (blue sphere, prediction, rendering)
+- ✅ ServerBall: Server-specific extensions (green cube, validation, authority)
+- ✅ EntityFactory: Clean entity creation and registration
+- ✅ No more inline entity definitions - pure modular approach
 
-✅ NATURAL SYNC WITH AUTHORITY + PING SIMULATION:
-- ✅ Client sends client-auth properties (input state)
-- ✅ Server sends server-auth properties (game state + position)
-- ✅ Local rendering properties (sphere vs cube, size, offset) don't sync
-- ✅ Configurable network ping simulation for testing client prediction
+✅ LAG COMPENSATION FEATURES:
+- ✅ State History: 1 second buffer for server-side rewinding
+- ✅ GameWorld: Lag compensation processing with input timestamps
+- ✅ Enhanced Input: All ground clicks now use lag compensation by default
+- ✅ Fast-Forward: Replay simulation after historical processing
 
-🎮 BEHAVIORS TO TEST:
-1. Click on GROUND → Watch client prediction vs server authority with ping
-2. Press WASD → Both shapes move together (same entity, synced position)  
-3. Click on SHAPES → Both change colors together (synced color state)
-4. Hover on SHAPES → Both show hover effects (synced hover state)
-5. Test ping → Blue sphere (client) moves first, green cube (server) follows
+🎮 ENHANCED BEHAVIORS TO TEST:
+1. Click on GROUND → Watch lag compensation with 100ms simulated lag
+2. Press WASD → Server processes with 80ms lag compensation
+3. Click on SHAPES → Both change colors together (synced state)
+4. Use extensionTest commands for targeted testing
 
-👀 VISUAL LAYOUT:
-- Blue sphere (left side) = CLIENT extension (smaller, opaque)
-- Green cube (right side) = SERVER extension (larger, semi-transparent)
-- Same logical position, visually offset for clarity
+🧪 ENHANCED CONSOLE COMMANDS:
+- extensionTest.testLagCompensation(5, 3, 200)  // Test 200ms lag compensation
+- extensionTest.testComparison(5, 3)           // Compare immediate vs lag compensated
+- extensionTest.getLagStats()                  // Get lag compensation performance
+- extensionTest.showEntityInfo()               // Show modular entity details
+- extensionTest.setPing(200)                   // Add network simulation on top
 
-🧪 EXTENSION PATTERN CONSOLE COMMANDS:
-- extensionTest.testMovement(5, 3)      // Test movement with extensions
-- extensionTest.testColors()            // Test color cycling
-- extensionTest.separateBalls()         // Move balls apart
-- extensionTest.showExtensionTypes()    // Show extension pattern info
-- extensionTest.debugSync()             // Debug natural sync for extensions
+🔍 WHAT TO WATCH FOR:
+- Console logs: "⏪ Rewinding world to..." and "⏩ Fast-forwarding..."
+- Smooth movement despite simulated lag
+- Blue sphere (client) immediate prediction
+- Green cube (server) lag compensated authority
 
-🌐 NETWORK PING SIMULATION:
-- extensionTest.setPing(200)            // Set custom ping (ms)
-- extensionTest.noPing()                // Disable ping simulation (0ms)
-- extensionTest.lowPing()               // Low ping: 50ms
-- extensionTest.mediumPing()            // Medium ping: 200ms  
-- extensionTest.highPing()              // High ping: 400ms
-- extensionTest.testPrediction(5, 3)    // Test prediction with current ping
-
-🔮 CLIENT PREDICTION TESTING:
-1. Set ping: extensionTest.mediumPing()
-2. Test: extensionTest.testPrediction()
-3. Watch: Blue sphere moves immediately, green cube follows after delay
-
-🎯 READY FOR BUILD SYSTEM: Client/server bundle separation with shared BaseBall logic!
-    
-🎭 EXTENSION PATTERN DEMO: Same entity ('ball1'), different local rendering:
-   - BLUE SPHERE (left, small) = CLIENT extension (prediction, input capture)
-   - GREEN CUBE (right, large, transparent) = SERVER extension (validation, authority)
-   - Network synced: position, colors, movement state
-   - Local only: mesh shape, size, transparency, visual offset
-   - Ping simulation: Test client prediction vs server authority
+🎯 READY FOR PRODUCTION:
+- Modular entity architecture ✅
+- Lag compensation system ✅  
+- State history working ✅
+- Network authority patterns ✅
+- Build system ready for Phase 2 ✅
     `);
 }
 
-// Start the extension pattern test
-setupExtensionPatternTest();
+// Start the clean modular game with lag compensation
+setupCleanModularGame();

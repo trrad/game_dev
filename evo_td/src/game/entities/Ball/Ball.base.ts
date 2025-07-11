@@ -1,8 +1,8 @@
 // src/game/entities/Ball/Ball.base.ts
 
-import { ExtendableEntity } from '@engine/core/ExtendableEntity';
+import { ExtendableEntity } from '../../../engine/core/ExtendableEntity';
 import { Vector3, StandardMaterial, Color3, ActionManager, ExecuteCodeAction } from '@babylonjs/core';
-import { EntitySchema } from '@engine/networking/NetworkTypes';
+import { EntitySchema } from '../../../engine/networking/NetworkTypes';
 import { BALL_SCHEMA } from './Ball.schema';
 
 /**
@@ -64,16 +64,16 @@ export abstract class BaseBall extends ExtendableEntity {
      * @param deltaTime - Time since last update in seconds
      */
     public updateGameLogic(deltaTime: number): void {
-        console.log(`🎮 BaseBall.updateGameLogic called with deltaTime: ${deltaTime}`);
 
-        // Update movement
+        // ADD ENTRY LOGGING
+        console.log(`🎮 BaseBall.updateGameLogic called with deltaTime: ${deltaTime}`);
+        console.log(`  Entity: ${this.getNetworkId()}, Type: ${this.getExtensionType()}`);
+
+        // Update movement - this is the core game logic
         this.updateMovement(deltaTime);
         
         // Future: Add other game logic updates here
-        // - Status effects
-        // - Buffs/debuffs
-        // - AI behavior
-        // - etc.
+        console.log(`  Movement update completed`);
     }
 
     /**
@@ -87,6 +87,11 @@ export abstract class BaseBall extends ExtendableEntity {
         const position = this.getVectorProperty('position');
         const targetPosition = this.getVectorProperty('targetPosition');
         const moveSpeed = this.getNumericProperty('moveSpeed');
+
+        // Add this helper function to BaseBall if it doesn't exist
+        function formatVector(v: Vector3): string {
+            return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
+        }                
 
         console.log(`🔍 updateMovement called: deltaTime=${deltaTime}`);
         console.log(`  isMoving: ${isMoving?.getValue()}`);
@@ -218,12 +223,6 @@ export abstract class BaseBall extends ExtendableEntity {
      * Override in extensions for different color schemes
      */
     protected abstract getColorForState(state: number): Color3;
-
-    // Add this helper function to BaseBall if it doesn't exist
-    private formatVector(v: Vector3): string {
-        return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
-    }
-
 
 
     // ============================================================

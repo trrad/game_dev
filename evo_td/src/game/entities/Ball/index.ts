@@ -1,6 +1,6 @@
 // src/game/entities/Ball/index.ts
 
-import { EntityFactory } from '@engine/core/EntityFactory';
+import { EntityFactory } from '../../../engine/core/EntityFactory';
 
 // Export schema
 export { BALL_SCHEMA } from './Ball.schema';

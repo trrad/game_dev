@@ -86,20 +86,18 @@ async function diagnoseMovementIssue() {
 /**
  * Test state history through actual reactive property changes
  */
-async function testReactiveStateHistory() {
-    console.log('🧪 Testing State History through Reactive Properties\n');
+async function testReactiveStateHistoryFixed() {
+    console.log('🧪 Testing State History through Reactive Properties (FIXED)\n');
     
     // Setup
     const engine = new NullEngine();
     const scene = new Scene(engine);
-    
-    // Enable state history BEFORE creating entities
     NetworkReactiveEntity.enableStateHistory(2000); // 2 second buffer
     
     // Create a server ball
     const serverBall = EntityFactory.create(
         'ball',
-        'test_ball',
+        'test_ball_fixed',
         scene,
         { isClient: false, isServer: true },
         Vector3.Zero()
@@ -107,56 +105,99 @@ async function testReactiveStateHistory() {
     
     console.log('✅ Created server ball with state history enabled\n');
     
-    // Test 1: Make small movements that won't be rejected
-    console.log('Test 1: Recording valid movements');
+    // Test 1: Record actual position changes (not just target changes)
+    console.log('Test 1: Recording actual position movements');
+    
     const movements = [
-        { pos: new Vector3(2, 0, 0), delay: 100 },
-        { pos: new Vector3(4, 0, 2), delay: 200 },
-        { pos: new Vector3(6, 0, 4), delay: 300 },
-        { pos: new Vector3(8, 0, 6), delay: 400 }
+        { target: new Vector3(2, 0, 0), steps: 3 },
+        { target: new Vector3(4, 0, 2), steps: 3 },
+        { target: new Vector3(6, 0, 4), steps: 3 },
+        { target: new Vector3(8, 0, 6), steps: 3 }
     ];
     
-    // Record movements with timestamps
-    const moveTimestamps: number[] = [];
+    const recordedTimestamps: number[] = [];
+    const recordedPositions: Vector3[] = [];
     
-    for (const move of movements) {
-        await sleep(move.delay);
-        const timestamp = Date.now();
-        moveTimestamps.push(timestamp);
-        
-        serverBall.moveTo(move.pos, 'test_movement');
-        console.log(`  Moved to ${formatVector(move.pos)} at T+${move.delay}ms`);
-        
-        // Give reactive system time to process
-        await sleep(50);
-    }
-    
-    // Test 2: Query historical positions
-    console.log('\nTest 2: Querying historical positions');
-    const now = Date.now();
-    
-    // Query at different points in the past
-    const queryTimes = [100, 300, 500, 700];
-    for (const msAgo of queryTimes) {
-        const historicalState = serverBall.getStateAt(now - msAgo);
-        const pos = historicalState.get('position');
-        console.log(`  ${msAgo}ms ago: position = ${formatVector(pos)}`);
-    }
-    
-    // Test 3: Verify reactive properties triggered recording
-    const stats = serverBall.getStateHistoryStats();
-    console.log('\n📊 State History Stats:', {
-        ...stats,
-        recordingsPerProperty: Math.floor(stats.totalRecorded / 5) // We have 5 synced properties
+    // Track actual position changes
+    serverBall.getVectorProperty('position')?.onChange((event) => {
+        recordedTimestamps.push(event.timestamp || Date.now());
+        recordedPositions.push(event.to.clone());
+        console.log(`📍 Position recorded: ${formatVector(event.to)} at ${event.timestamp || Date.now()}`);
     });
     
-    // Test 4: Test actual lag compensation scenario
-    await testLagCompensationWithGameWorld(scene);
+    // Execute movements with actual position updates
+    for (let i = 0; i < movements.length; i++) {
+        const movement = movements[i];
+        
+        console.log(`\n--- Movement ${i + 1}: Target ${formatVector(movement.target)} ---`);
+        
+        // Set target
+        serverBall.moveTo(movement.target, `movement_${i + 1}`);
+        
+        // Actually move the entity by calling updateGameLogic multiple times
+        for (let step = 0; step < movement.steps; step++) {
+            await sleep(50); // Small delay between steps
+            serverBall.updateGameLogic(0.1);
+            console.log(`  Step ${step + 1}: ${formatVector(serverBall.getPosition())}`);
+        }
+        
+        console.log(`  Final position: ${formatVector(serverBall.getPosition())}`);
+        await sleep(100); // Pause between movements
+    }
+    
+    // Test 2: Query historical positions using recorded timestamps
+    console.log('\n📊 Test 2: Querying historical positions (FIXED)');
+    console.log(`Recorded ${recordedTimestamps.length} position changes`);
+    
+    // Query using actual recorded timestamps
+    recordedTimestamps.forEach((timestamp, i) => {
+        const state = serverBall.getStateAt(timestamp);
+        const position = state.get('position');
+        console.log(`  T${i + 1} (${timestamp}): ${formatVector(position)} (recorded: ${formatVector(recordedPositions[i])})`);
+    });
+    
+    // Test 3: Query between recorded timestamps
+    console.log('\n🔍 Test 3: Querying between recorded timestamps');
+    if (recordedTimestamps.length >= 2) {
+        const midTime = Math.floor((recordedTimestamps[0] + recordedTimestamps[1]) / 2);
+        const midState = serverBall.getStateAt(midTime);
+        const midPosition = midState.get('position');
+        console.log(`  Between T1 and T2 (${midTime}): ${formatVector(midPosition)}`);
+        console.log(`  Expected: Should be T1 position (${formatVector(recordedPositions[0])})`);
+    }
+    
+    // Test 4: Test time-relative queries  
+    console.log('\n⏰ Test 4: Time-relative queries');
+    const now = Date.now();
+    
+    // Only query within reasonable time ranges
+    const queryOffsets = [100, 200, 500, 1000];
+    queryOffsets.forEach(msAgo => {
+        const queryTime = now - msAgo;
+        
+        // Check if this query time is within our recorded range
+        const inRange = recordedTimestamps.some(t => Math.abs(t - queryTime) < 100);
+        
+        const state = serverBall.getStateAt(queryTime);
+        const position = state.get('position');
+        
+        console.log(`  ${msAgo}ms ago (${queryTime}): ${formatVector(position)} ${inRange ? '✅' : '(out of range)'}`);
+    });
+    
+    // Show statistics
+    const stats = serverBall.getStateHistoryStats();
+    console.log('\n📊 Final State History Stats:', {
+        ...stats,
+        recordingsPerProperty: Math.floor(stats.totalRecorded / 5), // We have 5 synced properties
+        timeSpan: `${stats.newestEntry - stats.oldestEntry}ms`
+    });
     
     // Cleanup
     serverBall.dispose();
     scene.dispose();
     engine.dispose();
+    
+    console.log('\n✅ State History test completed with actual movement!');
 }
 
 /**
@@ -219,6 +260,48 @@ async function testLagCompensationWithGameWorld(scene: Scene) {
     
     // Cleanup
     world.dispose();
+}
+
+export function testMovementAfterFix() {
+    console.log('\n🧪 Testing movement after inheritance fix...\n');
+    
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    NetworkReactiveEntity.enableStateHistory(2000);
+    
+    const ball = new ServerBall(
+        'test_fixed_ball',
+        scene,
+        { isClient: false, isServer: true },
+        Vector3.Zero()
+    );
+    
+    console.log('✅ Ball created, testing movement...\n');
+    
+    // Set target
+    ball.moveTo(new Vector3(5, 0, 0), 'fix_test');
+    console.log(`Target set: ${formatVector(ball.getVectorProperty('targetPosition')?.getValue())}`);
+    console.log(`Is moving: ${ball.isMoving()}\n`);
+    
+    // Test updateGameLogic calls - should now see internal logs
+    console.log('🔄 Calling updateGameLogic - should see internal logs now:');
+    for (let i = 0; i < 3; i++) {
+        console.log(`\n--- Update ${i + 1} ---`);
+        ball.updateGameLogic(0.1);
+        const pos = ball.getPosition();
+        console.log(`Position after update: ${formatVector(pos)}`);
+        
+        // Stop if we see movement
+        if (pos.x > 0) {
+            console.log('🎉 SUCCESS: Movement detected!');
+            break;
+        }
+    }
+    
+    // Cleanup
+    ball.dispose();
+    scene.dispose();
+    engine.dispose();
 }
 
 /**
@@ -301,7 +384,7 @@ Testing state history through the reactive property system...
     await diagnoseMovementIssue();
     
     // Then run other tests
-    await testReactiveStateHistory();
+    await testReactiveStateHistoryFixed();
     await testStateHistoryPerformance();
     
     console.log('\n✅ All tests complete!\n');

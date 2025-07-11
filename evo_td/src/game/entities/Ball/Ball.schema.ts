@@ -1,6 +1,6 @@
 // src/game/entities/Ball/Ball.schema.ts
 
-import { EntitySchema } from '@engine/networking/NetworkTypes';
+import { EntitySchema } from '../../../engine/networking/NetworkTypes';
 
 /**
  * Ball Entity Schema

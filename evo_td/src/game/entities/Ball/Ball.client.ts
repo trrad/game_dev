@@ -3,7 +3,7 @@
 import { BaseBall } from './Ball.base';
 import { MeshBuilder, StandardMaterial, Color3 } from '@babylonjs/core';
 import { Scene, Vector3 } from '@babylonjs/core';
-import { NetworkRole } from '@engine/networking/NetworkTypes';
+import { NetworkRole } from '../../../engine/networking/NetworkTypes';
 
 /**
  * ClientBall - Client-side extension of Ball entity

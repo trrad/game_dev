@@ -3,7 +3,7 @@
 import { BaseBall } from './Ball.base';
 import { MeshBuilder, StandardMaterial, Color3 } from '@babylonjs/core';
 import { Scene, Vector3 } from '@babylonjs/core';
-import { NetworkRole } from '@engine/networking/NetworkTypes';
+import { NetworkRole } from '../../../engine/networking/NetworkTypes';
 
 /**
  * ServerBall - Server-side extension of Ball entity
@@ -214,12 +214,30 @@ export class ServerBall extends BaseBall {
 
     /**
      * Server-side game logic update
+     * ✅ FIXED: Now calls parent implementation for shared movement logic
      */
     public updateGameLogic(deltaTime: number): void {
+        console.log(`🖥️ ServerBall.updateGameLogic called with deltaTime: ${deltaTime}`);
+        
+        // ✅ CRITICAL: Call parent implementation for shared movement logic
+        super.updateGameLogic(deltaTime);
+        
+        // Then add server-specific updates
+        this.updateServerSpecificLogic(deltaTime);
+    }
+
+    /**
+     * Server-specific game logic (separated for clarity)
+     */
+    private updateServerSpecificLogic(deltaTime: number): void {
         // TODO: Server-specific updates
-        // - AI movement
-        // - State transitions
+        // - AI movement decisions
+        // - State validation
         // - Event triggers
+        // - Anti-cheat checks
+        
+        // For debugging, uncomment this:
+        // console.log(`🖥️ Server-specific logic completed for ${this.getNetworkId()}`);
     }
 
     /**
