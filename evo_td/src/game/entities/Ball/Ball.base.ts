@@ -1,103 +1,179 @@
 // src/game/entities/Ball/Ball.base.ts
-
 import { ExtendableEntity } from '../../../engine/core/ExtendableEntity';
 import { Vector3, StandardMaterial, Color3, ActionManager, ExecuteCodeAction } from '@babylonjs/core';
 import { EntitySchema } from '../../../engine/networking/NetworkTypes';
 import { BALL_SCHEMA } from './Ball.schema';
+import { InputStateEntity, ClickEvent } from '../../../engine/inputs/InputStateEntity';
+import { GameWorld } from '../../../game/systems/GameWorld';
 
 /**
- * BaseBall - Shared game logic for Ball entities
+ * Ball - Base class with ALL game logic including input handling
  * 
- * Contains all the reactive behaviors that work identically on client and server.
- * Visual differences are handled by client/server extensions.
+ * Both client and server run this exact same code:
+ * - Client: Immediate response (prediction)
+ * - Server: Delayed response with lag compensation (authority)
  */
 export abstract class Ball extends ExtendableEntity {
-    // Material is typed for better IDE support
     public material: StandardMaterial | null = null;
+    private inputStateObservers: (() => void)[] = [];
+    protected gameWorld?: GameWorld;
+    protected inputState?: InputStateEntity;
 
-    /**
-     * Return the Ball schema
-     */
     protected getSchema(): EntitySchema {
         return BALL_SCHEMA;
     }
 
-    /**
-     * Set up shared reactive behaviors
-     * These work the same on both client and server
-     */
     protected setupSharedBehaviors(): void {
-        // ✅ SHARED: Position changes update mesh
+        // Position changes update mesh (if present)
         this.observePosition();
 
-        // ✅ SHARED: Color state changes update visual
+        // Color state changes update visual
         this.observeProperty<number>('colorState', 
             (newState, oldState, source) => {
                 this.updateColor();
-            }, 
-            true // Log changes
+                console.log(`🎨 ${this.getExtensionType()} color: ${oldState} → ${newState} [${source}]`);
+            }
         );
 
-        // ✅ SHARED: Hover state changes update visual
+        // Hover state changes update visual
         this.observeProperty<boolean>('isHovered',
             (isHovered, wasHovered, source) => {
                 this.updateColor();
-            },
-            true // Log changes
+            }
         );
 
-        // ✅ SHARED: Target position changes trigger movement
+        // Target position changes trigger movement
         const targetPosition = this.getVectorProperty('targetPosition');
         targetPosition?.onChange((event) => {
             this.getBooleanProperty('isMoving')?.setTrue('movement_start');
             console.log(`🎯 ${this.getExtensionType()} target: (${event.to.x.toFixed(1)}, ${event.to.z.toFixed(1)}) [${event.source}]`);
         });
-
-        // NOTE: Movement update is NOT set up here anymore
-        // It will be called by the game loop (client render loop or server tick)
     }
 
     /**
-     * Update game logic - called by game loop
-     * This is the main update method for all game logic that needs to run every frame/tick
-     * 
-     * @param deltaTime - Time since last update in seconds
+     * Set the game world for lag compensation (server only uses this)
+     */
+    public setGameWorld(gameWorld: GameWorld): void {
+        this.gameWorld = gameWorld;
+    }
+
+    /**
+     * Observe input state - CORE GAME LOGIC that runs on both client and server
+     * Client: Processes immediately for prediction
+     * Server: Processes with lag compensation for authority
+     */
+    public observeInputState(inputState: InputStateEntity): void {
+        this.inputState = inputState;
+        console.log(`🎮 ${this.getExtensionType()} ${this.getNetworkId()}: Observing input state`);
+        
+        // Observe click events (ground clicks move the ball)
+        const clickObserver = inputState.getCollectionProperty('recentClicks')
+            ?.itemAddedObservable.add((event) => {
+                const clickEvent = event.value as ClickEvent;
+                
+                // Only process ground clicks (no entity picked)
+                if (!clickEvent.pickedEntityId || clickEvent.pickedEntityId === '') {
+                    console.log(`📍 ${this.getExtensionType()}: Processing ground click at (${clickEvent.worldPosition.x.toFixed(1)}, ${clickEvent.worldPosition.z.toFixed(1)})`);
+                    
+                    if (this.gameWorld && this.getRole().isServer) {
+                        // Server: Use lag compensation
+                        this.gameWorld.processClientInput({
+                            timestamp: clickEvent.timestamp,
+                            sequenceId: clickEvent.sequenceId,
+                            entityId: this.getNetworkId(),
+                            action: 'moveTo',
+                            parameters: { target: clickEvent.worldPosition, source: 'input_click' },
+                            clientId: 'main_client'
+                        });
+                    } else {
+                        // Client: Direct update for prediction
+                        this.moveTo(clickEvent.worldPosition, 'client_prediction_click');
+                    }
+                } 
+                // Process entity clicks (color cycling)
+                else if (clickEvent.pickedEntityId === this.getNetworkId()) {
+                    console.log(`🎨 ${this.getExtensionType()}: Entity clicked for color cycle`);
+                    this.cycleColor('input_entity_click');
+                }
+            });
+            
+        if (clickObserver) {
+            this.inputStateObservers.push(() => clickObserver.remove());
+        }
+        
+        // Observe keyboard state for WASD movement
+        const keysObserver = inputState.getCollectionProperty('keysPressed')
+            ?.itemAddedObservable.add((event) => {
+                const keyCode = event.value as string;
+                
+                const moveDistance = 2.0;
+                let offset = Vector3.Zero();
+                
+                switch (keyCode) {
+                    case 'KeyW': offset.z = moveDistance; break;
+                    case 'KeyS': offset.z = -moveDistance; break;
+                    case 'KeyA': offset.x = -moveDistance; break;
+                    case 'KeyD': offset.x = moveDistance; break;
+                    default: return;
+                }
+                
+                console.log(`⌨️ ${this.getExtensionType()}: Key ${keyCode} → move by (${offset.x}, ${offset.z})`);
+                
+                const currentPos = this.getVectorProperty('position')?.getValue() || Vector3.Zero();
+                const newTarget = currentPos.add(offset);
+                
+                if (this.getRole().isServer && this.gameWorld) {
+                    // Server: Use lag compensation for keyboard input too
+                    this.gameWorld.processClientInput({
+                        timestamp: Date.now(), // Could get from input event
+                        sequenceId: Date.now(),
+                        entityId: this.getNetworkId(),
+                        action: 'moveTo',
+                        parameters: { target: newTarget, source: 'input_keyboard' },
+                        clientId: 'main_client'
+                    });
+                } else {
+                    // Client: Direct update for prediction
+                    this.moveTo(newTarget, `client_prediction_key_${keyCode}`);
+                }
+            });
+            
+        if (keysObserver) {
+            this.inputStateObservers.push(() => keysObserver.remove());
+        }
+
+        // Observe hover state from enriched input
+        const hoverObserver = inputState.getProperty('currentlyPickedEntity')
+            ?.onChange((event) => {
+                const isHovered = event.to === this.getNetworkId();
+                this.getBooleanProperty('isHovered')?.set(isHovered, 'input_hover');
+            });
+
+        if (hoverObserver) {
+            this.inputStateObservers.push(() => hoverObserver.remove());
+        }
+    }
+
+    /**
+     * Update game logic - runs on BOTH client and server at fixed tick rate
      */
     public updateGameLogic(deltaTime: number): void {
-
-        // ADD ENTRY LOGGING
-        console.log(`🎮 BaseBall.updateGameLogic called with deltaTime: ${deltaTime}`);
-        console.log(`  Entity: ${this.getNetworkId()}, Type: ${this.getExtensionType()}`);
-
-        // Update movement - this is the core game logic
         this.updateMovement(deltaTime);
-        
-        // Future: Add other game logic updates here
-        console.log(`  Movement update completed`);
     }
 
     /**
-     * Movement interpolation logic
-     * Core game logic that runs on both client and server
-     * 
-     * @param deltaTime - Time since last update in seconds
+     * Update only visual aspects - runs at render framerate on client only
      */
+    public updateVisuals(deltaTime: number): void {
+        // Override in client extension for smooth visual interpolation
+        // Could include: particle effects, animation blending, etc.
+    }
+
     private updateMovement(deltaTime: number): void {
         const isMoving = this.getBooleanProperty('isMoving');
         const position = this.getVectorProperty('position');
         const targetPosition = this.getVectorProperty('targetPosition');
         const moveSpeed = this.getNumericProperty('moveSpeed');
-
-        // Add this helper function to BaseBall if it doesn't exist
-        function formatVector(v: Vector3): string {
-            return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
-        }                
-
-        console.log(`🔍 updateMovement called: deltaTime=${deltaTime}`);
-        console.log(`  isMoving: ${isMoving?.getValue()}`);
-        console.log(`  hasPosition: ${!!position}`);
-        console.log(`  hasTargetPosition: ${!!targetPosition}`);
-        console.log(`  moveSpeed: ${moveSpeed?.getValue()}`);
 
         if (!isMoving?.isTrue() || !position || !targetPosition || !moveSpeed) return;
 
@@ -105,15 +181,8 @@ export abstract class Ball extends ExtendableEntity {
         const targetPos = targetPosition.getValue();
         const speed = moveSpeed.getValue();
 
-        console.log(`  currentPos: ${formatVector(currentPos)}`);
-        console.log(`  targetPos: ${formatVector(targetPos)}`);
-        console.log(`  speed: ${speed}`);
-
         const direction = targetPos.subtract(currentPos);
         const distance = direction.length();
-
-        console.log(`  direction: ${formatVector(direction)}`);
-        console.log(`  distance: ${distance}`);
 
         if (distance < 0.1) {
             // Reached target
@@ -124,81 +193,19 @@ export abstract class Ball extends ExtendableEntity {
             // Move towards target
             const movement = direction.normalize().scale(speed * deltaTime);
             const newPos = currentPos.add(movement);
-            
-            console.log(`  movement: ${formatVector(movement)}`);
-            console.log(`  newPos: ${formatVector(newPos)}`);
-            
             position.set(newPos, 'movement_interpolation');
-            console.log(`  position.set() called`);
         }
     }
-    /**
-     * Set up mesh action handlers
-     * Called by extensions after creating their mesh
-     */
+
     protected setupMeshActions(): void {
         if (!this.mesh || !this.scene) return;
 
         this.mesh.actionManager = new ActionManager(this.scene);
         
-        // Click to cycle colors
-        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
-            ActionManager.OnLeftPickTrigger,
-            () => this.handleColorCycleClick()
-        ));
-        
-        // Hover effects
-        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
-            ActionManager.OnPointerOverTrigger,
-            () => this.handleHoverEnter()
-        ));
-        
-        this.mesh.actionManager.registerAction(new ExecuteCodeAction(
-            ActionManager.OnPointerOutTrigger,
-            () => this.handleHoverExit()
-        ));
+        // Mesh clicks are now handled through input state observation
+        // No direct click handlers needed - Babylon pointer events update InputStateEntity
     }
 
-    /**
-     * Handle color cycle click
-     * Updates color state through reactive property
-     */
-    private handleColorCycleClick(): void {
-        const colorState = this.getNumericProperty('colorState');
-        if (!colorState) return;
-        
-        const currentState = colorState.getValue() || 0;
-        const newState = (currentState + 1) % 3;
-        
-        // Natural sync handles authority automatically
-        colorState.set(newState, `click_color_${this.getExtensionType()}`);
-        console.log(`🎨 ${this.getExtensionType()} color clicked: ${currentState} → ${newState}`);
-    }
-
-    /**
-     * Handle mouse hover enter
-     */
-    private handleHoverEnter(): void {
-        const isHovered = this.getBooleanProperty('isHovered');
-        if (isHovered) {
-            isHovered.setTrue(`hover_enter_${this.getExtensionType()}`);
-        }
-    }
-
-    /**
-     * Handle mouse hover exit
-     */
-    private handleHoverExit(): void {
-        const isHovered = this.getBooleanProperty('isHovered');
-        if (isHovered) {
-            isHovered.setFalse(`hover_exit_${this.getExtensionType()}`);
-        }
-    }
-
-    /**
-     * Update material color based on state
-     * Extensions can override for custom color schemes
-     */
     protected updateColor(): void {
         if (!this.material) return;
 
@@ -208,37 +215,23 @@ export abstract class Ball extends ExtendableEntity {
         const baseColor = this.getColorForState(colorState);
         
         if (isHovered) {
-            // Brighten on hover
             this.material.diffuseColor = baseColor.add(new Color3(0.3, 0.3, 0.3));
         } else {
             this.material.diffuseColor = baseColor;
         }
         
         this.material.emissiveColor = this.material.diffuseColor.scale(0.3);
-        this.material.markDirty();
     }
 
-    /**
-     * Get color for a given state
-     * Override in extensions for different color schemes
-     */
+    // Abstract methods
     protected abstract getColorForState(state: number): Color3;
+    protected abstract getExtensionType(): 'CLIENT' | 'SERVER';
 
-
-    // ============================================================
-    // PUBLIC API
-    // ============================================================
-
-    /**
-     * Move the ball to a target position
-     */
+    // Public API
     public moveTo(target: Vector3, source: string): void {
         this.getVectorProperty('targetPosition')?.set(target, source);
     }
 
-    /**
-     * Cycle through color states
-     */
     public cycleColor(source: string): void {
         const colorState = this.getNumericProperty('colorState');
         const currentState = colorState?.getValue() || 0;
@@ -246,17 +239,17 @@ export abstract class Ball extends ExtendableEntity {
         colorState?.set(newState, source);
     }
 
-    /**
-     * Get current position
-     */
     public getPosition(): Vector3 {
         return this.getVectorProperty('position')?.getValue() || Vector3.Zero();
     }
 
-    /**
-     * Check if entity is currently moving
-     */
     public isMoving(): boolean {
         return this.getBooleanProperty('isMoving')?.isTrue() || false;
+    }
+
+    dispose(): void {
+        this.inputStateObservers.forEach(cleanup => cleanup());
+        this.inputStateObservers = [];
+        super.dispose();
     }
 }

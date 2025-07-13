@@ -6,7 +6,7 @@ import { EntityFactory } from '../../../engine/core/EntityFactory';
 export { BALL_SCHEMA } from './Ball.schema';
 
 // Export base class (for type references)
-export { BaseBall } from './Ball.base';
+export { Ball } from './Ball.base';
 
 // Export extensions based on build target
 // These will be tree-shaken by webpack based on build configuration
