@@ -360,9 +360,16 @@ export abstract class NetworkReactiveEntity extends GameNodeObject {
             if (property) {
                 const value = property.getValue();
                 
-                if (propName === 'position' && this.isVector3Object(value)) {
+                // Special handling for collections
+                if (property instanceof CollectionProperty) {
+                    // Convert Map to plain object for serialization
+                    const collection = property as CollectionProperty<any>;
+                    snapshot[propName] = collection.getSerializableValue();
+                }
+                else if (propName === 'position' && this.isVector3Object(value)) {
                     snapshot[propName] = { x: value.x, y: value.y, z: value.z };
-                } else {
+                } 
+                else {
                     snapshot[propName] = value;
                 }
             }

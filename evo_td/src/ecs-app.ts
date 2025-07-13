@@ -79,7 +79,7 @@ function setupPureReactiveGame() {
     const serverBall = EntityFactory.create(
         'ball',
         'ball1', // Same networkId 
-        null, // Server doesn't need scene
+        sceneManager.scene, // Server doesn't need scene
         serverRole,
         new Vector3(3, 0.5, 0)
     );
@@ -115,9 +115,12 @@ function setupPureReactiveGame() {
     clientNetworkManager.registerEntity(clientInputState as any);
 
     // ✅ CLIENT GAME LOOP: Fixed tick for game logic, native rate for visuals
-    ConfigurableTimers.createTimer(sceneManager.scene, 'gameLogic', () => {
+    const clientGameLogicTimer = ConfigurableTimers.createTimer(sceneManager.scene, 'gameLogic', () => {
+        console.log('⏰ Client game logic tick'); // Debug
         (clientBall as any).updateGameLogic(0.05); // 20Hz like server
     }, 'client_game_logic');
+
+    console.log('✅ Client game logic timer created');
 
     // Visual updates at render rate
     sceneManager.scene.onBeforeRenderObservable.add(() => {
@@ -143,6 +146,17 @@ function setupPureReactiveGame() {
     }
     
     serverGameLoop();
+
+    // After creating the server game loop, add visual updates for server ball:
+    if (serverBall.mesh) {
+        sceneManager.scene.onBeforeRenderObservable.add(() => {
+            // Server ball visual position should track its position property
+            const pos = serverBall.getVectorProperty('position')?.getValue();
+            if (pos && serverBall.mesh) {
+                serverBall.mesh.position.copyFrom(pos);
+            }
+        });
+    }    
 
     // ✅ Camera follows client ball
     setupCamera(sceneManager, clientBall);

@@ -1,6 +1,6 @@
-// src/engine/input/ReactiveInputEnricher.ts - Minimal TypeScript Fixes
+// src/engine/inputs/ReactiveInputEnricher.ts - Use Babylon's picking directly
 
-import { Scene, Vector3, PickingInfo, PointerEventTypes, PointerInfo } from '@babylonjs/core';
+import { Scene, Vector3, PointerEventTypes, PointerInfo, ActionManager } from '@babylonjs/core';
 import { InputStateEntity } from './InputStateEntity';
 
 export class ReactiveInputEnricher {
@@ -8,20 +8,8 @@ export class ReactiveInputEnricher {
     private inputState: InputStateEntity;
     private canvas: HTMLCanvasElement;
     
-    // DOM event listeners for cleanup
-    private eventListeners: Array<() => void> = [];
-    
-    // ✅ FIX: Babylon.js observer for cleanup
     private babylonObservers: Array<() => void> = [];
-    
-    // Performance tracking
-    private pickingPerformanceCounter = 0;
-    private lastPerformanceUpdate = Date.now();
-    
-    // Continuous picking state
-    private continuousPickingEnabled = true;
-    private lastPickingUpdate = 0;
-    private readonly PICKING_THROTTLE_MS = 16;
+    private domListeners: Array<() => void> = [];
 
     constructor(scene: Scene, inputState: InputStateEntity) {
         this.scene = scene;
@@ -33,128 +21,97 @@ export class ReactiveInputEnricher {
         }
         this.canvas = canvas;
         
-        // ✅ MINIMAL FIX: Use Babylon.js pointer events + DOM keyboard
         this.setupBabylonPointerEvents();
-        this.setupDOMKeyboardEvents();
-        this.setupContinuousEnrichment();
+        this.setupKeyboardEvents();
         
-        console.log('🎮 ReactiveInputEnricher initialized - Babylon.js Pointer Events + DOM Keyboard');
+        console.log('🎮 ReactiveInputEnricher initialized - Using Babylon picking');
     }
 
-    // ========================================================================
-    // ✅ MINIMAL FIX: Use Babylon.js scene pointer events
-    // ========================================================================
-
+    /**
+     * Use Babylon's pointer observable for all mouse/touch input
+     */
     private setupBabylonPointerEvents(): void {
-        console.log('🖱️ Setting up Babylon.js pointer events...');
-        
-        // ✅ MAIN FIX: Use scene.onPointerObservable
-        const pointerObserver = this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
-            this.handleBabylonPointerEvent(pointerInfo);
+        // Pointer down/up for button state
+        const downObserver = this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
+            if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
+                const event = pointerInfo.event as PointerEvent;
+                this.inputState.updateMouseButton(event.button, true);
+            }
         });
-        
-        this.babylonObservers.push(() => {
-            this.scene.onPointerObservable.remove(pointerObserver);
+
+        const upObserver = this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
+            if (pointerInfo.type === PointerEventTypes.POINTERUP) {
+                const event = pointerInfo.event as PointerEvent;
+                this.inputState.updateMouseButton(event.button, false);
+            }
         });
-        
-        // Still need DOM mousemove for continuous position tracking
-        const onMouseMove = (event: MouseEvent) => {
-            const screenPos = this.getScreenPosition(event);
-            this.inputState.updateMouseContext(
-                screenPos,
-                Vector3.Zero()
-            );
-        };
-        
-        const onContextMenu = (event: Event) => {
-            event.preventDefault();
-        };
-        
-        this.addEventListener('mousemove', onMouseMove);
-        this.addEventListener('contextmenu', onContextMenu);
-        
-        console.log('✅ Babylon.js pointer events registered');
-    }
-    
-    /**
-     * ✅ MINIMAL FIX: Handle pointer events with proper types
-     */
-    private handleBabylonPointerEvent(pointerInfo: PointerInfo): void {
-        const { type, event, pickInfo } = pointerInfo;
-        
-        switch (type) {
-            case PointerEventTypes.POINTERDOWN:
-                this.handlePointerDown(event, pickInfo);
-                break;
+
+        // Pointer pick for clicks (Babylon handles the picking!)
+        const pickObserver = this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
+            if (pointerInfo.type === PointerEventTypes.POINTERPICK && pointerInfo.pickInfo) {
+                const event = pointerInfo.event as PointerEvent;
+                const pickInfo = pointerInfo.pickInfo;
                 
-            case PointerEventTypes.POINTERUP:
-                this.handlePointerUp(event, pickInfo);
-                break;
-                
-            case PointerEventTypes.POINTERTAP:
-                this.handlePointerTap(event, pickInfo);
-                break;
-        }
-    }
-    
-    // ✅ FIX: Use proper event types
-    private handlePointerDown(event: any, _pickInfo?: PickingInfo): void {
-        console.log(`🖱️ POINTER DOWN: button ${event.button}`);
-        this.inputState.updateMouseButton(event.button, true);
-    }
-    
-    private handlePointerUp(event: any, _pickInfo?: PickingInfo): void {
-        console.log(`🖱️ POINTER UP: button ${event.button}`);
-        this.inputState.updateMouseButton(event.button, false);
-    }
-    
-    private handlePointerTap(event: any, pickInfo?: PickingInfo): void {
-        console.log(`🖱️ POINTER TAP: button ${event.button}`);
-        
-        if (pickInfo) {
-            this.updateContextFromPickInfo(pickInfo);
-        }
-        
-        const modifierKeys = this.getModifierKeys(event);
-        this.inputState.addClickEvent(event.button, modifierKeys);
-        
-        console.log(`🖱️ Click event created`);
-    }
-    
-    /**
-     * ✅ MINIMAL: Update context from PickingInfo
-     */
-    private updateContextFromPickInfo(pickInfo: PickingInfo): void {
-        if (pickInfo.hit && pickInfo.pickedPoint) {
-            const screenPos = this.inputState.getVectorProperty('mouseScreenPosition')?.getValue() || Vector3.Zero();
-            
-            let pickedEntityId: string | undefined;
-            if (pickInfo.pickedMesh) {
-                const meshName = pickInfo.pickedMesh.name;
-                if (meshName.startsWith('entity_')) {
-                    pickedEntityId = meshName.replace('entity_', '');
-                } else if (meshName.includes('player')) {
-                    pickedEntityId = meshName;
+                // Get the network ID from the picked mesh
+                let pickedNetworkId = '';
+                if (pickInfo.pickedMesh && pickInfo.pickedMesh.name.startsWith('entity_')) {
+                    pickedNetworkId = pickInfo.pickedMesh.name.replace('entity_', '');
                 }
+                
+                // Get pick point or default to origin
+                const pickedPoint = pickInfo.pickedPoint || Vector3.Zero();
+                
+                // Add click to input state
+                this.inputState.addClick(
+                    event.button,
+                    event.clientX,
+                    event.clientY,
+                    pickedNetworkId,
+                    pickedPoint
+                );
+            }
+        });
+
+        // Pointer move for hover detection
+        const moveObserver = this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
+            if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
+                const pickInfo = this.scene.pick(
+                    this.scene.pointerX, 
+                    this.scene.pointerY
+                );
+                
+                let hoveredNetworkId = '';
+                if (pickInfo.hit && pickInfo.pickedMesh && 
+                    pickInfo.pickedMesh.name.startsWith('entity_')) {
+                    hoveredNetworkId = pickInfo.pickedMesh.name.replace('entity_', '');
+                }
+                
+                // Update hovered entity
+                this.inputState.setHoveredEntity(hoveredNetworkId);
+            }
+        });
+
+        // Store observers for cleanup
+        this.babylonObservers.push(
+            () => this.scene.onPointerObservable.remove(downObserver),
+            () => this.scene.onPointerObservable.remove(upObserver),
+            () => this.scene.onPointerObservable.remove(pickObserver),
+            () => this.scene.onPointerObservable.remove(moveObserver)
+        );
+
+        console.log('✅ Babylon pointer events set up');
+    }
+
+    /**
+     * Keyboard events still use DOM
+     */
+    private setupKeyboardEvents(): void {
+        const onKeyDown = (event: KeyboardEvent) => {
+            // Prevent browser defaults for game keys
+            if (['KeyW', 'KeyA', 'KeyS', 'KeyD', ' '].includes(event.code)) {
+                event.preventDefault();
             }
             
-            this.inputState.updateMouseContext(
-                screenPos,
-                pickInfo.pickedPoint.clone(),
-                pickedEntityId,
-                undefined,
-                pickInfo.getNormal ? pickInfo.getNormal(true, true) : new Vector3(0, 1, 0),
-                pickInfo.distance
-            );
-        }
-    }
-
-    // ========================================================================
-    // ✅ EXISTING: DOM keyboard events (no changes)
-    // ========================================================================
-
-    private setupDOMKeyboardEvents(): void {
-        const onKeyDown = (event: KeyboardEvent) => {
             const modifierKeys = this.getModifierKeys(event);
             this.inputState.updateKeyPressed(event.code, true, modifierKeys);
         };
@@ -164,215 +121,34 @@ export class ReactiveInputEnricher {
             this.inputState.updateKeyPressed(event.code, false, modifierKeys);
         };
         
-        this.addEventListener('keydown', onKeyDown);
-        this.addEventListener('keyup', onKeyUp);
+        this.canvas.addEventListener('keydown', onKeyDown);
+        this.canvas.addEventListener('keyup', onKeyUp);
         
+        this.domListeners.push(
+            () => this.canvas.removeEventListener('keydown', onKeyDown),
+            () => this.canvas.removeEventListener('keyup', onKeyUp)
+        );
+        
+        // Ensure canvas can receive keyboard events
         if (this.canvas.tabIndex < 0) {
             this.canvas.tabIndex = 0;
         }
         
-        const onCanvasClick = () => {
-            this.canvas.focus();
-        };
-        this.addEventListener('click', onCanvasClick);
-        
-        console.log('⌨️ DOM keyboard event capture registered');
-    }
-    
-    private addEventListener<K extends keyof HTMLElementEventMap>(
-        type: K,
-        listener: (this: HTMLCanvasElement, ev: HTMLElementEventMap[K]) => any
-    ): void {
-        this.canvas.addEventListener(type, listener);
-        this.eventListeners.push(() => {
-            this.canvas.removeEventListener(type, listener);
-        });
+        console.log('✅ Keyboard events set up');
     }
 
-    // ========================================================================
-    // ✅ EXISTING: Continuous enrichment (no changes)
-    // ========================================================================
-
-    private setupContinuousEnrichment(): void {
-        const observer = this.scene.onBeforeRenderObservable.add(() => {
-            if (!this.continuousPickingEnabled) return;
-            
-            const now = performance.now();
-            if (now - this.lastPickingUpdate < this.PICKING_THROTTLE_MS) return;
-            this.lastPickingUpdate = now;
-            
-            this.updateEnrichedContext();
-        });
-        
-        this.babylonObservers.push(() => {
-            this.scene.onBeforeRenderObservable.remove(observer);
-        });
-    }
-    
-    private updateEnrichedContext(): void {
-        const startTime = performance.now();
-        
-        try {
-            const screenPos = this.inputState.getVectorProperty('mouseScreenPosition')?.getValue();
-            if (!screenPos) return;
-            
-            const enrichedContext = this.performScenePicking(screenPos);
-            
-            this.inputState.updateMouseContext(
-                screenPos,
-                enrichedContext.worldPosition,
-                enrichedContext.pickedEntityId,
-                enrichedContext.pickedUIElement,
-                enrichedContext.surfaceNormal,
-                enrichedContext.raycastDistance
-            );
-            
-            this.pickingPerformanceCounter++;
-            this.updatePerformanceMetrics(performance.now() - startTime);
-            
-        } catch (error) {
-            console.error('Error in continuous context enrichment:', error);
-        }
-    }
-
-    /**
-     * ✅ EXISTING: Scene picking (no changes)
-     */
-    private performScenePicking(screenPosition: Vector3): {
-        worldPosition: Vector3;
-        pickedEntityId?: string;
-        pickedUIElement?: string;
-        surfaceNormal?: Vector3;
-        raycastDistance?: number;
-    } {
-        const { x, y } = screenPosition;
-        
-        const canvasX = x * this.canvas.width;
-        const canvasY = y * this.canvas.height;
-
-        const pickInfo: PickingInfo = this.scene.pick(canvasX, canvasY);
-
-        if (pickInfo.hit && pickInfo.pickedPoint) {
-            const result = {
-                worldPosition: pickInfo.pickedPoint.clone(),
-                raycastDistance: pickInfo.distance,
-                surfaceNormal: pickInfo.getNormal ? pickInfo.getNormal(true, true) : new Vector3(0, 1, 0)
-            };
-            
-            if (pickInfo.pickedMesh) {
-                const meshName = pickInfo.pickedMesh.name;
-                
-                if (meshName.startsWith('entity_')) {
-                    return {
-                        ...result,
-                        pickedEntityId: meshName.replace('entity_', '')
-                    };
-                } else if (meshName.includes('player')) {
-                    return {
-                        ...result,
-                        pickedEntityId: meshName
-                    };
-                } else if (meshName.startsWith('ui_')) {
-                    return {
-                        ...result,
-                        pickedUIElement: meshName.replace('ui_', '')
-                    };
-                }
-            }
-            
-            return result;
-        } else {
-            return {
-                worldPosition: this.screenToWorldPosition(x, y)
-            };
-        }
-    }
-
-    /**
-     * ✅ MINIMAL FIX: Simple screen-to-world projection
-     */
-    private screenToWorldPosition(screenX: number, screenY: number): Vector3 {
-        const worldX = (screenX - 0.5) * 20;
-        const worldZ = -(screenY - 0.5) * 20;  // Flip Y→Z mapping
-        return new Vector3(worldX, 0, worldZ);
-    }
-
-    // ========================================================================
-    // ✅ EXISTING: Utility methods (no changes)
-    // ========================================================================
-
-    private getScreenPosition(event: MouseEvent): Vector3 {
-        const rect = this.canvas.getBoundingClientRect();
-        
-        const x = (event.clientX - rect.left) / rect.width;
-        const y = (event.clientY - rect.top) / rect.height;
-        
-        return new Vector3(x, y, 0);
-    }
-    
-    private getModifierKeys(event: KeyboardEvent | any): string[] {
+    private getModifierKeys(event: KeyboardEvent): string[] {
         const modifiers: string[] = [];
-        
         if (event.ctrlKey) modifiers.push('ctrl');
         if (event.shiftKey) modifiers.push('shift');
         if (event.altKey) modifiers.push('alt');
         if (event.metaKey) modifiers.push('meta');
-        
         return modifiers;
     }
-    
-    private updatePerformanceMetrics(pickingTime: number): void {
-        const now = Date.now();
-        if (now - this.lastPerformanceUpdate > 1000) {
-            const pickingRate = this.pickingPerformanceCounter;
-            this.pickingPerformanceCounter = 0;
-            this.lastPerformanceUpdate = now;
-            
-            this.inputState.getNumericProperty('pickingPerformance')?.set(pickingRate, 'performance_tracking');
-            
-            if (pickingRate > 100) {
-                console.warn(`🐌 High picking rate detected: ${pickingRate}/sec (avg ${pickingTime.toFixed(2)}ms/pick)`);
-            }
-        }
-    }
-
-    // ========================================================================
-    // ✅ EXISTING: Control methods (no changes)
-    // ========================================================================
-
-    setContinuousPickingEnabled(enabled: boolean): void {
-        this.continuousPickingEnabled = enabled;
-        console.log(`🎯 Continuous picking ${enabled ? 'enabled' : 'disabled'}`);
-    }
-    
-    getPerformanceStats(): {
-        pickingRate: number;
-        continuousPickingEnabled: boolean;
-        lastPickingUpdate: number;
-    } {
-        return {
-            pickingRate: this.inputState.getNumericProperty('pickingPerformance')?.getValue() || 0,
-            continuousPickingEnabled: this.continuousPickingEnabled,
-            lastPickingUpdate: this.lastPickingUpdate
-        };
-    }
-
-    forcePicking(): void {
-        this.updateEnrichedContext();
-        console.log('🎯 Forced picking update');
-    }
-
-    // ========================================================================
-    // ✅ EXISTING: Cleanup (enhanced)
-    // ========================================================================
 
     dispose(): void {
-        this.eventListeners.forEach(cleanup => cleanup());
-        this.eventListeners = [];
-        
         this.babylonObservers.forEach(cleanup => cleanup());
-        this.babylonObservers = [];
-        
+        this.domListeners.forEach(cleanup => cleanup());
         console.log('🧹 ReactiveInputEnricher disposed');
     }
 }

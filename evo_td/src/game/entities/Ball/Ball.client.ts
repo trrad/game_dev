@@ -37,31 +37,32 @@ export class ClientBall extends Ball {
     protected createVisual(): void {
         if (!this.scene) return;
 
-        // CLIENT: Sphere with smaller size
-        this.mesh = MeshBuilder.CreateSphere(
-            `client_ball_${this.getNetworkId()}`, 
-            { 
-                diameter: 0.8,
-                segments: 16 
-            }, 
-            this.scene
-        );
+            // CLIENT: Sphere with standard size
+            this.mesh = MeshBuilder.CreateSphere(
+                `client_ball_${this.getNetworkId()}`, 
+                { 
+                    diameter: 1.0, // Full size
+                    segments: 16 
+                }, 
+                this.scene
+            );
 
-        // Set mesh name for entity picking
-        this.mesh.name = `entity_${this.getNetworkId()}`;
-        
-        // Create material with client color scheme
-        this.material = new StandardMaterial(`client_material_${this.getNetworkId()}`, this.scene);
-        this.material.specularColor = new Color3(0.2, 0.2, 0.3);
-        this.mesh.material = this.material;
-        
-        // Set up interaction handlers
-        this.setupMeshActions();
-        
-        // Initial color update
-        this.updateColor();
-        
-        console.log(`🔵 CLIENT visual created: SPHERE (0.8) for ${this.getNetworkId()}`);
+            // Set mesh name for entity picking
+            this.mesh.name = `entity_${this.getNetworkId()}`;
+            this.mesh.isPickable = true;
+            
+            // Create material with client color scheme
+            this.material = new StandardMaterial(`client_material_${this.getNetworkId()}`, this.scene);
+            this.material.specularColor = new Color3(0.2, 0.2, 0.3);
+            this.mesh.material = this.material;
+            
+            // Set up interaction handlers
+            this.setupMeshActions();
+            
+            // Initial color update
+            this.updateColor();
+            
+            console.log(`🔵 CLIENT visual created: SPHERE (1.0) for ${this.getNetworkId()}`);
     }
 
     /**

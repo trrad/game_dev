@@ -474,13 +474,42 @@ export class CollectionProperty<T> extends ReactiveProperty<Map<string, T>> {
         return this.set(new Map<string, T>(), source);
     }
 
+    // Override the getValue method to return a serializable format
+    getValue(): Map<string, T> {
+        return this.currentValue;
+    }
+
+    // Add a method to get serializable value
+    getSerializableValue(): Record<string, T> {
+        const obj: Record<string, T> = {};
+        this.currentValue.forEach((value, key) => {
+            obj[key] = value;
+        });
+        return obj;
+    }
+
+    // Override set to handle both Map and plain object inputs
+    set(newValue: Map<string, T> | Record<string, T>, source: string = 'unknown'): boolean {
+        let mapValue: Map<string, T>;
+        
+        if (newValue instanceof Map) {
+            mapValue = newValue;
+        } else {
+            // Convert plain object to Map
+            mapValue = new Map(Object.entries(newValue));
+        }
+        
+        return super.set(mapValue, source);
+    }
+
+
     dispose(): void {
         this.itemAddedObservable.clear();
         this.itemRemovedObservable.clear();
         this.itemUpdatedObservable.clear();
         super.dispose();
     }
-}
+}    
 
 // ============================================================
 // Unified Component Container

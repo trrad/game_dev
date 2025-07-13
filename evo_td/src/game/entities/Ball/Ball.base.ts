@@ -66,14 +66,14 @@ export abstract class Ball extends ExtendableEntity {
         this.inputState = inputState;
         console.log(`🎮 ${this.getExtensionType()} ${this.getNetworkId()}: Observing input state`);
         
-        // Observe click events (ground clicks move the ball)
+        // Observe click events
         const clickObserver = inputState.getCollectionProperty('recentClicks')
             ?.itemAddedObservable.add((event) => {
                 const clickEvent = event.value as ClickEvent;
                 
-                // Only process ground clicks (no entity picked)
-                if (!clickEvent.pickedEntityId || clickEvent.pickedEntityId === '') {
-                    console.log(`📍 ${this.getExtensionType()}: Processing ground click at (${clickEvent.worldPosition.x.toFixed(1)}, ${clickEvent.worldPosition.z.toFixed(1)})`);
+                // Ground clicks move the ball
+                if (!clickEvent.pickedNetworkId) {
+                    console.log(`📍 ${this.getExtensionType()}: Ground click at ${clickEvent.pickedPoint}`);
                     
                     if (this.gameWorld && this.getRole().isServer) {
                         // Server: Use lag compensation
@@ -82,23 +82,34 @@ export abstract class Ball extends ExtendableEntity {
                             sequenceId: clickEvent.sequenceId,
                             entityId: this.getNetworkId(),
                             action: 'moveTo',
-                            parameters: { target: clickEvent.worldPosition, source: 'input_click' },
+                            parameters: { target: clickEvent.pickedPoint, source: 'click' },
                             clientId: 'main_client'
                         });
                     } else {
                         // Client: Direct update for prediction
-                        this.moveTo(clickEvent.worldPosition, 'client_prediction_click');
+                        this.moveTo(clickEvent.pickedPoint, 'client_prediction');
                     }
                 } 
-                // Process entity clicks (color cycling)
-                else if (clickEvent.pickedEntityId === this.getNetworkId()) {
-                    console.log(`🎨 ${this.getExtensionType()}: Entity clicked for color cycle`);
-                    this.cycleColor('input_entity_click');
+                // Entity clicks cycle color
+                else if (clickEvent.pickedNetworkId === this.getNetworkId()) {
+                    console.log(`🎨 ${this.getExtensionType()}: Clicked for color cycle`);
+                    this.cycleColor('entity_click');
                 }
             });
             
         if (clickObserver) {
             this.inputStateObservers.push(() => clickObserver.remove());
+        }
+        
+        // Observe hover state
+        const hoverObserver = inputState.getProperty('hoveredEntityId')
+            ?.onChange((event) => {
+                const isHovered = event.to === this.getNetworkId();
+                this.getBooleanProperty('isHovered')?.set(isHovered, 'hover_state');
+            });
+
+        if (hoverObserver) {
+            this.inputStateObservers.push(() => hoverObserver.remove());
         }
         
         // Observe keyboard state for WASD movement
@@ -141,17 +152,6 @@ export abstract class Ball extends ExtendableEntity {
         if (keysObserver) {
             this.inputStateObservers.push(() => keysObserver.remove());
         }
-
-        // Observe hover state from enriched input
-        const hoverObserver = inputState.getProperty('currentlyPickedEntity')
-            ?.onChange((event) => {
-                const isHovered = event.to === this.getNetworkId();
-                this.getBooleanProperty('isHovered')?.set(isHovered, 'input_hover');
-            });
-
-        if (hoverObserver) {
-            this.inputStateObservers.push(() => hoverObserver.remove());
-        }
     }
 
     /**
@@ -175,6 +175,11 @@ export abstract class Ball extends ExtendableEntity {
         const targetPosition = this.getVectorProperty('targetPosition');
         const moveSpeed = this.getNumericProperty('moveSpeed');
 
+        // Debug log only when moving
+        if (isMoving?.isTrue()) {
+            console.log(`🏃 ${this.getExtensionType()} updateMovement: dt=${deltaTime.toFixed(3)}, pos=${position?.getValue()}, target=${targetPosition?.getValue()}`);
+        }
+
         if (!isMoving?.isTrue() || !position || !targetPosition || !moveSpeed) return;
 
         const currentPos = position.getValue();
@@ -188,12 +193,13 @@ export abstract class Ball extends ExtendableEntity {
             // Reached target
             isMoving.setFalse('movement_complete');
             position.set(targetPos, 'movement_complete');
-            console.log(`🏁 ${this.getExtensionType()} reached target`);
+            console.log(`🏁 ${this.getExtensionType()} reached target at ${targetPos}`);
         } else {
             // Move towards target
             const movement = direction.normalize().scale(speed * deltaTime);
             const newPos = currentPos.add(movement);
             position.set(newPos, 'movement_interpolation');
+            console.log(`  ${this.getExtensionType()} moving: ${currentPos} → ${newPos} (distance: ${distance.toFixed(2)})`);
         }
     }
 

@@ -36,20 +36,28 @@ export class ServerBall extends Ball {
     protected createVisual(): void {
         if (!this.scene) return;
 
-        // SERVER: Cube for debugging (production server wouldn't render)
+        // SERVER: Smaller cube with wireframe so we can see both
         this.mesh = MeshBuilder.CreateBox(
             `server_ball_${this.getNetworkId()}`, 
-            { size: 1 }, 
+            { size: 0.6 }, // Smaller than client sphere
             this.scene
         );
 
+        // Set mesh name for entity picking
+        this.mesh.name = `entity_${this.getNetworkId()}`;
+        this.mesh.isPickable = true;
+        
         this.material = new StandardMaterial(`server_material_${this.getNetworkId()}`, this.scene);
         this.material.specularColor = new Color3(0.2, 0.3, 0.2);
+        this.material.wireframe = true; // Wireframe to see through
         this.mesh.material = this.material;
+        
+        // Offset slightly up so we can see it better
+        this.mesh.position.y = 0.1;
         
         this.updateColor();
         
-        console.log(`🟩 SERVER visual created: CUBE for ${this.getNetworkId()}`);
+        console.log(`🟩 SERVER visual created: WIREFRAME CUBE (0.6) for ${this.getNetworkId()}`);
     }
 
     protected setupServerBehaviors(): void {
