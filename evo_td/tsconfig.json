@@ -1,28 +1,24 @@
 {
   "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "target": "ES2020",
-    "module": "commonjs",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "lib": ["ES2020", "DOM"],
-    "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    
-    // Path mappings for clean imports
-    "baseUrl": "./src",
+    "sourceMap": true,
+    "declaration": false,
+    "outDir": "./dist",
+    "baseUrl": "./",
     "paths": {
-      "@engine/*": ["engine/*"],
-      "@game/*": ["game/*"],
-      "@shared/*": ["game/*"],
-      "@client/*": ["client/*"],
-      "@server/*": ["server/*"]
+      "@engine/*": ["src/engine/*"],
+      "@game/*": ["src/game/*"]
     }
   },
   "include": [

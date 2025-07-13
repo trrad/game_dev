@@ -1,27 +1,21 @@
 {
-  "name": "evo_td",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:original": "vite --config vite.config.js",
-    "dev:ecs": "vite --config vite.config.ecs.js",
-    "build": "tsc && vite build",
-    "build:ecs": "tsc && vite build --config vite.config.ecs.js",
-    "preview": "vite preview",
-    "test": "jest",
-    "test:watch": "jest --watch"
-  },
-  "dependencies": {
-    "socket.io": "^4.7.4",
-    "socket.io-client": "^4.7.4"
+    "demo:client": "webpack serve --config webpack.client.config.js --mode development",
+    "demo:server": "webpack --config webpack.server.config.js --mode development --watch & node dist/server/server.bundle.js",
+    "demo:build": "npm run demo:build:client && npm run demo:build:server",
+    "demo:build:client": "webpack --config webpack.client.config.js --mode production",
+    "demo:build:server": "webpack --config webpack.server.config.js --mode production",
+    "demo:all": "concurrently \"npm run demo:client\" \"npm run demo:server\"",
+    "clean": "rimraf dist"
   },
   "devDependencies": {
-    "jest-environment-jsdom": "^30.0.2",
-    "typescript": "~5.8.3",
-    "vite": "^7.0.0",
-    "@types/socket.io": "^3.0.2",
-    "@types/socket.io-client": "^1.4.36"
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1",
+    "ts-loader": "^9.5.0",
+    "html-webpack-plugin": "^5.5.3",
+    "webpack-node-externals": "^3.0.0",
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
   }
 }
