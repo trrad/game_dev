@@ -58,13 +58,6 @@ class Unit extends NetworkReactiveEntity {
     }
 }
 
-// Player clicks enemy unit
-onEnemyClick(enemyId: string) {
-    // Just update client's input state
-    myUnit.getProperty('targetEnemyId').set(enemyId);
-    // This immediately runs on client (prediction)
-    // And syncs to server for authoritative processing
-}
 ```
 
 The magic: the client sees immediate response, the server processes with authority, and they naturally converge.
